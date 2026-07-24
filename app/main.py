@@ -1,10 +1,11 @@
 from fastapi import FastAPI, status
 
+from app.core.config import settings
 
 app = FastAPI(
-    title="AI Business Platform API",
-    description="API for the AI Business Platform.",
-    version="0.1.0",
+    title=settings.app_name,
+    description=settings.app_description,
+    version=settings.app_version,
 )
 
 
