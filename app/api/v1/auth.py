@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db_session
 from app.dependencies.auth import get_current_user
-from app.exceptions import InvalidCredentialsError, UserAlreadyExistsError
 from app.models.user import User
 from app.repositories.user_repository import UserRepository
 from app.schemas.auth import LoginRequest, RegisterRequest, TokenResponse
@@ -22,20 +21,13 @@ async def get_auth_service(session: AsyncSession = Depends(get_db_session)) -> A
 
 @router.post("/register", response_model=UserRead, status_code=status.HTTP_201_CREATED)
 async def register_user(payload: RegisterRequest, service: AuthService = Depends(get_auth_service)) -> UserRead:
-    try:
-        user = await service.register_user(email=str(payload.email), password=payload.password)
-    except UserAlreadyExistsError as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    user = await service.register_user(email=str(payload.email), password=payload.password)
     return UserRead.model_validate(user)
 
 
 @router.post("/login", response_model=TokenResponse)
 async def login_user(payload: LoginRequest, service: AuthService = Depends(get_auth_service)) -> TokenResponse:
-    try:
-        user = await service.authenticate_user(email=str(payload.email), password=payload.password)
-    except InvalidCredentialsError as exc:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc)) from exc
-
+    user = await service.authenticate_user(email=str(payload.email), password=payload.password)
     token = service.create_access_token(user_id=user.id)
     return TokenResponse(access_token=token)
 

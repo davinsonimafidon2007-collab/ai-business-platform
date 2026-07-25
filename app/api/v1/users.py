@@ -2,12 +2,11 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db_session
 from app.dependencies.auth import get_current_user, require_admin
-from app.exceptions import UserAlreadyExistsError, UserNotFoundError
 from app.models.user import User
 from app.repositories.user_repository import UserRepository
 from app.schemas.user import UserCreate, UserRead, UserUpdate
@@ -27,10 +26,7 @@ async def create_user(
     service: UserService = Depends(get_user_service),
     current_user: User = Depends(get_current_user),
 ) -> UserRead:
-    try:
-        user = await service.create_user(email=str(payload.email), hashed_password=payload.hashed_password, full_name=payload.full_name)
-    except UserAlreadyExistsError as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    user = await service.create_user(email=str(payload.email), hashed_password=payload.hashed_password, full_name=payload.full_name)
     return UserRead.model_validate(user)
 
 
@@ -49,10 +45,7 @@ async def get_user(
     service: UserService = Depends(get_user_service),
     current_user: User = Depends(get_current_user),
 ) -> UserRead:
-    try:
-        user = await service.get_user(user_id)
-    except UserNotFoundError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    user = await service.get_user(user_id)
     return UserRead.model_validate(user)
 
 
@@ -63,12 +56,7 @@ async def update_user(
     service: UserService = Depends(get_user_service),
     current_user: User = Depends(get_current_user),
 ) -> UserRead:
-    try:
-        user = await service.update_user(user_id, **payload.model_dump(exclude_unset=True))
-    except UserAlreadyExistsError as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
-    except UserNotFoundError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    user = await service.update_user(user_id, **payload.model_dump(exclude_unset=True))
     return UserRead.model_validate(user)
 
 
@@ -78,7 +66,4 @@ async def delete_user(
     service: UserService = Depends(get_user_service),
     current_user: User = Depends(require_admin),
 ) -> None:
-    try:
-        await service.delete_user(user_id)
-    except UserNotFoundError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    await service.delete_user(user_id)

@@ -1,14 +1,17 @@
-class UserAlreadyExistsError(Exception):
-    pass
+from app.exceptions.base import (
+    AppError,
+    AuthenticationError,
+    AuthorizationError,
+    InvalidCredentialsError,
+    UserAlreadyExistsError,
+    UserNotFoundError,
+)
 
-
-class UserNotFoundError(Exception):
-    pass
-
-
-class InvalidCredentialsError(Exception):
-    pass
-
-
-class AuthenticationError(Exception):
-    pass
+__all__ = [
+    "AppError",
+    "AuthenticationError",
+    "AuthorizationError",
+    "InvalidCredentialsError",
+    "UserAlreadyExistsError",
+    "UserNotFoundError",
+]
