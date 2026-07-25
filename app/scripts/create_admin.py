@@ -1,16 +1,23 @@
 """Script para crear el primer usuario administrador.
 
 Uso:
+    # Modo interactivo (por defecto):
+    uv run python -m app.scripts.create_admin
+    
+    # Modo con variables de entorno:
+    # Configura ADMIN_EMAIL y ADMIN_PASSWORD en .env
     uv run python -m app.scripts.create_admin
 
-Este script solicita interactivamente el email y password del administrador,
-y crea el usuario con rol ADMIN en la base de datos.
+Este script crea el primer usuario administrador del sistema.
+Es idempotente: si el administrador ya existe, no lo duplica.
+Puede funcionar en modo interactivo o leyendo variables de entorno.
 """
 
 from __future__ import annotations
 
 import asyncio
 import getpass
+import os
 import sys
 
 from app.core.config import settings
@@ -30,7 +37,7 @@ async def create_admin_user(email: str, password: str, session=None) -> None:
         session: Sesión de base de datos opcional (para tests).
         
     Raises:
-        SystemExit: Si el usuario ya existe o hay un error.
+        SystemExit: Si hay un error en la validación o creación.
     """
     # Validar longitud de password
     if len(password) < 8:
@@ -57,11 +64,25 @@ async def _create_admin_with_repository(email: str, password: str, repository: U
     auth_service = AuthService(repository)
     user_service = UserService(repository)
 
-    # Verificar si el usuario ya existe
+    # Verificar si el usuario ya existe (idempotente)
     existing_user = await repository.get_by_email(email)
     if existing_user is not None:
-        print(f"❌ Error: Ya existe un usuario con el email '{email}'.")
-        sys.exit(1)
+        if existing_user.role == Role.ADMIN:
+            print(f"ℹ️  El usuario administrador con email '{email}' ya existe.")
+            print(f"   ID: {existing_user.id}")
+            print("   No se realizaron cambios.")
+            return
+        else:
+            # Si existe pero no es admin, actualizar el rol
+            print(f"ℹ️  El usuario '{email}' existe pero no es administrador.")
+            print("   Actualizando rol a ADMIN...")
+            existing_user.role = Role.ADMIN
+            await repository.update(existing_user)
+            print(f"✅ Rol actualizado a ADMIN exitosamente.")
+            print(f"   Email: {existing_user.email}")
+            print(f"   ID: {existing_user.id}")
+            print(f"   Rol: {existing_user.role.value}")
+            return
 
     # Crear el usuario administrador
     try:
@@ -89,40 +110,67 @@ async def _create_admin_with_repository(email: str, password: str, repository: U
         sys.exit(1)
 
 
+def _get_credentials_from_env() -> tuple[str | None, str | None]:
+    """Obtiene las credenciales del administrador desde variables de entorno.
+    
+    Returns:
+        Tupla (email, password) o (None, None) si no están definidas.
+    """
+    email = os.getenv("ADMIN_EMAIL")
+    password = os.getenv("ADMIN_PASSWORD")
+    return email, password
+
+
 def main() -> None:
     """Función principal del script."""
     print("=" * 60)
     print("Creación de Usuario Administrador")
     print("=" * 60)
     print()
-    print("Este script creará el primer usuario administrador del sistema.")
-    print("Por favor, proporciona las credenciales del administrador.")
-    print()
 
-    # Solicitar email
-    email = input("Email del administrador: ").strip()
-    if not email or "@" not in email:
-        print("❌ Error: Debes proporcionar un email válido.")
-        sys.exit(1)
+    # Intentar obtener credenciales de variables de entorno
+    email, password = _get_credentials_from_env()
+    
+    if email and password:
+        # Modo automático con variables de entorno
+        print("📋 Modo: Variables de entorno")
+        print(f"   Email: {email}")
+        print()
+        print("Creando usuario administrador...")
+        print()
+        asyncio.run(create_admin_user(email, password))
+    else:
+        # Modo interactivo
+        print("📋 Modo: Interactivo")
+        print()
+        print("Este script creará el primer usuario administrador del sistema.")
+        print("Por favor, proporciona las credenciales del administrador.")
+        print()
 
-    # Solicitar password (oculto en consola)
-    password = getpass.getpass("Contraseña del administrador: ")
-    if not password:
-        print("❌ Error: Debes proporcionar una contraseña.")
-        sys.exit(1)
+        # Solicitar email
+        email = input("Email del administrador: ").strip()
+        if not email or "@" not in email:
+            print("❌ Error: Debes proporcionar un email válido.")
+            sys.exit(1)
 
-    # Confirmar password
-    password_confirm = getpass.getpass("Confirma la contraseña: ")
-    if password != password_confirm:
-        print("❌ Error: Las contraseñas no coinciden.")
-        sys.exit(1)
+        # Solicitar password (oculto en consola)
+        password = getpass.getpass("Contraseña del administrador: ")
+        if not password:
+            print("❌ Error: Debes proporcionar una contraseña.")
+            sys.exit(1)
 
-    print()
-    print("Creando usuario administrador...")
-    print()
+        # Confirmar password
+        password_confirm = getpass.getpass("Confirma la contraseña: ")
+        if password != password_confirm:
+            print("❌ Error: Las contraseñas no coinciden.")
+            sys.exit(1)
 
-    # Ejecutar la creación del usuario
-    asyncio.run(create_admin_user(email, password))
+        print()
+        print("Creando usuario administrador...")
+        print()
+
+        # Ejecutar la creación del usuario
+        asyncio.run(create_admin_user(email, password))
 
 
 if __name__ == "__main__":

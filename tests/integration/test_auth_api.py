@@ -8,6 +8,7 @@ from app.api.v1 import auth as auth_module
 from app.main import app
 from app.models.user import User
 from app.services.auth_service import AuthService
+from app.services.refresh_token_service import RefreshTokenService
 
 
 class FakeUserRepository:
@@ -25,13 +26,36 @@ class FakeUserRepository:
         return user
 
 
+class FakeRefreshTokenRepository:
+    def __init__(self) -> None:
+        self._tokens: dict[str, str] = {}
+
+    async def create(self, refresh_token) -> None:
+        self._tokens[refresh_token.token] = refresh_token.user_id
+
+    async def get_by_token(self, token: str):
+        from app.models.refresh_token import RefreshToken
+        if token not in self._tokens:
+            return None
+        return RefreshToken(token=token, user_id=self._tokens[token])
+
+    async def revoke_by_token(self, token: str) -> None:
+        if token in self._tokens:
+            del self._tokens[token]
+
+    async def revoke_all_by_user_id(self, user_id: str) -> None:
+        self._tokens = {token: uid for token, uid in self._tokens.items() if uid != user_id}
+
+
 @pytest.fixture
 def client() -> TestClient:
-    repository = FakeUserRepository()
-    service = AuthService(repository)
+    user_repository = FakeUserRepository()
+    token_repository = FakeRefreshTokenRepository()
+    auth_service = AuthService(user_repository)
+    refresh_service = RefreshTokenService(token_repository)
 
     async def override_get_auth_service() -> AuthService:
-        return service
+        return auth_service
 
     async def override_get_current_user(request: Request) -> User:
         authorization = request.headers.get("authorization", "")
@@ -40,7 +64,7 @@ def client() -> TestClient:
 
         token = authorization.split(" ", 1)[1]
         try:
-            payload = service.decode_access_token(token)
+            payload = auth_service.decode_access_token(token)
         except Exception as exc:
             raise HTTPException(status_code=401, detail="Invalid or expired token") from exc
 
@@ -48,13 +72,17 @@ def client() -> TestClient:
         if not user_id:
             raise HTTPException(status_code=401, detail="Invalid token")
 
-        user = await repository.get_by_id(user_id)
+        user = await user_repository.get_by_id(user_id)
         if user is None:
             raise HTTPException(status_code=404, detail="User not found")
         return user
 
+    async def override_get_refresh_token_service() -> RefreshTokenService:
+        return refresh_service
+
     app.dependency_overrides[auth_module.get_auth_service] = override_get_auth_service
     app.dependency_overrides[auth_module.get_current_user] = override_get_current_user
+    app.dependency_overrides[auth_module.get_refresh_token_service] = override_get_refresh_token_service
     try:
         yield TestClient(app)
     finally:

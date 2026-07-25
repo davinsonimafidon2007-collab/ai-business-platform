@@ -1,0 +1,60 @@
+from __future__ import annotations
+
+from datetime import datetime, timedelta, timezone
+from typing import Any
+
+from jose import JWTError, jwt
+
+from app.core.config import settings
+from app.exceptions import AuthenticationError
+from app.models.refresh_token import RefreshToken
+from app.repositories.refresh_token_repository import RefreshTokenRepository
+
+
+class RefreshTokenService:
+    def __init__(self, repository: RefreshTokenRepository) -> None:
+        self.repository = repository
+
+    def create_refresh_token(self, *, user_id: str | Any) -> str:
+        expire_at = datetime.now(timezone.utc) + timedelta(minutes=settings.jwt_refresh_token_expire_minutes)
+        payload = {"sub": str(user_id), "exp": expire_at, "type": "refresh"}
+        return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
+
+    def decode_refresh_token(self, token: str) -> dict[str, Any]:
+        try:
+            payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
+            if payload.get("type") != "refresh":
+                raise AuthenticationError("Invalid token type")
+            return payload
+        except JWTError as exc:
+            raise AuthenticationError("Invalid or expired refresh token") from exc
+
+    async def create_refresh_token_record(self, *, user_id: str, token: str) -> RefreshToken:
+        expires_at = datetime.now(timezone.utc) + timedelta(minutes=settings.jwt_refresh_token_expire_minutes)
+        refresh_token = RefreshToken(
+            token=token,
+            user_id=user_id,
+            expires_at=expires_at,
+        )
+        return await self.repository.create(refresh_token)
+
+    async def validate_refresh_token(self, token: str) -> RefreshToken:
+        payload = self.decode_refresh_token(token)
+        refresh_token = await self.repository.get_by_token(token)
+        
+        if refresh_token is None:
+            raise AuthenticationError("Refresh token not found")
+        
+        if refresh_token.is_revoked:
+            raise AuthenticationError("Refresh token has been revoked")
+        
+        if refresh_token.expires_at < datetime.now(timezone.utc):
+            raise AuthenticationError("Refresh token has expired")
+        
+        return refresh_token
+
+    async def revoke_refresh_token(self, token: str) -> None:
+        await self.repository.revoke_by_token(token)
+
+    async def revoke_all_user_tokens(self, user_id: str) -> None:
+        await self.repository.revoke_all_by_user_id(user_id)
