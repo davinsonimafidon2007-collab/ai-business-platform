@@ -1,0 +1,55 @@
+from __future__ import annotations
+
+from datetime import datetime, timedelta, timezone
+from typing import Any
+
+from jose import JWTError, jwt
+from pwdlib import PasswordHash
+from pwdlib.exceptions import UnknownHashError
+
+from app.core.config import settings
+from app.exceptions import AuthenticationError, InvalidCredentialsError, UserAlreadyExistsError
+from app.models.user import User
+from app.repositories.user_repository import UserRepository
+
+password_hasher = PasswordHash.recommended()
+
+
+class AuthService:
+    def __init__(self, repository: UserRepository) -> None:
+        self.repository = repository
+
+    async def register_user(self, *, email: str, password: str) -> User:
+        existing_user = await self.repository.get_by_email(email)
+        if existing_user is not None:
+            raise UserAlreadyExistsError(f"User with email '{email}' already exists")
+
+        hashed_password = password_hasher.hash(password)
+        user = User(email=email, hashed_password=hashed_password)
+        return await self.repository.create(user)
+
+    async def authenticate_user(self, *, email: str, password: str) -> User:
+        user = await self.repository.get_by_email(email)
+        if user is None:
+            raise InvalidCredentialsError("Invalid email or password")
+
+        try:
+            is_valid_password = password_hasher.verify(password, user.hashed_password)
+        except UnknownHashError as exc:
+            raise InvalidCredentialsError("Invalid email or password") from exc
+
+        if not is_valid_password:
+            raise InvalidCredentialsError("Invalid email or password")
+
+        return user
+
+    def create_access_token(self, *, user_id: str | Any) -> str:
+        expire_at = datetime.now(timezone.utc) + timedelta(minutes=settings.jwt_access_token_expire_minutes)
+        payload = {"sub": str(user_id), "exp": expire_at}
+        return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
+
+    def decode_access_token(self, token: str) -> dict[str, Any]:
+        try:
+            return jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
+        except JWTError as exc:
+            raise AuthenticationError("Invalid or expired token") from exc

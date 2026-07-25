@@ -9,6 +9,9 @@ class Settings(BaseSettings):
     app_version: str = "0.1.0"
     environment: Literal["development", "production", "test"] = "development"
     database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/ai_business_platform"
+    jwt_secret_key: str = "change-me-in-production"
+    jwt_algorithm: str = "HS256"
+    jwt_access_token_expire_minutes: int = 30
 
     @property
     def database_url_for_environment(self) -> str:

@@ -27,3 +27,14 @@ class User(Base):
         default=lambda: datetime.now(timezone.utc),
         nullable=False,
     )
+
+    def __init__(self, **kwargs: object) -> None:
+        super().__init__(**kwargs)
+        if getattr(self, "id", None) is None:
+            self.id = str(uuid4())
+        if getattr(self, "is_active", None) is None:
+            self.is_active = True
+        if getattr(self, "created_at", None) is None:
+            self.created_at = datetime.now(timezone.utc)
+        if getattr(self, "updated_at", None) is None:
+            self.updated_at = datetime.now(timezone.utc)

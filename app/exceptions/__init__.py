@@ -4,3 +4,11 @@ class UserAlreadyExistsError(Exception):
 
 class UserNotFoundError(Exception):
     pass
+
+
+class InvalidCredentialsError(Exception):
+    pass
+
+
+class AuthenticationError(Exception):
+    pass
