@@ -2,6 +2,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.schemas.user import UserCreate, UserRead, UserUpdate
+from app.models.role import Role
 
 
 def test_user_create_accepts_valid_email() -> None:
@@ -22,12 +23,14 @@ def test_user_read_allows_model_attributes() -> None:
         email="user@example.com",
         full_name="Jane Doe",
         is_active=True,
+        role=Role.USER,
         created_at="2024-01-01T00:00:00",
         updated_at="2024-01-01T00:00:00",
     )
 
     assert user.email == "user@example.com"
     assert user.full_name == "Jane Doe"
+    assert user.role is Role.USER
 
 
 def test_user_update_allows_partial_updates() -> None:

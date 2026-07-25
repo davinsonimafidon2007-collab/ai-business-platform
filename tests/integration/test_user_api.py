@@ -6,8 +6,11 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.api.v1 import users as users_module
+from app.dependencies.auth import get_current_user
 from app.exceptions import UserAlreadyExistsError, UserNotFoundError
 from app.main import app
+from app.models.role import Role
+from app.models.user import User
 
 
 class StubUserService:
@@ -25,6 +28,7 @@ class StubUserService:
             hashed_password=hashed_password,
             full_name=full_name,
             is_active=True,
+            role=Role.USER,
             created_at=datetime.now(timezone.utc),
             updated_at=datetime.now(timezone.utc),
         )
@@ -62,7 +66,11 @@ def client() -> TestClient:
     async def override_get_user_service():
         return service
 
+    async def override_get_current_user() -> User:
+        return User(email="admin@example.com", hashed_password="secret", role=Role.ADMIN)
+
     app.dependency_overrides[users_module.get_user_service] = override_get_user_service
+    app.dependency_overrides[get_current_user] = override_get_current_user
     try:
         yield TestClient(app)
     finally:
