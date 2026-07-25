@@ -1,45 +1,52 @@
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from app.models.role import Role
 from app.models.user import User
-from app.repositories.user_repository import UserRepository
 from app.scripts.create_admin import create_admin_user
-from app.services.auth_service import AuthService, password_hasher
-from app.services.user_service import UserService
+from app.services.auth_service import password_hasher
 
 
 @pytest.mark.asyncio
 async def test_create_admin_user_successfully():
     """Verifica que se crea un usuario administrador correctamente."""
     mock_session = AsyncMock()
-    repository = UserRepository(mock_session)
-
+    
     email = "admin@example.com"
     password = "SecurePass123!"
 
-    # Mock de get_by_email para que no exista el usuario
-    repository.get_by_email = AsyncMock(return_value=None)
-    
-    # Mock de create_user
+    # Crear usuario inicial (sin rol ADMIN)
     admin_user = User(email=email, hashed_password=password_hasher.hash(password), full_name="Administrator")
-    repository.create = AsyncMock(return_value=admin_user)
-    repository.update = AsyncMock(return_value=admin_user)
+    # Crear usuario actualizado (con rol ADMIN)
+    updated_admin = User(email=email, hashed_password=password_hasher.hash(password), full_name="Administrator", role=Role.ADMIN)
 
-    # Ejecutar con sesión mock
-    await create_admin_user(email, password, session=mock_session)
+    # Mock del repositorio
+    mock_repository = MagicMock()
+    mock_repository.get_by_email = AsyncMock(return_value=None)
+    mock_repository.create = AsyncMock(return_value=admin_user)
+    mock_repository.update = AsyncMock(return_value=updated_admin)
 
-    # Verificar que se llamó a create
-    repository.create.assert_called_once()
-    created_user = repository.create.call_args[0][0]
-    assert created_user.email == email
-    assert created_user.role == Role.USER  # Inicialmente USER
+    # Mock de UserService
+    mock_user_service = MagicMock()
+    mock_user_service.create_user = AsyncMock(return_value=admin_user)
+
+    with patch("app.scripts.create_admin.UserRepository", return_value=mock_repository), \
+         patch("app.scripts.create_admin.UserService", return_value=mock_user_service):
+        await create_admin_user(email, password, session=mock_session)
+
+    # Verificar que se llamó a create_user del servicio con la contraseña hasheada
+    mock_user_service.create_user.assert_called_once()
+    call_kwargs = mock_user_service.create_user.call_args[1]
+    assert call_kwargs["email"] == email
+    assert call_kwargs["full_name"] == "Administrator"
+    assert call_kwargs["hashed_password"] != password
+    assert call_kwargs["hashed_password"].startswith("$")
     
     # Verificar que se actualizó a ADMIN
-    repository.update.assert_called_once()
-    updated_user = repository.update.call_args[0][0]
+    mock_repository.update.assert_called_once()
+    updated_user = mock_repository.update.call_args[0][0]
     assert updated_user.role == Role.ADMIN
 
 
@@ -47,14 +54,17 @@ async def test_create_admin_user_successfully():
 async def test_create_admin_user_raises_when_user_exists():
     """Verifica que no se crea el admin si el usuario ya existe."""
     mock_session = AsyncMock()
-    repository = UserRepository(mock_session)
-
+    
     email = "existing@example.com"
     existing_user = User(email=email, hashed_password="hashed", role=Role.USER)
-    repository.get_by_email = AsyncMock(return_value=existing_user)
 
-    with pytest.raises(SystemExit):
-        await create_admin_user(email, "password123", session=mock_session)
+    # Mock del repositorio
+    mock_repository = MagicMock()
+    mock_repository.get_by_email = AsyncMock(return_value=existing_user)
+
+    with patch("app.scripts.create_admin.UserRepository", return_value=mock_repository):
+        with pytest.raises(SystemExit):
+            await create_admin_user(email, "password123", session=mock_session)
 
 
 @pytest.mark.asyncio
@@ -78,44 +88,60 @@ async def test_create_admin_user_rejects_common_passwords():
 async def test_create_admin_user_hashes_password():
     """Verifica que la contraseña se hashea correctamente."""
     mock_session = AsyncMock()
-    repository = UserRepository(mock_session)
-
+    
     email = "admin@example.com"
     password = "SecurePass123!"
 
-    repository.get_by_email = AsyncMock(return_value=None)
-    
     admin_user = User(email=email, hashed_password="hashed", full_name="Administrator")
-    repository.create = AsyncMock(return_value=admin_user)
-    repository.update = AsyncMock(return_value=admin_user)
+    updated_admin = User(email=email, hashed_password="hashed", full_name="Administrator", role=Role.ADMIN)
 
-    await create_admin_user(email, password, session=mock_session)
+    # Mock del repositorio
+    mock_repository = MagicMock()
+    mock_repository.get_by_email = AsyncMock(return_value=None)
+    mock_repository.create = AsyncMock(return_value=admin_user)
+    mock_repository.update = AsyncMock(return_value=updated_admin)
 
-    # Verificar que se hasheó la contraseña
-    created_user = repository.create.call_args[0][0]
-    assert created_user.hashed_password != password
-    assert created_user.hashed_password.startswith("$")  # Formato Argon2
+    # Mock de UserService
+    mock_user_service = MagicMock()
+    mock_user_service.create_user = AsyncMock(return_value=admin_user)
+
+    with patch("app.scripts.create_admin.UserRepository", return_value=mock_repository), \
+         patch("app.scripts.create_admin.UserService", return_value=mock_user_service):
+        await create_admin_user(email, password, session=mock_session)
+
+    # Verificar que se llamó a create_user con la contraseña hasheada
+    mock_user_service.create_user.assert_called_once()
+    call_kwargs = mock_user_service.create_user.call_args[1]
+    assert call_kwargs["hashed_password"] != password
+    assert call_kwargs["hashed_password"].startswith("$")  # Formato Argon2
 
 
 @pytest.mark.asyncio
 async def test_create_admin_user_sets_correct_role():
     """Verifica que el usuario se crea con rol ADMIN."""
     mock_session = AsyncMock()
-    repository = UserRepository(mock_session)
-
+    
     email = "admin@example.com"
     password = "SecurePass123!"
 
-    repository.get_by_email = AsyncMock(return_value=None)
-    
     admin_user = User(email=email, hashed_password=password_hasher.hash(password), full_name="Administrator")
-    repository.create = AsyncMock(return_value=admin_user)
-    
     updated_admin = User(email=email, hashed_password=password_hasher.hash(password), full_name="Administrator", role=Role.ADMIN)
-    repository.update = AsyncMock(return_value=updated_admin)
 
-    await create_admin_user(email, password, session=mock_session)
+    # Mock del repositorio
+    mock_repository = MagicMock()
+    mock_repository.get_by_email = AsyncMock(return_value=None)
+    mock_repository.create = AsyncMock(return_value=admin_user)
+    mock_repository.update = AsyncMock(return_value=updated_admin)
+
+    # Mock de UserService
+    mock_user_service = MagicMock()
+    mock_user_service.create_user = AsyncMock(return_value=admin_user)
+
+    with patch("app.scripts.create_admin.UserRepository", return_value=mock_repository), \
+         patch("app.scripts.create_admin.UserService", return_value=mock_user_service):
+        await create_admin_user(email, password, session=mock_session)
 
     # Verificar que se actualizó el rol a ADMIN
-    updated_user = repository.update.call_args[0][0]
+    mock_repository.update.assert_called_once()
+    updated_user = mock_repository.update.call_args[0][0]
     assert updated_user.role == Role.ADMIN
