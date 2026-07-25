@@ -13,6 +13,12 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_access_token_expire_minutes: int = 30
     cors_origins: str = "http://localhost:3000,http://localhost:5173,http://localhost:8080"
+    cors_allow_credentials: bool = True
+    cors_allow_methods: str = "GET,POST,PUT,PATCH,DELETE,OPTIONS"
+    cors_allow_headers: str = "*"
+    rate_limit_global: int = 60
+    rate_limit_login: int = 5
+    rate_limit_register: int = 10
 
     @property
     def database_url_for_environment(self) -> str:
@@ -22,6 +28,18 @@ class Settings(BaseSettings):
     def cors_origins_list(self) -> list[str]:
         """Convierte la cadena de origins en una lista."""
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+
+    @property
+    def cors_methods_list(self) -> list[str]:
+        """Convierte la cadena de métodos HTTP en una lista."""
+        return [method.strip() for method in self.cors_allow_methods.split(",") if method.strip()]
+
+    @property
+    def cors_headers_list(self) -> list[str]:
+        """Convierte la cadena de headers en una lista."""
+        if self.cors_allow_headers == "*":
+            return ["*"]
+        return [header.strip() for header in self.cors_allow_headers.split(",") if header.strip()]
 
     model_config = SettingsConfigDict(
         env_file=".env",

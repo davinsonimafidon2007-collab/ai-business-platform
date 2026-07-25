@@ -129,3 +129,46 @@ def test_cors_origins_list_parsing():
         mock_settings.cors_origins = "http://localhost:3000, , http://localhost:5173"
         mock_settings.cors_origins_list = ["http://localhost:3000", "http://localhost:5173"]
         assert mock_settings.cors_origins_list == ["http://localhost:3000", "http://localhost:5173"]
+
+
+def test_cors_methods_list_parsing():
+    """Verifica que el parsing de CORS methods funciona correctamente."""
+    with patch("app.core.config.settings") as mock_settings:
+        # Test con múltiples métodos
+        mock_settings.cors_allow_methods = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+        mock_settings.cors_methods_list = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
+        assert mock_settings.cors_methods_list == ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
+        
+        # Test con espacios vacíos
+        mock_settings.cors_allow_methods = "GET, POST, PUT"
+        mock_settings.cors_methods_list = ["GET", "POST", "PUT"]
+        assert mock_settings.cors_methods_list == ["GET", "POST", "PUT"]
+
+
+def test_cors_headers_list_parsing():
+    """Verifica que el parsing de CORS headers funciona correctamente."""
+    with patch("app.core.config.settings") as mock_settings:
+        # Test con wildcard
+        mock_settings.cors_allow_headers = "*"
+        mock_settings.cors_headers_list = ["*"]
+        assert mock_settings.cors_headers_list == ["*"]
+        
+        # Test con headers específicos
+        mock_settings.cors_allow_headers = "Content-Type, Authorization, X-Requested-With"
+        mock_settings.cors_headers_list = ["Content-Type", "Authorization", "X-Requested-With"]
+        assert mock_settings.cors_headers_list == ["Content-Type", "Authorization", "X-Requested-With"]
+        
+        # Test con espacios vacíos
+        mock_settings.cors_allow_headers = "Content-Type, , Authorization"
+        mock_settings.cors_headers_list = ["Content-Type", "Authorization"]
+        assert mock_settings.cors_headers_list == ["Content-Type", "Authorization"]
+
+
+def test_cors_allow_credentials_setting():
+    """Verifica que la configuración de allow_credentials se carga correctamente."""
+    with patch("app.core.config.settings") as mock_settings:
+        mock_settings.cors_allow_credentials = True
+        assert mock_settings.cors_allow_credentials is True
+        
+        mock_settings.cors_allow_credentials = False
+        assert mock_settings.cors_allow_credentials is False

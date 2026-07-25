@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.db.session import get_db_session
 from app.dependencies.auth import get_current_user
 from app.models.user import User
@@ -25,8 +26,15 @@ async def register_user(payload: RegisterRequest, service: AuthService = Depends
     return UserRead.model_validate(user)
 
 
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+
+limiter = Limiter(key_func=get_remote_address)
+
+
 @router.post("/login", response_model=TokenResponse)
-async def login_user(payload: LoginRequest, service: AuthService = Depends(get_auth_service)) -> TokenResponse:
+@limiter.limit(f"{settings.rate_limit_login}/minute")
+async def login_user(request: Request, payload: LoginRequest, service: AuthService = Depends(get_auth_service)) -> TokenResponse:
     user = await service.authenticate_user(email=str(payload.email), password=payload.password)
     token = service.create_access_token(user_id=user.id)
     return TokenResponse(access_token=token)

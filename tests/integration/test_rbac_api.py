@@ -51,7 +51,7 @@ def client() -> TestClient:
     app.dependency_overrides[users_module.get_user_service] = override_get_user_service
     app.dependency_overrides[get_current_user] = override_get_current_user
     try:
-        test_client = TestClient(app)
+        test_client = TestClient(app, raise_server_exceptions=False)
         test_client.current_user = current_user  # type: ignore[attr-defined]
         yield test_client
     finally:
@@ -93,7 +93,7 @@ def unauthenticated_client() -> TestClient:
 
     app.dependency_overrides[users_module.get_user_service] = override_get_user_service
     try:
-        yield TestClient(app)
+        yield TestClient(app, raise_server_exceptions=False)
     finally:
         app.dependency_overrides.clear()
 
