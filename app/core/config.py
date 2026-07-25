@@ -10,6 +10,10 @@ class Settings(BaseSettings):
     environment: Literal["development", "production", "test"] = "development"
     database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/ai_business_platform"
 
+    @property
+    def database_url_for_environment(self) -> str:
+        return self.database_url
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
