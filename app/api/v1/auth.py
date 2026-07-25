@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import APIRouter, Body, Depends, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -8,12 +10,16 @@ from app.db.session import get_db_session
 from app.dependencies.auth import get_current_user
 from app.models.refresh_token import RefreshToken
 from app.models.user import User
+from app.notifications.email_provider import SmtpEmailProvider
 from app.repositories.refresh_token_repository import RefreshTokenRepository
 from app.repositories.user_repository import UserRepository
+from app.repositories.verification_token_repository import VerificationTokenRepository
 from app.schemas.auth import LoginRequest, RegisterRequest, TokenResponse
 from app.schemas.user import UserRead
+from app.schemas.verification import VerificationRequestResponse, VerifyRequest, VerifyResponse
 from app.services.auth_service import AuthService
 from app.services.refresh_token_service import RefreshTokenService
+from app.services.verification_service import VerificationService
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
@@ -91,3 +97,32 @@ async def logout(
 @router.get("/me", response_model=UserRead)
 async def get_current_user_profile(current_user: User = Depends(get_current_user)) -> UserRead:
     return UserRead.model_validate(current_user)
+
+
+async def get_verification_service(session: AsyncSession = Depends(get_db_session)) -> VerificationService:
+    user_repository = UserRepository(session)
+    token_repository = VerificationTokenRepository(session)
+    email_provider = SmtpEmailProvider()
+    return VerificationService(
+        user_repository=user_repository,
+        token_repository=token_repository,
+        email_provider=email_provider,
+    )
+
+
+@router.post("/request-verification", response_model=VerificationRequestResponse)
+async def request_verification(
+    current_user: User = Depends(get_current_user),
+    verification_service: VerificationService = Depends(get_verification_service),
+) -> VerificationRequestResponse:
+    await verification_service.request_verification(current_user)
+    return VerificationRequestResponse()
+
+
+@router.post("/verify", response_model=VerifyResponse)
+async def verify_email(
+    payload: VerifyRequest,
+    verification_service: VerificationService = Depends(get_verification_service),
+) -> VerifyResponse:
+    await verification_service.confirm_verification(payload.token)
+    return VerifyResponse()

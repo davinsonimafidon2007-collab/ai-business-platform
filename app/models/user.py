@@ -18,6 +18,7 @@ class User(Base):
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     full_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    is_verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     role: Mapped[Role] = mapped_column(
         Enum(Role, name="role", values_callable=lambda roles: [role.value for role in roles]),
         default=Role.USER,

@@ -5,7 +5,7 @@ from app.models.user import User
 def test_user_model_has_expected_columns() -> None:
     columns = {column.name for column in User.__table__.columns}
 
-    assert {"id", "email", "hashed_password", "full_name", "is_active", "role", "created_at", "updated_at"}.issubset(columns)
+    assert {"id", "email", "hashed_password", "full_name", "is_active", "is_verified", "role", "created_at", "updated_at"}.issubset(columns)
 
 
 def test_user_model_defaults_to_user_role() -> None:

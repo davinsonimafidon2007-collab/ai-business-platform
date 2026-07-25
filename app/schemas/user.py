@@ -23,6 +23,7 @@ class UserRead(UserBase):
 
     id: UUID
     role: Role
+    is_verified: bool
     created_at: datetime
     updated_at: datetime
 

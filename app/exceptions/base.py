@@ -41,3 +41,13 @@ class AuthenticationError(AppError):
 class AuthorizationError(AppError):
     status_code = 403
     default_code = "authorization_error"
+
+
+class VerificationTokenNotFoundError(AppError):
+    status_code = 404
+    default_code = "verification_token_not_found"
+
+
+class VerificationTokenExpiredError(AppError):
+    status_code = 400
+    default_code = "verification_token_expired"

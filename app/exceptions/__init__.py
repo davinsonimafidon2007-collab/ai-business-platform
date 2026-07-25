@@ -5,6 +5,8 @@ from app.exceptions.base import (
     InvalidCredentialsError,
     UserAlreadyExistsError,
     UserNotFoundError,
+    VerificationTokenExpiredError,
+    VerificationTokenNotFoundError,
 )
 
 __all__ = [
@@ -14,4 +16,6 @@ __all__ = [
     "InvalidCredentialsError",
     "UserAlreadyExistsError",
     "UserNotFoundError",
+    "VerificationTokenExpiredError",
+    "VerificationTokenNotFoundError",
 ]
