@@ -6,7 +6,9 @@ from slowapi.middleware import SlowAPIMiddleware
 from slowapi.util import get_remote_address
 
 from app.api.v1.auth import router as auth_router
+from app.api.v1.searches import router as searches_router
 from app.api.v1.users import router as users_router
+from app.api.v1.vehicles import router as vehicles_router
 from app.core.config import settings
 from app.core.exception_handlers import register_exception_handlers
 from app.core.logging import setup_logging
@@ -43,7 +45,9 @@ app.add_middleware(
 )
 
 app.include_router(auth_router)
+app.include_router(searches_router)
 app.include_router(users_router)
+app.include_router(vehicles_router)
 
 
 @app.get(

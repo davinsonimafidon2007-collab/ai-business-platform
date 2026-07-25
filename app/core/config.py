@@ -20,6 +20,13 @@ class Settings(BaseSettings):
     rate_limit_global: int = 60
     rate_limit_login: int = 5
     rate_limit_register: int = 10
+    password_reset_token_expire_hours: int = 1
+
+    # Provider HTTP client configuration
+    provider_http_timeout: float = 30.0
+    provider_http_max_retries: int = 3
+    provider_http_retry_backoff_min: int = 1
+    provider_http_retry_backoff_max: int = 60
 
     @property
     def database_url_for_environment(self) -> str:

@@ -1,0 +1,329 @@
+from __future__ import annotations
+
+from datetime import datetime, timedelta, timezone
+from typing import Any
+
+import pytest
+from fastapi import HTTPException, Request
+from fastapi.testclient import TestClient
+
+from app.api.v1 import auth as auth_module
+from app.main import app
+from app.models.password_reset_token import PasswordResetToken
+from app.models.user import User
+from app.repositories.password_reset_token_repository import PasswordResetTokenRepository
+from app.repositories.user_repository import UserRepository
+from app.services.auth_service import AuthService
+from app.services.password_reset_service import PasswordResetService
+from app.services.refresh_token_service import RefreshTokenService
+
+
+class FakeUserRepository:
+    def __init__(self) -> None:
+        self._users: dict[str, User] = {}
+
+    async def get_by_email(self, email: str) -> User | None:
+        return self._users.get(email)
+
+    async def get_by_id(self, user_id: str | Any) -> User | None:
+        return next((user for user in self._users.values() if str(user.id) == str(user_id)), None)
+
+    async def create(self, user: User) -> User:
+        self._users[user.email] = user
+        return user
+
+    async def update(self, user: User) -> User:
+        self._users[user.email] = user
+        return user
+
+
+class FakePasswordResetTokenRepository:
+    def __init__(self) -> None:
+        self._tokens: list[PasswordResetToken] = []
+
+    async def create(self, token: PasswordResetToken) -> PasswordResetToken:
+        self._tokens.append(token)
+        return token
+
+    async def get_by_token(self, token: str) -> PasswordResetToken | None:
+        return next((t for t in self._tokens if t.token == token), None)
+
+    async def get_valid_by_user_id(self, user_id: str) -> PasswordResetToken | None:
+        now = datetime.now(timezone.utc)
+        valid = [t for t in self._tokens if t.user_id == user_id and not t.is_used and t.expires_at > now]
+        return valid[-1] if valid else None
+
+    async def mark_as_used(self, token: PasswordResetToken) -> PasswordResetToken:
+        token.is_used = True
+        token.used_at = datetime.now(timezone.utc)
+        return token
+
+    async def invalidate_all_for_user(self, user_id: str) -> None:
+        now = datetime.now(timezone.utc)
+        for token in self._tokens:
+            if token.user_id == user_id and not token.is_used and token.expires_at > now:
+                token.is_used = True
+                token.used_at = now
+
+
+class FakeRefreshTokenRepository:
+    def __init__(self) -> None:
+        self._tokens: dict[str, str] = {}
+
+    async def create(self, refresh_token) -> None:
+        self._tokens[refresh_token.token] = refresh_token.user_id
+
+    async def get_by_token(self, token: str):
+        from app.models.refresh_token import RefreshToken
+        if token not in self._tokens:
+            return None
+        return RefreshToken(token=token, user_id=self._tokens[token])
+
+    async def revoke_by_token(self, token: str) -> None:
+        if token in self._tokens:
+            del self._tokens[token]
+
+    async def revoke_all_by_user_id(self, user_id: str) -> None:
+        self._tokens = {token: uid for token, uid in self._tokens.items() if uid != user_id}
+
+
+user_repository = FakeUserRepository()
+token_repository = FakePasswordResetTokenRepository()
+refresh_token_repository = FakeRefreshTokenRepository()
+auth_service = AuthService(user_repository)
+refresh_service = RefreshTokenService(refresh_token_repository)
+password_reset_service = PasswordResetService(
+    user_repository=user_repository,
+    token_repository=token_repository,
+    email_provider=None,
+)
+
+
+@pytest.fixture
+def client() -> TestClient:
+    # Clear state between tests
+    user_repository._users.clear()
+    token_repository._tokens.clear()
+    refresh_token_repository._tokens.clear()
+
+    async def override_get_auth_service() -> AuthService:
+        return auth_service
+
+    async def override_get_refresh_token_service() -> RefreshTokenService:
+        return refresh_service
+
+    async def override_get_password_reset_service() -> PasswordResetService:
+        return password_reset_service
+
+    async def override_get_current_user(request: Request) -> User:
+        authorization = request.headers.get("authorization", "")
+        if not authorization.startswith("Bearer "):
+            raise HTTPException(status_code=401, detail="Not authenticated")
+
+        token = authorization.split(" ", 1)[1]
+        try:
+            payload = auth_service.decode_access_token(token)
+        except Exception as exc:
+            raise HTTPException(status_code=401, detail="Invalid or expired token") from exc
+
+        user_id = payload.get("sub")
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Invalid token")
+
+        user = await user_repository.get_by_id(user_id)
+        if user is None:
+            raise HTTPException(status_code=404, detail="User not found")
+        return user
+
+    app.dependency_overrides[auth_module.get_auth_service] = override_get_auth_service
+    app.dependency_overrides[auth_module.get_current_user] = override_get_current_user
+    app.dependency_overrides[auth_module.get_refresh_token_service] = override_get_refresh_token_service
+    app.dependency_overrides[auth_module.get_password_reset_service] = override_get_password_reset_service
+    try:
+        yield TestClient(app)
+    finally:
+        app.dependency_overrides.clear()
+
+
+# ---------------------------------------------------------------------------
+# Tests – Forgot Password
+# ---------------------------------------------------------------------------
+
+
+def test_forgot_password_returns_success_for_existing_user(client: TestClient) -> None:
+    """Verifica que forgot-password responde correctamente para un usuario existente."""
+    # Registrar usuario
+    client.post(
+        "/auth/register",
+        json={"email": "reset@example.com", "password": "secret123"},
+    )
+
+    # Solicitar reset
+    response = client.post(
+        "/auth/forgot-password",
+        json={"email": "reset@example.com"},
+    )
+    assert response.status_code == 200
+    assert "sent" in response.json()["message"].lower()
+
+    # Verificar que se creó un token
+    assert len(token_repository._tokens) == 1
+
+
+def test_forgot_password_returns_success_for_nonexistent_user(client: TestClient) -> None:
+    """Verifica que forgot-password no revela si el email no existe."""
+    response = client.post(
+        "/auth/forgot-password",
+        json={"email": "nonexistent@example.com"},
+    )
+    assert response.status_code == 200
+    assert "sent" in response.json()["message"].lower()
+
+    # No debe crear token
+    assert len(token_repository._tokens) == 0
+
+
+def test_forgot_password_invalidates_previous_tokens(client: TestClient) -> None:
+    """Verifica que forgot-password invalida tokens anteriores."""
+    # Registrar usuario
+    client.post(
+        "/auth/register",
+        json={"email": "multi@example.com", "password": "secret123"},
+    )
+
+    # Primera solicitud
+    client.post(
+        "/auth/forgot-password",
+        json={"email": "multi@example.com"},
+    )
+    first_token = token_repository._tokens[0]
+
+    # Segunda solicitud
+    client.post(
+        "/auth/forgot-password",
+        json={"email": "multi@example.com"},
+    )
+
+    # El primer token debe estar marcado como usado
+    assert first_token.is_used is True
+    assert len(token_repository._tokens) == 2
+
+
+# ---------------------------------------------------------------------------
+# Tests – Reset Password
+# ---------------------------------------------------------------------------
+
+
+def test_reset_password_successfully(client: TestClient) -> None:
+    """Verifica el flujo completo de reset de contraseña."""
+    # Registrar usuario
+    client.post(
+        "/auth/register",
+        json={"email": "fullreset@example.com", "password": "secret123"},
+    )
+
+    # Solicitar reset
+    client.post(
+        "/auth/forgot-password",
+        json={"email": "fullreset@example.com"},
+    )
+
+    # Obtener el token generado
+    token_record = token_repository._tokens[0]
+    raw_token = token_record.token
+
+    # Resetear contraseña
+    response = client.post(
+        "/auth/reset-password",
+        json={"token": raw_token, "new_password": "NewSecurePass123!"},
+    )
+    assert response.status_code == 200
+    assert "reset" in response.json()["message"].lower()
+
+    # Verificar que el token está marcado como usado
+    assert token_record.is_used is True
+
+    # Verificar que se puede iniciar sesión con la nueva contraseña
+    login_response = client.post(
+        "/auth/login",
+        json={"email": "fullreset@example.com", "password": "NewSecurePass123!"},
+    )
+    assert login_response.status_code == 200
+    assert "access_token" in login_response.json()
+
+
+def test_reset_password_with_expired_token_returns_error(client: TestClient) -> None:
+    """Verifica que un token expirado devuelve error."""
+    # Registrar usuario
+    client.post(
+        "/auth/register",
+        json={"email": "expiredreset@example.com", "password": "secret123"},
+    )
+
+    # Solicitar reset
+    client.post(
+        "/auth/forgot-password",
+        json={"email": "expiredreset@example.com"},
+    )
+
+    # Forzar expiración del token
+    token_record = token_repository._tokens[0]
+    token_record.expires_at = datetime.now(timezone.utc) - timedelta(hours=1)
+
+    # Intentar reset con token expirado
+    response = client.post(
+        "/auth/reset-password",
+        json={"token": token_record.token, "new_password": "NewSecurePass123!"},
+    )
+    assert response.status_code == 400
+    assert "expired" in response.json()["detail"].lower()
+
+
+def test_reset_password_with_already_used_token_returns_error(client: TestClient) -> None:
+    """Verifica que un token ya usado devuelve error."""
+    # Registrar usuario
+    client.post(
+        "/auth/register",
+        json={"email": "usedreset@example.com", "password": "secret123"},
+    )
+
+    # Solicitar reset
+    client.post(
+        "/auth/forgot-password",
+        json={"email": "usedreset@example.com"},
+    )
+
+    token_record = token_repository._tokens[0]
+
+    # Primer reset (debe funcionar)
+    client.post(
+        "/auth/reset-password",
+        json={"token": token_record.token, "new_password": "NewSecurePass123!"},
+    )
+
+    # Segundo reset con el mismo token (debe fallar)
+    response = client.post(
+        "/auth/reset-password",
+        json={"token": token_record.token, "new_password": "AnotherPass123!"},
+    )
+    assert response.status_code == 400
+    assert "used" in response.json()["detail"].lower()
+
+
+def test_reset_password_with_invalid_token_returns_error(client: TestClient) -> None:
+    """Verifica que un token inválido devuelve error."""
+    response = client.post(
+        "/auth/reset-password",
+        json={"token": "invalid-token-that-does-not-exist", "new_password": "NewSecurePass123!"},
+    )
+    assert response.status_code == 404
+    assert "not found" in response.json()["detail"].lower()
+
+
+def test_reset_password_with_short_password_returns_error(client: TestClient) -> None:
+    """Verifica que una contraseña corta devuelve error de validación."""
+    response = client.post(
+        "/auth/reset-password",
+        json={"token": "some-token", "new_password": "short"},
+    )
+    assert response.status_code == 422

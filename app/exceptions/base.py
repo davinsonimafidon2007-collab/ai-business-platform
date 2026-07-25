@@ -51,3 +51,18 @@ class VerificationTokenNotFoundError(AppError):
 class VerificationTokenExpiredError(AppError):
     status_code = 400
     default_code = "verification_token_expired"
+
+
+class PasswordResetTokenNotFoundError(AppError):
+    status_code = 404
+    default_code = "password_reset_token_not_found"
+
+
+class PasswordResetTokenExpiredError(AppError):
+    status_code = 400
+    default_code = "password_reset_token_expired"
+
+
+class PasswordResetError(AppError):
+    status_code = 400
+    default_code = "password_reset_error"

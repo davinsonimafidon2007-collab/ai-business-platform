@@ -28,6 +28,7 @@ class StubUserService:
             hashed_password=hashed_password,
             full_name=full_name,
             is_active=True,
+            is_verified=False,
             role=Role.USER,
             created_at=datetime.now(timezone.utc),
             updated_at=datetime.now(timezone.utc),

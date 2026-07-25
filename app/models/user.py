@@ -42,6 +42,8 @@ class User(Base):
             self.id = str(uuid4())
         if getattr(self, "is_active", None) is None:
             self.is_active = True
+        if getattr(self, "is_verified", None) is None:
+            self.is_verified = False
         if getattr(self, "role", None) is None:
             self.role = Role.USER
         if getattr(self, "created_at", None) is None:

@@ -11,13 +11,21 @@ from app.dependencies.auth import get_current_user
 from app.models.refresh_token import RefreshToken
 from app.models.user import User
 from app.notifications.email_provider import SmtpEmailProvider
+from app.repositories.password_reset_token_repository import PasswordResetTokenRepository
 from app.repositories.refresh_token_repository import RefreshTokenRepository
 from app.repositories.user_repository import UserRepository
 from app.repositories.verification_token_repository import VerificationTokenRepository
 from app.schemas.auth import LoginRequest, RegisterRequest, TokenResponse
+from app.schemas.password_reset import (
+    ForgotPasswordRequest,
+    ForgotPasswordResponse,
+    ResetPasswordRequest,
+    ResetPasswordResponse,
+)
 from app.schemas.user import UserRead
 from app.schemas.verification import VerificationRequestResponse, VerifyRequest, VerifyResponse
 from app.services.auth_service import AuthService
+from app.services.password_reset_service import PasswordResetService
 from app.services.refresh_token_service import RefreshTokenService
 from app.services.verification_service import VerificationService
 
@@ -126,3 +134,37 @@ async def verify_email(
 ) -> VerifyResponse:
     await verification_service.confirm_verification(payload.token)
     return VerifyResponse()
+
+
+# ---------------------------------------------------------------------------
+# Password Reset
+# ---------------------------------------------------------------------------
+
+
+async def get_password_reset_service(session: AsyncSession = Depends(get_db_session)) -> PasswordResetService:
+    user_repository = UserRepository(session)
+    token_repository = PasswordResetTokenRepository(session)
+    email_provider = SmtpEmailProvider()
+    return PasswordResetService(
+        user_repository=user_repository,
+        token_repository=token_repository,
+        email_provider=email_provider,
+    )
+
+
+@router.post("/forgot-password", response_model=ForgotPasswordResponse)
+async def forgot_password(
+    payload: ForgotPasswordRequest,
+    password_reset_service: PasswordResetService = Depends(get_password_reset_service),
+) -> ForgotPasswordResponse:
+    await password_reset_service.request_password_reset(str(payload.email))
+    return ForgotPasswordResponse()
+
+
+@router.post("/reset-password", response_model=ResetPasswordResponse)
+async def reset_password(
+    payload: ResetPasswordRequest,
+    password_reset_service: PasswordResetService = Depends(get_password_reset_service),
+) -> ResetPasswordResponse:
+    await password_reset_service.reset_password(payload.token, payload.new_password)
+    return ResetPasswordResponse()

@@ -22,6 +22,7 @@ class StubUserService:
             hashed_password="secret",
             full_name=None,
             is_active=True,
+            is_verified=False,
             role=Role.USER,
             created_at=datetime.now(timezone.utc),
             updated_at=datetime.now(timezone.utc),
