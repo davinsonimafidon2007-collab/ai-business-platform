@@ -92,3 +92,15 @@ class SearchSummary(BaseModel):
     average: int = 0
     poor: int = 0
     rejected: int = 0
+
+
+class SearchEngineResult(BaseModel):
+    """Resultado completo de una búsqueda del SearchEngineService.
+
+    Contiene tanto el resumen como la lista completa de resultados analizados.
+    """
+
+    summary: SearchSummary
+    results: list[SearchResult]
+
+    model_config = {"arbitrary_types_allowed": True}

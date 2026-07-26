@@ -1,39 +1,34 @@
-# SearchOrchestrator Implementation Plan
+# TODOs — Implementation Complete ✅
 
-## ✅ Step 1: Create MarketEstimator Protocol
-- [x] Create `app/services/market_estimator.py` with `MarketEstimator` protocol/interface
-- [x] Define `estimate(vehicle) -> MarketEstimation` abstract method
+## Completed: ComparableMarketEstimator
 
-## ✅ Step 2: Add SearchRequest, SearchResult, SearchSummary to models
-- [x] Extend `app/models/search.py` with Pydantic models:
-  - `SearchRequest` (query, max_results, providers, country, budget_min, budget_max)
-  - `SearchResult` (vehicle, vehicle_score, market_estimation, profit_analysis, opportunity)
-  - `SearchSummary` (total_results, excellent, good, average, poor, rejected)
+### Files Created
 
-## ✅ Step 3: Create SearchOrchestrator
-- [x] Create `app/services/search_orchestrator.py`
-- [x] Constructor with dependency injection (VehicleService, VehicleScorer, MarketEstimator, ProfitAnalyzer, OpportunityFinder)
-- [x] `search(request: SearchRequest) -> list[SearchResult]`
-- [x] `summarize(results: list[SearchResult]) -> SearchSummary`
-- [x] `top(results: list[SearchResult], n: int) -> list[SearchResult]`
-- [x] `filter(results: list[SearchResult], ...) -> list[SearchResult]`
-- [x] `sort(results: list[SearchResult], ...) -> list[SearchResult]`
+| File | Status |
+|------|--------|
+| `app/config/comparable_market.py` | ✅ All tolerances, weights, thresholds |
+| `app/services/comparable_market_estimator.py` | ✅ 5 components: ComparableSearcher, ComparableFilter, MarketStatisticsCalculator, ConfidenceCalculator, ComparableMarketEstimator |
+| `tests/unit/test_comparable_market_estimator.py` | ✅ 46 tests across 4 test classes |
 
-## ✅ Step 4: Create Tests
-- [x] Create `tests/unit/test_search_orchestrator.py` (53 tests)
-- [x] Test empty search
-- [x] Test search with results
-- [x] Test multiple providers
-- [x] Test correct ordering
-- [x] Test top()
-- [x] Test filter()
-- [x] Test summarize()
-- [x] Test determinism
-- [x] Test integration with mocks
-- [x] Test edge cases
+### What was preserved (per user requirements)
+- ✅ MarketEstimator protocol interface kept **sync** (no `async` conversion)
+- ✅ Public API compatible (`estimate(vehicle) → MarketEstimation`)
+- ✅ No duplicated logic — delegated to CachedMarketRepository, VehicleService, ProviderRegistry
+- ✅ Everything configurable via `app/config/comparable_market.py`
+- ✅ Caching (local in-memory + CachedMarketRepository)
 
-## ✅ Step 5: Run Tests
-- [x] Run existing tests: **529 passed, 0 regressions**
-- [x] Run new tests: **53 passed, 100%**
-- [x] **Total: 582 tests passed**
+### Test Results
+
+| Test Class | Tests | Status |
+|-----------|-------|--------|
+| TestComparableFilter | 15 | ✅ All pass |
+| TestMarketStatisticsCalculator | 6 | ✅ All pass |
+| TestConfidenceCalculator | 7 | ✅ All pass |
+| TestComparableMarketEstimator | 16 | ✅ All pass |
+| TestComponentIntegration | 2 | ✅ All pass |
+| **Total** | **46** | **✅ All pass** |
+
+### Regression Check
+- Full test suite: **Zero regressions** ✅
+- Only pre-existing failure: `test_database_connection` (requires PostgreSQL runtime — environment constraint, not code regression)
 
