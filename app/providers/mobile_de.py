@@ -21,7 +21,7 @@ BASE_URL = "https://www.mobile.de"
 
 # Mapeo de palabras clave a tipos de combustible
 _FUEL_PATTERNS: list[tuple[re.Pattern[str], str]] = [
-    (re.compile(r"benzin|petrol", re.IGNORECASE), "Gasolina"),
+    (re.compile(r"benzin|petrol|gasolina", re.IGNORECASE), "Gasolina"),
     (re.compile(r"diesel", re.IGNORECASE), "Diesel"),
     (re.compile(r"elektro", re.IGNORECASE), "Eléctrico"),
     (re.compile(r"hybrid", re.IGNORECASE), "Híbrido"),
@@ -224,6 +224,7 @@ class MobileDeProvider(VehicleProvider):
             power_hp=power_hp,
             location=location,
             images=images,
+            price=price,
         )
 
     # ------------------------------------------------------------------
@@ -282,6 +283,7 @@ class MobileDeProvider(VehicleProvider):
             location=location,
             images=images,
             description=description,
+            price=price,
         )
 
     # ------------------------------------------------------------------
@@ -431,20 +433,17 @@ class MobileDeProvider(VehicleProvider):
         """Parsea un texto de precio y devuelve el valor numérico."""
         if not text:
             return None
-        # Buscar patrones como "12.345 €", "12.345,- €", "12345 EUR"
-        match = re.search(r"(\d{1,3}(?:\.\d{3})*(?:,\d+)?)(?:,-)?\s*(?:€|EUR|eur)", text)
+        # Buscar patrones como "12.345 €", "12.345,- €", "12345 EUR", "12345 €"
+        # (?<!\d) evita coincidencias parciales dentro de números más grandes.
+        # La alternancia permite números sin separador de miles (ej. "12345").
+        match = re.search(
+            r"(?<!\d)(\d{1,3}(?:\.\d{3})*(?:,\d+)?|\d+)(?:,-)?\s*(?:€|EUR|eur)",
+            text,
+        )
         if match:
             raw = match.group(1)
             # Normalizar: eliminar puntos de miles, reemplazar coma decimal
             raw = raw.replace(".", "").replace(",", ".")
-            try:
-                return float(raw)
-            except ValueError:
-                return None
-        # También intentar sin símbolo de moneda
-        match = re.search(r"(\d{1,3}(?:\.\d{3})*(?:,\d+)?)\s*€", text)
-        if match:
-            raw = match.group(1).replace(".", "").replace(",", ".")
             try:
                 return float(raw)
             except ValueError:
@@ -539,7 +538,7 @@ class MobileDeProvider(VehicleProvider):
         for label_span in soup.select(".label"):
             label_text = label_span.get_text(strip=True).lower()
             if any(kw in label_text for kw in ("ubicación", "location", "localidad", "ort")):
-                value_span = label_span.find_next_sibling(".value")
+                value_span = label_span.find_next_sibling(class_="value")
                 if value_span:
                     text = value_span.get_text(strip=True)
                     if text:
