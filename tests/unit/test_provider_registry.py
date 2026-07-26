@@ -12,6 +12,9 @@ class FakeProvider(VehicleProvider):
     def source_name(self) -> str:
         return "fake_provider"
 
+    def _find_listing_nodes(self, soup: object) -> list[object]:
+        return []
+
     async def search(self, query: str, **kwargs: object) -> list[VehicleSearchResult]:
         return []
 
@@ -28,6 +31,9 @@ class AnotherFakeProvider(VehicleProvider):
     @property
     def source_name(self) -> str:
         return "another_provider"
+
+    def _find_listing_nodes(self, soup: object) -> list[object]:
+        return []
 
     async def search(self, query: str, **kwargs: object) -> list[VehicleSearchResult]:
         return []

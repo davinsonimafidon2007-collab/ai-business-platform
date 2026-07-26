@@ -51,6 +51,9 @@ class MockProvider(VehicleProvider):
     def source_name(self) -> str:
         return "mock_provider"
 
+    def _find_listing_nodes(self, soup: object) -> list[object]:
+        return []
+
     async def search(self, query: str, **kwargs: object) -> list[VehicleSearchResult]:
         return [
             VehicleSearchResult(
