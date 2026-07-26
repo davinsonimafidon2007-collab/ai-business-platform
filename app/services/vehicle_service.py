@@ -78,6 +78,7 @@ class VehicleService:
             "url": result.url,
             "brand": result.brand or "",
             "model": result.model or "",
+            "category": result.category,
             "version": result.version,
             "year": result.year,
             "mileage": result.mileage,
@@ -110,6 +111,8 @@ class VehicleService:
             update_data["brand"] = result.brand
         if result.model is not None:
             update_data["model"] = result.model
+        if result.category is not None:
+            update_data["category"] = result.category
         if result.version is not None:
             update_data["version"] = result.version
         if result.year is not None:

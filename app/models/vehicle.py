@@ -19,6 +19,7 @@ class Vehicle(Base):
     url: Mapped[str] = mapped_column(Text, nullable=True)
     brand: Mapped[str] = mapped_column(String(100), nullable=False)
     model: Mapped[str] = mapped_column(String(100), nullable=False)
+    category: Mapped[str | None] = mapped_column(String(50), nullable=True)
     version: Mapped[str | None] = mapped_column(String(255), nullable=True)
     year: Mapped[int | None] = mapped_column(Integer, nullable=True)
     mileage: Mapped[int | None] = mapped_column(Integer, nullable=True)

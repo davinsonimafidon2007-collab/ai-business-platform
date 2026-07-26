@@ -12,6 +12,7 @@ class VehicleBase(BaseModel):
     url: str | None = None
     brand: str = Field(..., max_length=100)
     model: str = Field(..., max_length=100)
+    category: str | None = Field(default=None, max_length=50)
     version: str | None = Field(default=None, max_length=255)
     year: int | None = None
     mileage: int | None = None
@@ -49,6 +50,7 @@ class VehicleUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     url: str | None = None
+    category: str | None = None
     version: str | None = None
     year: int | None = None
     mileage: int | None = None

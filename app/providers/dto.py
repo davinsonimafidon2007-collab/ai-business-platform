@@ -16,6 +16,7 @@ class VehicleSearchResult:
     url: str | None = None
     brand: str | None = None
     model: str | None = None
+    category: str | None = None
     version: str | None = None
     year: int | None = None
     mileage: int | None = None
@@ -49,6 +50,7 @@ class VehicleDetail:
     url: str | None = None
     brand: str | None = None
     model: str | None = None
+    category: str | None = None
     version: str | None = None
     year: int | None = None
     mileage: int | None = None

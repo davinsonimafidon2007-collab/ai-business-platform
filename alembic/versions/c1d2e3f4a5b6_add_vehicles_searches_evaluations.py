@@ -26,6 +26,7 @@ def upgrade() -> None:
         sa.Column("url", sa.Text, nullable=True),
         sa.Column("brand", sa.String(100), nullable=False),
         sa.Column("model", sa.String(100), nullable=False),
+        sa.Column("category", sa.String(50), nullable=True),
         sa.Column("version", sa.String(255), nullable=True),
         sa.Column("year", sa.Integer, nullable=True),
         sa.Column("mileage", sa.Integer, nullable=True),
