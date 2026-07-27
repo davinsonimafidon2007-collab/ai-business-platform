@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.db.session import get_db_session
 from app.dependencies.auth import get_current_user
+from app.exceptions import AuthenticationError
 from app.models.refresh_token import RefreshToken
 from app.models.user import User
 from app.notifications.email_provider import SmtpEmailProvider
@@ -48,14 +49,7 @@ async def register_user(payload: RegisterRequest, service: AuthService = Depends
     return UserRead.model_validate(user)
 
 
-from slowapi import Limiter
-from slowapi.util import get_remote_address
-
-limiter = Limiter(key_func=get_remote_address)
-
-
 @router.post("/login", response_model=TokenResponse)
-@limiter.limit(f"{settings.rate_limit_login}/minute")
 async def login_user(
     request: Request,
     payload: LoginRequest,

@@ -120,8 +120,8 @@ async def test_rate_limit_exceeded_returns_429(middleware: RateLimitMiddleware) 
 
     call_next = AsyncMock(return_value=Response())
 
-    # Exhaust the limit by making many requests
-    for _ in range(65):  # Default limit is 60
+    # Exhaust the limit by making many requests (default limit is 60)
+    for _ in range(60):
         await middleware.dispatch(request, call_next)
 
     # Next request should be rate limited

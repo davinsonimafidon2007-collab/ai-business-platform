@@ -4,10 +4,6 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.errors import RateLimitExceeded
-from slowapi.middleware import SlowAPIMiddleware
-from slowapi.util import get_remote_address
 
 from app.api.v1.auth import router as auth_router
 from app.api.v1.searches import router as searches_router
@@ -62,9 +58,6 @@ async def scheduler_lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 # FastAPI application
 # ---------------------------------------------------------------------------
 
-# Configuración de rate limiting
-limiter = Limiter(key_func=get_remote_address, default_limits=[f"{settings.rate_limit_global}/minute"])
-
 app = FastAPI(
     title=settings.app_name,
     description=settings.app_description,
@@ -74,10 +67,6 @@ app = FastAPI(
 
 # Registrar manejadores de excepciones
 register_exception_handlers(app)
-
-# Registrar manejador de errores de rate limit
-app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # Middlewares (ejecutados en orden inverso)
 # RateLimitMiddleware and AuthenticationMiddleware are the new security layers

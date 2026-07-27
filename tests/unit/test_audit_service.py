@@ -7,6 +7,8 @@ import pytest
 from app.models.audit_log import AuditLog
 from app.services.audit_service import AuditService
 
+pytestmark = pytest.mark.asyncio
+
 
 @pytest.fixture
 def mock_repository() -> MagicMock:

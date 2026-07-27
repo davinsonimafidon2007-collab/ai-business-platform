@@ -10,7 +10,7 @@ import { Button } from "@/app/components/ui/button";
 import { Input } from "@/app/components/ui/input";
 import { api } from "@/app/services/api/client";
 import { useAuthStore } from "@/app/store/auth-store";
-import type { LoginRequest, AuthResponse, User } from "@/app/types/auth";
+import type { AuthResponse, User } from "@/app/types/auth";
 
 const loginSchema = z.object({
   email: z.string().email("Email inválido"),
@@ -38,12 +38,9 @@ export function LoginPage() {
     setError(null);
 
     try {
-      const formData = new URLSearchParams();
-      formData.append("username", data.email);
-      formData.append("password", data.password);
-
-      const authRes = await api.post<AuthResponse>("/auth/login", formData, {
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      const authRes = await api.post<AuthResponse>("/auth/login", {
+        email: data.email,
+        password: data.password,
       });
 
       localStorage.setItem("access_token", authRes.data.access_token);

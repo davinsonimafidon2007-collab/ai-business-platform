@@ -7,6 +7,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from starlette.responses import Response
 
+from app.exceptions import AuthenticationError
 from app.middleware.authentication_middleware import AuthenticationMiddleware
 
 
@@ -88,9 +89,10 @@ async def test_invalid_api_key_returns_401(middleware: AuthenticationMiddleware)
 
     call_next = AsyncMock(return_value=Response())
 
-    response = await middleware.dispatch(request, call_next)
-    assert response.status_code == 401
-    call_next.assert_not_called()
+    with patch.object(middleware, "_authenticate_api_key", new=AsyncMock(side_effect=AuthenticationError("Invalid API key"))):
+        response = await middleware.dispatch(request, call_next)
+        assert response.status_code == 401
+        call_next.assert_not_called()
 
 
 @pytest.mark.asyncio

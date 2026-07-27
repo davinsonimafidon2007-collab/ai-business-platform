@@ -32,18 +32,18 @@ def test_rate_limit_global_applied():
         assert response.status_code == 200
 
 
-def test_rate_limit_login_decorator_applied():
-    """Verifica que el decorador de rate limit está aplicado en el endpoint de login."""
+def test_rate_limit_middleware_applied():
+    """Verifica que el RateLimitMiddleware está aplicado en la aplicación."""
+    from app.middleware.rate_limit_middleware import RateLimitMiddleware
+
+    # Verificar que el middleware está en la pila de la aplicación
+    middleware_classes = [
+        mw.cls for mw in app.user_middleware
+    ]
+    assert RateLimitMiddleware in middleware_classes
+    # Verificar que el endpoint de login existe
     from app.api.v1.auth import login_user
-    from app.main import limiter
-    
-    # Verificar que el endpoint tiene el límite configurado en el limiter
     assert login_user is not None
-    
-    # Verificar que el limiter global está configurado
-    assert limiter is not None
-    # Verificar que tiene límites por defecto configurados
-    assert hasattr(limiter, "_default_limits")
 
 
 def test_rate_limit_configuration_values():

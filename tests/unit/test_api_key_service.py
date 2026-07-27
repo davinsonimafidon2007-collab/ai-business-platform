@@ -8,6 +8,8 @@ import pytest
 from app.models.api_key import ApiKey
 from app.services.api_key_service import ApiKeyService
 
+pytestmark = pytest.mark.asyncio
+
 
 @pytest.fixture
 def mock_repository() -> MagicMock:

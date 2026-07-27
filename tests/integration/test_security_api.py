@@ -455,8 +455,7 @@ class TestJWTIntegration:
         access_token = tokens["access_token"]
 
         # Decode token to verify it contains user_id
-        from app.services.auth_service import AuthService
-        payload = AuthService.decode_token(access_token)
+        payload = auth_service.decode_access_token(access_token)
         assert "sub" in payload
         assert payload["sub"] is not None
 

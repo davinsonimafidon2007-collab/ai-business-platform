@@ -122,7 +122,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         current time window has expired.
         """
         now = time.time()
-        entry = limits[key]
+        entry = limits.setdefault(key, RateLimitEntry())
 
         # Reset window if expired
         if now - entry.window_start > self.window_seconds:

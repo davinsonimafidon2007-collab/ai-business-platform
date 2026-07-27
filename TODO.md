@@ -3,7 +3,7 @@
 ## Phase 1: Models & Database
 - [x] `app/models/api_key.py` - ApiKey model (id, user_id, name, key_hash, prefix, scopes, description, expires_at, created_at, last_used_at, is_active)
 - [x] `app/models/audit_log.py` - AuditLog model (id, user_id, action, resource, resource_id, details, ip_address, user_agent, timestamp) - immutable (create/read only)
-- [ ] Alembic migration for new tables
+- [x] Alembic migration for new tables (`alembic/versions/e1f2a3b4c5d6_add_api_keys_and_audit_logs.py`)
 
 ## Phase 2: Repositories
 - [x] `app/repositories/api_key_repository.py` - CRUD for API keys

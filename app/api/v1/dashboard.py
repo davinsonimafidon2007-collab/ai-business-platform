@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, status
@@ -33,7 +33,7 @@ async def get_dashboard_stats(
     total_searches = total_searches_result.scalar() or 0
 
     # Búsquedas de los últimos 30 días
-    thirty_days_ago = datetime.utcnow() - timedelta(days=30)
+    thirty_days_ago = datetime.now(timezone.utc) - timedelta(days=30)
     recent_searches_result = await session.execute(
         select(func.count(SearchHistory.id)).where(
             SearchHistory.timestamp >= thirty_days_ago
