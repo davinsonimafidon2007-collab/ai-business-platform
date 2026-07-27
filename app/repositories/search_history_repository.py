@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from uuid import UUID
 
 from sqlalchemy import func, select
@@ -101,6 +102,25 @@ class SearchHistoryRepository:
         """
         await self.session.delete(search_history)
         await self.session.commit()
+
+    async def delete_older_than(self, cutoff: datetime) -> int:
+        """Deletes all search history records older than the given cutoff.
+
+        Args:
+            cutoff: Datetime threshold; records with timestamp before this
+                will be deleted.
+
+        Returns:
+            Number of deleted records.
+        """
+        result = await self.session.execute(
+            select(SearchHistory).where(SearchHistory.timestamp < cutoff)
+        )
+        records = list(result.scalars().all())
+        for record in records:
+            await self.session.delete(record)
+        await self.session.commit()
+        return len(records)
 
     async def count(self) -> int:
         """Counts total search history records.

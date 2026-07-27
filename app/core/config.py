@@ -20,13 +20,51 @@ class Settings(BaseSettings):
     rate_limit_global: int = 60
     rate_limit_login: int = 5
     rate_limit_register: int = 10
+    rate_limit_premium: int = 120
+    rate_limit_user: int = 30
+    rate_limit_readonly: int = 10
     password_reset_token_expire_hours: int = 1
+
+    # API Key configuration
+    api_key_prefix: str = "abp_live"
+    api_key_length: int = 32
+
+    # Audit configuration
+    audit_retention_days: int = 365
 
     # Provider HTTP client configuration
     provider_http_timeout: float = 30.0
     provider_http_max_retries: int = 3
     provider_http_retry_backoff_min: int = 1
     provider_http_retry_backoff_max: int = 60
+
+    # =========================================================================
+    # Scheduler / Jobs configuration
+    # =========================================================================
+    cache_refresh_interval: int = 3600
+    """Seconds between automatic market cache refreshes (default 1h)."""
+
+    search_history_ttl: int = 2592000
+    """Seconds to keep search history records (default 30 days)."""
+
+    market_cache_ttl: int = 21600
+    """TTL in seconds for cached market data (default 6h)."""
+
+    max_concurrent_jobs: int = 4
+    """Maximum number of jobs that can run concurrently."""
+
+    enable_scheduler: bool = True
+    """Master toggle to enable/disable the background scheduler."""
+
+    # =========================================================================
+    # Observability — Logging
+    # =========================================================================
+    log_level: str = "INFO"
+    log_json: bool = False
+    log_request_body: bool = False
+    log_response_body: bool = False
+    max_log_body_size: int = 4096
+    enable_access_log: bool = True
 
     @property
     def database_url_for_environment(self) -> str:
@@ -52,9 +90,11 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
+        env_prefix="",
         case_sensitive=False,
         extra="ignore",
     )
 
 
 settings = Settings()
+

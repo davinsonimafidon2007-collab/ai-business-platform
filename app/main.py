@@ -1,5 +1,9 @@
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.openapi.utils import get_openapi
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
@@ -9,12 +13,54 @@ from app.api.v1.auth import router as auth_router
 from app.api.v1.searches import router as searches_router
 from app.api.v1.users import router as users_router
 from app.api.v1.vehicles import router as vehicles_router
+from app.api.v1.router import api_router
 from app.core.config import settings
 from app.core.exception_handlers import register_exception_handlers
 from app.core.logging import setup_logging
+from app.database.manager import DatabaseManager
+from app.jobs.base import JobContext
+from app.jobs.factory import create_scheduler
+from app.jobs.scheduler import Scheduler
+from app.middleware.authentication_middleware import AuthenticationMiddleware
+from app.middleware.logging_middleware import AccessLogMiddleware
+from app.middleware.rate_limit_middleware import RateLimitMiddleware
 from app.middleware.request_id import RequestIdMiddleware
 
 setup_logging()
+
+# ---------------------------------------------------------------------------
+# Scheduler lifecycle
+# ---------------------------------------------------------------------------
+
+
+@asynccontextmanager
+async def scheduler_lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    """Manage the background scheduler lifecycle.
+
+    Creates the DatabaseManager, instantiates the Scheduler with all
+    registered jobs, starts it on startup and gracefully stops on shutdown.
+    """
+    db_manager = DatabaseManager(settings.database_url, echo=False)
+    await db_manager.init()
+
+    context = JobContext(db_manager=db_manager, settings=settings)
+    scheduler: Scheduler = create_scheduler(context)
+
+    if settings.enable_scheduler:
+        await scheduler.start()
+
+    try:
+        yield
+    finally:
+        if settings.enable_scheduler:
+            await scheduler.stop()
+
+        await db_manager.shutdown()
+
+
+# ---------------------------------------------------------------------------
+# FastAPI application
+# ---------------------------------------------------------------------------
 
 # Configuración de rate limiting
 limiter = Limiter(key_func=get_remote_address, default_limits=[f"{settings.rate_limit_global}/minute"])
@@ -23,6 +69,7 @@ app = FastAPI(
     title=settings.app_name,
     description=settings.app_description,
     version=settings.app_version,
+    lifespan=scheduler_lifespan,
 )
 
 # Registrar manejadores de excepciones
@@ -32,10 +79,14 @@ register_exception_handlers(app)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-# Middlewares
+# Middlewares (ejecutados en orden inverso)
+# RateLimitMiddleware and AuthenticationMiddleware are the new security layers
+app.add_middleware(RateLimitMiddleware)
+app.add_middleware(AuthenticationMiddleware)
+app.add_middleware(AccessLogMiddleware)
 app.add_middleware(RequestIdMiddleware)
 
-# Configuración CORS
+# Configuración CORS (debe ser el último middleware añadido, primero en ejecutarse)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins_list,
@@ -48,6 +99,7 @@ app.include_router(auth_router)
 app.include_router(searches_router)
 app.include_router(users_router)
 app.include_router(vehicles_router)
+app.include_router(api_router, prefix="/api/v1")
 
 
 @app.get(
@@ -57,3 +109,48 @@ app.include_router(vehicles_router)
 )
 def get_health() -> dict[str, str]:
     return {"status": "operational"}
+
+
+# ---------------------------------------------------------------------------
+# Custom OpenAPI schema with security schemes
+# ---------------------------------------------------------------------------
+
+def custom_openapi() -> dict:
+    if app.openapi_schema:
+        return app.openapi_schema
+
+    openapi_schema = get_openapi(
+        title=settings.app_name,
+        description=settings.app_description,
+        version=settings.app_version,
+        routes=app.routes,
+    )
+
+    # Add security schemes
+    openapi_schema["components"]["securitySchemes"] = {
+        "BearerAuth": {
+            "type": "http",
+            "scheme": "bearer",
+            "bearerFormat": "JWT",
+            "description": "JWT Bearer token obtained from /auth/login",
+        },
+        "ApiKeyAuth": {
+            "type": "apiKey",
+            "in": "header",
+            "name": "X-API-Key",
+            "description": "API Key with format: abp_live_<key>",
+        },
+    }
+
+    # Apply security globally
+    openapi_schema["security"] = [
+        {"BearerAuth": []},
+        {"ApiKeyAuth": []},
+    ]
+
+    app.openapi_schema = openapi_schema
+    return app.openapi_schema
+
+
+app.openapi = custom_openapi  # type: ignore
+
