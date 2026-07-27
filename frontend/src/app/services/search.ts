@@ -1,5 +1,6 @@
 import { api } from "./api/client";
 import type {
+  DashboardStats,
   SearchAPIRequest,
   SearchAPIResponse,
   SearchHistory,
@@ -27,14 +28,27 @@ export const searchService = {
     await api.delete(`/searches/${id}`);
   },
 
-  async getDashboardStats(): Promise<{
-    total_searches: number;
-    total_vehicles: number;
-    excellent_opportunities: number;
-    average_roi: number;
-    average_profit: number;
-    recommendation_distribution: Record<string, number>;
-  }> {
+  async saveSearchToHistory(searchData: {
+    query: string;
+    results_count: number;
+    execution_time: number;
+    providers_used?: string[];
+  }): Promise<SearchHistory> {
+    const payload = {
+      name: `Search: ${searchData.query}`,
+      country: "ES",
+      brands: null,
+      models: null,
+      filters: JSON.stringify({
+        query: searchData.query,
+        providers: searchData.providers_used,
+      }),
+    };
+    const { data: result } = await api.post<SearchHistory>("/searches", payload);
+    return result;
+  },
+
+  async getDashboardStats(): Promise<DashboardStats> {
     const { data } = await api.get("/dashboard/stats");
     return data;
   },

@@ -14,6 +14,30 @@ interface VehicleTableProps {
 
 type SortField = "price" | "year" | "mileage" | "score" | "roi" | "profit";
 
+interface SortHeaderProps {
+  field: SortField;
+  children: React.ReactNode;
+  sortField: SortField;
+  sortOrder: "asc" | "desc";
+  onSort: (field: SortField) => void;
+}
+
+function SortHeader({ field, children, sortField, sortOrder, onSort }: SortHeaderProps) {
+  return (
+    <th
+      className="cursor-pointer whitespace-nowrap px-3 py-3 text-left text-xs font-medium uppercase tracking-wider text-secondary-500 hover:text-secondary-700 dark:text-secondary-400 dark:hover:text-secondary-200"
+      onClick={() => onSort(field)}
+    >
+      <div className="flex items-center gap-1">
+        {children}
+        {sortField === field && (
+          <span>{sortOrder === "desc" ? "↓" : "↑"}</span>
+        )}
+      </div>
+    </th>
+  );
+}
+
 export function VehicleTable({ vehicles, onSelectVehicle, selectedVehicleId }: VehicleTableProps) {
   const [sortField, setSortField] = useState<SortField>("roi");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
@@ -79,20 +103,6 @@ export function VehicleTable({ vehicles, onSelectVehicle, selectedVehicleId }: V
     }
   };
 
-  const SortHeader = ({ field, children }: { field: SortField; children: React.ReactNode }) => (
-    <th
-      className="cursor-pointer whitespace-nowrap px-3 py-3 text-left text-xs font-medium uppercase tracking-wider text-secondary-500 hover:text-secondary-700 dark:text-secondary-400 dark:hover:text-secondary-200"
-      onClick={() => handleSort(field)}
-    >
-      <div className="flex items-center gap-1">
-        {children}
-        {sortField === field && (
-          <span>{sortOrder === "desc" ? "↓" : "↑"}</span>
-        )}
-      </div>
-    </th>
-  );
-
   if (!vehicles || vehicles.length === 0) {
     return null;
   }
@@ -131,19 +141,19 @@ export function VehicleTable({ vehicles, onSelectVehicle, selectedVehicleId }: V
               <th className="whitespace-nowrap px-3 py-3 text-left text-xs font-medium uppercase tracking-wider text-secondary-500 dark:text-secondary-400">
                 Modelo
               </th>
-              <SortHeader field="year">Año</SortHeader>
-              <SortHeader field="mileage">Km</SortHeader>
-              <SortHeader field="price">Precio</SortHeader>
+              <SortHeader field="year" sortField={sortField} sortOrder={sortOrder} onSort={handleSort}>Año</SortHeader>
+              <SortHeader field="mileage" sortField={sortField} sortOrder={sortOrder} onSort={handleSort}>Km</SortHeader>
+              <SortHeader field="price" sortField={sortField} sortOrder={sortOrder} onSort={handleSort}>Precio</SortHeader>
               <th className="whitespace-nowrap px-3 py-3 text-left text-xs font-medium uppercase tracking-wider text-secondary-500 dark:text-secondary-400">
                 País
               </th>
               <th className="whitespace-nowrap px-3 py-3 text-left text-xs font-medium uppercase tracking-wider text-secondary-500 dark:text-secondary-400">
                 Proveedor
               </th>
-              <SortHeader field="score">Score</SortHeader>
-              <SortHeader field="profit">Oportunidad</SortHeader>
-              <SortHeader field="roi">ROI</SortHeader>
-              <SortHeader field="profit">Beneficio</SortHeader>
+              <SortHeader field="score" sortField={sortField} sortOrder={sortOrder} onSort={handleSort}>Score</SortHeader>
+              <SortHeader field="profit" sortField={sortField} sortOrder={sortOrder} onSort={handleSort}>Oportunidad</SortHeader>
+              <SortHeader field="roi" sortField={sortField} sortOrder={sortOrder} onSort={handleSort}>ROI</SortHeader>
+              <SortHeader field="profit" sortField={sortField} sortOrder={sortOrder} onSort={handleSort}>Beneficio</SortHeader>
               <th className="whitespace-nowrap px-3 py-3 text-left text-xs font-medium uppercase tracking-wider text-secondary-500 dark:text-secondary-400">
                 Nivel
               </th>

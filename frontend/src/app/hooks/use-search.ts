@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { searchService } from "@/app/services/search";
 import type {
+  DashboardStats,
   SearchAPIRequest,
   SearchAPIResponse,
   SearchFilters,
@@ -13,8 +14,17 @@ export function useSearchVehicles() {
   return useMutation<SearchAPIResponse, Error, SearchAPIRequest>({
     mutationFn: (params: SearchAPIRequest) =>
       searchService.searchVehicles(params),
-    onSuccess: (data) => {
+    onSuccess: (data, variables) => {
       queryClient.setQueryData(["searchResults"], data);
+      // Save search to history (fire and forget, don't block the UI)
+      searchService.saveSearchToHistory({
+        query: variables.query,
+        results_count: data.summary.total_results,
+        execution_time: 0, // Will be calculated by backend if needed
+        providers_used: variables.providers,
+      }).catch(() => {
+        // Silently fail - history is not critical
+      });
     },
   });
 }
@@ -30,6 +40,13 @@ export function useSearchHistory() {
   return useQuery<SearchHistory[]>({
     queryKey: ["searchHistory"],
     queryFn: () => searchService.getSearchHistory(),
+  });
+}
+
+export function useDashboardStats() {
+  return useQuery<DashboardStats>({
+    queryKey: ["dashboardStats"],
+    queryFn: () => searchService.getDashboardStats(),
   });
 }
 

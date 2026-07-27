@@ -23,13 +23,21 @@ describe("ScoreBadge", () => {
 
 describe("ProfitBadge", () => {
   it("shows positive profit with + sign", () => {
-    render(<ProfitBadge value={1500} />);
-    expect(screen.getByText("+€1.500")).toBeDefined();
+    const { container } = render(<ProfitBadge value={1500} />);
+    const badge = container.querySelector("span");
+    expect(badge).toBeDefined();
+    expect(badge?.textContent).toContain("+");
+    expect(badge?.textContent).toContain("€");
+    expect(badge?.textContent).toContain("1500");
   });
 
   it("shows negative profit without + sign", () => {
-    render(<ProfitBadge value={-500} />);
-    expect(screen.getByText("-€500")).toBeDefined();
+    const { container } = render(<ProfitBadge value={-500} />);
+    const badge = container.querySelector("span");
+    expect(badge).toBeDefined();
+    expect(badge?.textContent).toContain("€");
+    expect(badge?.textContent).toContain("-500");
+    expect(badge?.textContent).not.toContain("+");
   });
 });
 

@@ -338,5 +338,3 @@ class TestSearchEndpoint:
             assert len(data["results"]) > 0
         finally:
             app.dependency_overrides.clear()
-</parameter>
-</create_file>

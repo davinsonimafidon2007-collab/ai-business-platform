@@ -172,7 +172,7 @@ def test_invalid_token_is_rejected(client: TestClient) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Tests – Email Verification
+# Tests Email Verification
 # ---------------------------------------------------------------------------
 
 
@@ -261,7 +261,9 @@ def test_verify_with_expired_token_returns_error(client: TestClient) -> None:
         json={"token": token_record.token},
     )
     assert verify_response.status_code == 400
-    assert "expired" in verify_response.json()["detail"].lower()
+    response_json = verify_response.json()
+    assert "error" in response_json
+    assert "expired" in response_json["error"]["message"].lower()
 
 
 def test_verify_with_already_used_token_returns_error(client: TestClient) -> None:
@@ -293,7 +295,9 @@ def test_verify_with_already_used_token_returns_error(client: TestClient) -> Non
         json={"token": token_record.token},
     )
     assert verify_response.status_code == 400
-    assert "used" in verify_response.json()["detail"].lower()
+    response_json = verify_response.json()
+    assert "error" in response_json
+    assert "used" in response_json["error"]["message"].lower()
 
 
 def test_verify_with_invalid_token_returns_error(client: TestClient) -> None:
@@ -303,4 +307,6 @@ def test_verify_with_invalid_token_returns_error(client: TestClient) -> None:
         json={"token": "invalid-token-that-does-not-exist"},
     )
     assert verify_response.status_code == 404
-    assert "not found" in verify_response.json()["detail"].lower()
+    response_json = verify_response.json()
+    assert "error" in response_json
+    assert "not found" in response_json["error"]["message"].lower()

@@ -158,10 +158,10 @@ export interface SearchFilters {
 export interface SearchHistory {
   id: string;
   query: string;
-  results_count: number;
-  execution_time: number;
-  created_at: string;
-  filters?: Record<string, unknown>;
+  timestamp: string;
+  providers_used?: string | null;
+  results_count?: number | null;
+  execution_time?: number | null;
 }
 
 // =============================================================================
@@ -169,9 +169,8 @@ export interface SearchHistory {
 // =============================================================================
 export interface DashboardStats {
   total_searches: number;
-  total_vehicles: number;
-  excellent_opportunities: number;
-  average_roi: number;
-  average_profit: number;
-  recommendation_distribution: Record<string, number>;
+  recent_searches: number;
+  average_results_per_search: number;
+  average_execution_time: number;
+  provider_stats: Record<string, number>;
 }

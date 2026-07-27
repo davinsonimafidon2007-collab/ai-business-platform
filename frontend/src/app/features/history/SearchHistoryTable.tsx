@@ -56,7 +56,7 @@ export function SearchHistoryTable({
           {history.map((search) => (
             <tr key={search.id} className="hover:bg-secondary-50 dark:hover:bg-secondary-800">
               <td className="whitespace-nowrap px-6 py-4 text-sm text-secondary-600 dark:text-secondary-400">
-                {new Date(search.created_at).toLocaleDateString("es-ES", {
+                {new Date(search.timestamp).toLocaleDateString("es-ES", {
                   year: "numeric",
                   month: "short",
                   day: "numeric",
