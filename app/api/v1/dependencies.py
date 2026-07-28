@@ -19,12 +19,19 @@ from app.providers.http_client import ProviderHttpClient
 from app.providers.mobile_de import MobileDeProvider
 from app.providers.registry import ProviderRegistry
 from app.repositories.cached_market_repository import CachedMarketRepository
+from app.repositories.inspection_repository import (
+    InspectionObservationRepository,
+    InspectionPhotoRepository,
+    InspectionSessionRepository,
+)
 from app.repositories.vehicle_repository import VehicleRepository
 from app.services.comparable_market_estimator import ComparableMarketEstimator
 from app.services.market_estimator import MarketEstimator
+from app.services.negotiation_engine import NegotiationEngine
 from app.services.opportunity_finder import OpportunityFinder
 from app.services.profit_analyzer import ProfitAnalyzer
 from app.services.search_engine import SearchEngineService
+from app.services.inspection_service import InspectionService
 from app.services.vehicle_scorer import VehicleScorer
 from app.services.vehicle_service import VehicleService
 
@@ -119,8 +126,52 @@ def get_autoscout24_provider() -> AutoScout24Provider:
 
 
 # =============================================================================
+# Inspection dependencies
+# =============================================================================
+
+
+def get_inspection_session_repository(
+    session: AsyncSession = Depends(get_db_session),
+) -> InspectionSessionRepository:
+    """Obtiene el repositorio de sesiones de inspección."""
+    return InspectionSessionRepository(session)
+
+
+def get_inspection_observation_repository(
+    session: AsyncSession = Depends(get_db_session),
+) -> InspectionObservationRepository:
+    """Obtiene el repositorio de observaciones de inspección."""
+    return InspectionObservationRepository(session)
+
+
+def get_inspection_photo_repository(
+    session: AsyncSession = Depends(get_db_session),
+) -> InspectionPhotoRepository:
+    """Obtiene el repositorio de fotos de inspección."""
+    return InspectionPhotoRepository(session)
+
+
+def get_inspection_service(
+    session_repo: InspectionSessionRepository = Depends(get_inspection_session_repository),
+    observation_repo: InspectionObservationRepository = Depends(get_inspection_observation_repository),
+    photo_repo: InspectionPhotoRepository = Depends(get_inspection_photo_repository),
+) -> InspectionService:
+    """Obtiene el servicio de orquestación de inspecciones."""
+    return InspectionService(
+        session_repo=session_repo,
+        observation_repo=observation_repo,
+        photo_repo=photo_repo,
+    )
+
+
+# =============================================================================
 # SearchEngineService (facade principal)
 # =============================================================================
+
+
+def get_negotiation_engine() -> NegotiationEngine:
+    """Obtiene el motor de estrategia de negociación."""
+    return NegotiationEngine()
 
 
 def get_search_engine_service(
@@ -131,6 +182,7 @@ def get_search_engine_service(
     market_estimator: MarketEstimator = Depends(get_market_estimator),
     profit_analyzer: ProfitAnalyzer = Depends(get_profit_analyzer),
     opportunity_finder: OpportunityFinder = Depends(get_opportunity_finder),
+    negotiation_engine: NegotiationEngine = Depends(get_negotiation_engine),
 ) -> SearchEngineService:
     """Obtiene el servicio principal de búsqueda con todas las dependencias.
 
@@ -144,6 +196,7 @@ def get_search_engine_service(
         market_estimator=market_estimator,
         profit_analyzer=profit_analyzer,
         opportunity_finder=opportunity_finder,
+        negotiation_engine=negotiation_engine,
     )
 
 

@@ -1,5 +1,15 @@
 from app.models.base import Base
 from app.models.cached_market import CachedMarketData
+from app.models.negotiation import (
+    DefectItem,
+    InspectionResult,
+    NegotiationArgument,
+    NegotiationInput,
+    NegotiationRecommendation,
+    NegotiationResult,
+    NegotiationScript,
+    RepairEstimate,
+)
 from app.models.opportunity import Opportunity
 from app.models.password_reset_token import PasswordResetToken
 from app.models.refresh_token import RefreshToken
@@ -14,9 +24,17 @@ from app.models.verification_token import VerificationToken
 __all__ = [
     "Base",
     "CachedMarketData",
+    "DefectItem",
+    "InspectionResult",
+    "NegotiationArgument",
+    "NegotiationInput",
+    "NegotiationRecommendation",
+    "NegotiationResult",
+    "NegotiationScript",
     "Opportunity",
     "PasswordResetToken",
     "RefreshToken",
+    "RepairEstimate",
     "Role",
     "Search",
     "SearchHistory",

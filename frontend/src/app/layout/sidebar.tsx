@@ -8,6 +8,7 @@ const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: "📊" },
   { name: "Búsqueda", href: "/search", icon: "🔍" },
   { name: "Vehículos", href: "/vehicles", icon: "🚗" },
+  { name: "Inspección", href: "/inspection", icon: "🔎" },
   { name: "Historial", href: "/history", icon: "📋" },
 ];
 
