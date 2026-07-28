@@ -140,3 +140,20 @@ export interface UploadPhotoRequest {
   mime_type?: string | null;
   file_size_bytes?: number | null;
 }
+
+export interface VisionSuggestion {
+  photo_id: string;
+  observation_id: string;
+  category_id: string;
+  item_id: string;
+  status: InspectionItemStatus;
+  severity: SeverityLevel;
+  confidence: 'LOW' | 'MEDIUM' | 'HIGH';
+  notes: string;
+  suggested_repair_cost: number | null;
+}
+
+export interface VisionAnalysis {
+  summary: string;
+  suggestions: VisionSuggestion[];
+}

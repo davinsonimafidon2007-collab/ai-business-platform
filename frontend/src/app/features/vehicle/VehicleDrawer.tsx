@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { Button } from "@/app/components/ui/button";
-import { ScoreBadge, OpportunityBadge, RecommendationBadge } from "@/app/components/ui/ScoreBadge";
+import { ScoreBadge, OpportunityBadge, RecommendationBadge, NegotiationBadge } from "@/app/components/ui/ScoreBadge";
 import type { SearchResultItem } from "@/app/types/vehicle";
 
 interface VehicleDrawerProps {
@@ -178,6 +178,91 @@ export function VehicleDrawer({ vehicle, onClose }: VehicleDrawerProps) {
                   <ul className="list-inside list-disc text-sm text-secondary-600 dark:text-secondary-400">
                     {opp.weaknesses.map((w, i) => <li key={i}>{w}</li>)}
                   </ul>
+                </div>
+              )}
+            </Section>
+          )}
+
+          {/* Negotiation */}
+          {vehicle.negotiation && (
+            <Section title="Negociación">
+              <div className="flex flex-wrap items-center gap-3">
+                <NegotiationBadge recommendation={vehicle.negotiation.recommendation} size="md" />
+                {vehicle.negotiation.leverage_score && (
+                  <span className="text-sm text-secondary-600 dark:text-secondary-400">
+                    Apalancamiento: {vehicle.negotiation.leverage_score.toFixed(0)}/100
+                  </span>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <InfoItem label="Valor real estimado" value={formatEur(vehicle.negotiation.estimated_vehicle_value)} />
+                <InfoItem label="Oferta inicial" value={formatEur(vehicle.negotiation.recommended_initial_offer)} />
+                <InfoItem label="Contraoferta" value={formatEur(vehicle.negotiation.recommended_counter_offer)} />
+                <InfoItem label="Precio máximo" value={formatEur(vehicle.negotiation.maximum_purchase_price)} />
+                <InfoItem label="Precio retirada" value={formatEur(vehicle.negotiation.walk_away_price)} />
+                <InfoItem label="Beneficio esperado" value={formatEur(vehicle.negotiation.expected_profit)} />
+                <InfoItem label="ROI esperado" value={`${vehicle.negotiation.expected_roi.toFixed(1)}%`} />
+                <InfoItem label="Descuento necesario" value={`${vehicle.negotiation.discount_needed.toFixed(1)}%`} />
+              </div>
+
+              {/* Argumentos */}
+              {vehicle.negotiation.negotiation_arguments.length > 0 && (
+                <div>
+                  <p className="mb-2 text-sm font-medium text-secondary-700 dark:text-secondary-300">
+                    Argumentos de negociación
+                  </p>
+                  <ol className="list-inside list-decimal space-y-1">
+                    {vehicle.negotiation.negotiation_arguments.map((arg, i) => (
+                      <li key={i} className="text-xs text-secondary-600 dark:text-secondary-400">
+                        <span className="font-medium">{arg.argument}</span>
+                        {arg.economic_impact > 0 && (
+                          <span className="ml-1 text-red-500">(-{formatEur(arg.economic_impact)})</span>
+                        )}
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+              )}
+
+              {/* Script de negociación */}
+              {vehicle.negotiation.negotiation_script && (
+                <div className="rounded-md bg-secondary-50 p-3 dark:bg-secondary-800">
+                  <p className="mb-2 text-sm font-medium text-secondary-700 dark:text-secondary-300">
+                    Script de negociación
+                  </p>
+                  {vehicle.negotiation.negotiation_script.opening && (
+                    <div className="mb-2">
+                      <p className="text-xs font-medium text-secondary-500">Apertura</p>
+                      <p className="text-xs text-secondary-600 dark:text-secondary-400 italic">
+                        "{vehicle.negotiation.negotiation_script.opening}"
+                      </p>
+                    </div>
+                  )}
+                  {vehicle.negotiation.negotiation_script.defect_based_points.length > 0 && (
+                    <div className="mb-2">
+                      <p className="text-xs font-medium text-secondary-500">Argumentos (defectos)</p>
+                      {vehicle.negotiation.negotiation_script.defect_based_points.map((point, i) => (
+                        <p key={i} className="text-xs text-secondary-600 dark:text-secondary-400">{point}</p>
+                      ))}
+                    </div>
+                  )}
+                  {vehicle.negotiation.negotiation_script.market_based_points.length > 0 && (
+                    <div className="mb-2">
+                      <p className="text-xs font-medium text-secondary-500">Argumentos (mercado)</p>
+                      {vehicle.negotiation.negotiation_script.market_based_points.map((point, i) => (
+                        <p key={i} className="text-xs text-secondary-600 dark:text-secondary-400">{point}</p>
+                      ))}
+                    </div>
+                  )}
+                  {vehicle.negotiation.negotiation_script.closing && (
+                    <div>
+                      <p className="text-xs font-medium text-secondary-500">Cierre</p>
+                      <p className="text-xs text-secondary-600 dark:text-secondary-400 italic">
+                        "{vehicle.negotiation.negotiation_script.closing}"
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
             </Section>

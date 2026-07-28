@@ -14,6 +14,7 @@ from app.api.v1.schemas.common import (
     MarketEstimationSchema,
     VehicleScoreSchema,
 )
+from app.api.v1.schemas.negotiation import NegotiationResultSchema
 from app.models.search import SearchRequest
 
 
@@ -121,6 +122,9 @@ class SearchResultItem(BaseModel):
     )
     opportunity: OpportunityAnalysisSchema | None = Field(
         None, description="Análisis de oportunidad"
+    )
+    negotiation: NegotiationResultSchema | None = Field(
+        None, description="Estrategia de negociación"
     )
 
 

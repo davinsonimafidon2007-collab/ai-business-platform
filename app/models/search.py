@@ -68,7 +68,8 @@ class SearchResult(BaseModel):
     """Resultado individual de una búsqueda orquestada.
 
     Contiene el vehículo junto con todos los análisis asociados:
-    scoring, estimación de mercado, análisis de beneficio y oportunidad.
+    scoring, estimación de mercado, análisis de beneficio, oportunidad
+    y estrategia de negociación.
     """
 
     vehicle: Any = Field(..., description="VehicleSearchResult o Vehicle")
@@ -76,6 +77,7 @@ class SearchResult(BaseModel):
     market_estimation: Any = Field(..., description="MarketEstimation")
     profit_analysis: Any = Field(..., description="ProfitAnalysis")
     opportunity: Any = Field(..., description="OpportunityAnalysis")
+    negotiation: Any | None = Field(None, description="NegotiationResult")
 
     model_config = {"arbitrary_types_allowed": True}
 

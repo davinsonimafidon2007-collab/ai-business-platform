@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -17,6 +18,7 @@ class VehicleEvaluationBase(BaseModel):
     classification: str | None = Field(default=None, max_length=10)
     warnings: str | None = None
     recommendation: str | None = None
+    negotiation: dict[str, Any] | None = None
 
 
 class VehicleEvaluationCreate(VehicleEvaluationBase):
@@ -44,3 +46,4 @@ class VehicleEvaluationUpdate(BaseModel):
     classification: str | None = Field(default=None, max_length=10)
     warnings: str | None = None
     recommendation: str | None = None
+    negotiation: dict[str, Any] | None = None

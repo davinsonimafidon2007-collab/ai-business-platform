@@ -23,6 +23,11 @@ from app.api.v1.schemas.common import (
     ProfitAnalysisSchema,
     VehicleScoreSchema,
 )
+from app.api.v1.schemas.negotiation import (
+    NegotiationArgumentSchema,
+    NegotiationResultSchema,
+    NegotiationScriptSchema,
+)
 from app.services.search_engine import SearchEngineService
 
 router = APIRouter(tags=["Search"])
@@ -155,6 +160,52 @@ def _build_search_result_item(result: Any) -> SearchResultItem:
             weaknesses=opp_weaknesses,
         )
 
+    # --- NegotiationResult ---
+    neg = getattr(result, "negotiation", None)
+    negotiation_schema: NegotiationResultSchema | None = None
+    if neg is not None:
+        # NegotiationArguments
+        args = getattr(neg, "negotiation_arguments", []) or []
+        arg_schemas = [
+            NegotiationArgumentSchema(
+                argument=getattr(a, "argument", ""),
+                economic_impact=getattr(a, "economic_impact", 0.0) or 0.0,
+                category=getattr(a, "category", "defect") or "defect",
+                severity=getattr(a, "severity", 5) or 5,
+            )
+            for a in args
+        ]
+
+        # NegotiationScript
+        script = getattr(neg, "negotiation_script", None)
+        script_schema: NegotiationScriptSchema | None = None
+        if script is not None:
+            script_schema = NegotiationScriptSchema(
+                opening=getattr(script, "opening", "") or "",
+                defect_based_points=getattr(script, "defect_based_points", []) or [],
+                market_based_points=getattr(script, "market_based_points", []) or [],
+                closing=getattr(script, "closing", "") or "",
+            )
+
+        rec = getattr(neg, "recommendation", None)
+        rec_str = rec.value if hasattr(rec, "value") else str(rec or "WALK_AWAY")
+
+        negotiation_schema = NegotiationResultSchema(
+            estimated_vehicle_value=getattr(neg, "estimated_vehicle_value", 0.0) or 0.0,
+            recommended_initial_offer=getattr(neg, "recommended_initial_offer", 0.0) or 0.0,
+            recommended_counter_offer=getattr(neg, "recommended_counter_offer", 0.0) or 0.0,
+            maximum_purchase_price=getattr(neg, "maximum_purchase_price", 0.0) or 0.0,
+            walk_away_price=getattr(neg, "walk_away_price", 0.0) or 0.0,
+            expected_profit=getattr(neg, "expected_profit", 0.0) or 0.0,
+            expected_roi=getattr(neg, "expected_roi", 0.0) or 0.0,
+            negotiation_arguments=arg_schemas,
+            negotiation_script=script_schema or NegotiationScriptSchema(),
+            recommendation=rec_str,
+            leverage_score=getattr(neg, "leverage_score", 50.0) or 50.0,
+            price_gap=getattr(neg, "price_gap", 0.0) or 0.0,
+            discount_needed=getattr(neg, "discount_needed", 0.0) or 0.0,
+        )
+
     # --- Construir item ---
     return SearchResultItem(
         source=getattr(vehicle, "source", None),
@@ -176,6 +227,7 @@ def _build_search_result_item(result: Any) -> SearchResultItem:
         market_estimation=market_estimation_schema,
         profit_analysis=profit_analysis_schema,
         opportunity=opportunity_schema,
+        negotiation=negotiation_schema,
     )
 
 

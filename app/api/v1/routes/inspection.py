@@ -20,6 +20,8 @@ from app.api.v1.schemas.inspection import (
     ObservationUpdate,
     PhotoResponse,
     PhotoUploadRequest,
+    VisionAnalysisResponse,
+    VisionAnalyzeRequest,
 )
 from app.services.inspection_service import InspectionService
 
@@ -109,6 +111,24 @@ async def upload_photo(
         file_size_bytes=data.file_size_bytes,
     )
     return PhotoResponse(**photo.to_dict())
+
+
+@router.post(
+    "/{session_id}/analyze",
+    response_model=VisionAnalysisResponse,
+    summary="Analyze inspection photographs and return suggestions",
+)
+async def analyze_photos(
+    session_id: str,
+    data: VisionAnalyzeRequest,
+    service: InspectionService = Depends(get_inspection_service),
+) -> VisionAnalysisResponse:
+    """Analyzes photos but never applies suggested inspection changes."""
+    try:
+        result = await service.analyze_photos(session_id, data.photo_ids)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    return VisionAnalysisResponse(**result)
 
 
 @router.post(

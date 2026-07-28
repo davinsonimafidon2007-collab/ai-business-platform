@@ -77,6 +77,39 @@ export interface OpportunityAnalysis {
 }
 
 // =============================================================================
+// Negotiation
+// =============================================================================
+export interface NegotiationArgument {
+  argument: string;
+  economic_impact: number;
+  category: string;
+  severity: number;
+}
+
+export interface NegotiationScript {
+  opening: string;
+  defect_based_points: string[];
+  market_based_points: string[];
+  closing: string;
+}
+
+export interface NegotiationResult {
+  estimated_vehicle_value: number;
+  recommended_initial_offer: number;
+  recommended_counter_offer: number;
+  maximum_purchase_price: number;
+  walk_away_price: number;
+  expected_profit: number;
+  expected_roi: number;
+  negotiation_arguments: NegotiationArgument[];
+  negotiation_script: NegotiationScript;
+  recommendation: "BUY" | "NEGOTIATE" | "WALK_AWAY";
+  leverage_score: number;
+  price_gap: number;
+  discount_needed: number;
+}
+
+// =============================================================================
 // Search Result Item
 // =============================================================================
 export interface SearchResultItem {
@@ -99,6 +132,7 @@ export interface SearchResultItem {
   market_estimation: MarketEstimation | null;
   profit_analysis: ProfitAnalysis | null;
   opportunity: OpportunityAnalysis | null;
+  negotiation: NegotiationResult | null;
 }
 
 // =============================================================================

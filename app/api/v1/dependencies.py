@@ -32,6 +32,8 @@ from app.services.opportunity_finder import OpportunityFinder
 from app.services.profit_analyzer import ProfitAnalyzer
 from app.services.search_engine import SearchEngineService
 from app.services.inspection_service import InspectionService
+from app.services.vision_service import VisionService
+from app.providers.vision_provider import MockVisionProvider
 from app.services.vehicle_scorer import VehicleScorer
 from app.services.vehicle_service import VehicleService
 
@@ -161,6 +163,7 @@ def get_inspection_service(
         session_repo=session_repo,
         observation_repo=observation_repo,
         photo_repo=photo_repo,
+        vision_service=VisionService(MockVisionProvider()),
     )
 
 

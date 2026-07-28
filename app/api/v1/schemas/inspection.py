@@ -49,6 +49,12 @@ class PhotoUploadRequest(BaseModel):
     )
 
 
+class VisionAnalyzeRequest(BaseModel):
+    """Optional subset of a session's uploaded photographs to analyze."""
+
+    photo_ids: list[str] | None = None
+
+
 # =============================================================================
 # Response schemas
 # =============================================================================
@@ -81,6 +87,23 @@ class PhotoResponse(BaseModel):
     file_size_bytes: int | None = None
     ai_analysis_status: str = "PENDING"
     created_at: str | None = None
+
+
+class VisionSuggestionResponse(BaseModel):
+    photo_id: str
+    observation_id: str
+    category_id: str
+    item_id: str
+    status: str
+    severity: str
+    confidence: str
+    notes: str
+    suggested_repair_cost: float | None = None
+
+
+class VisionAnalysisResponse(BaseModel):
+    summary: str
+    suggestions: list[VisionSuggestionResponse] = []
 
 
 class CatalogItemResponse(BaseModel):

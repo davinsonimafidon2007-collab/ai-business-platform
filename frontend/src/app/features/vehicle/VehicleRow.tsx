@@ -1,7 +1,7 @@
 "use client";
 
 import { cn } from "@/app/utils/cn";
-import { ScoreBadge, ProfitBadge, OpportunityBadge, RecommendationBadge } from "@/app/components/ui/ScoreBadge";
+import { ScoreBadge, ProfitBadge, OpportunityBadge, RecommendationBadge, NegotiationBadge } from "@/app/components/ui/ScoreBadge";
 import type { SearchResultItem } from "@/app/types/vehicle";
 
 interface VehicleRowProps {
@@ -74,8 +74,11 @@ export function VehicleRow({ vehicle, onClick, isSelected }: VehicleRowProps) {
       <td className="whitespace-nowrap px-3 py-2">
         {opp && <OpportunityBadge level={opp.opportunity_level} />}
       </td>
-      <td className="whitespace-nowrap px-3 py-2">
+<td className="whitespace-nowrap px-3 py-2">
         {opp && <RecommendationBadge recommendation={opp.recommendation} />}
+      </td>
+      <td className="whitespace-nowrap px-3 py-2">
+        {vehicle.negotiation && <NegotiationBadge recommendation={vehicle.negotiation.recommendation} />}
       </td>
     </tr>
   );

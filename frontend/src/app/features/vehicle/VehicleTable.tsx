@@ -3,7 +3,7 @@
 import { useState, useMemo } from "react";
 import { VehicleRow } from "./VehicleRow";
 import { Button } from "@/app/components/ui/button";
-import { ScoreBadge, ProfitBadge, OpportunityBadge, RecommendationBadge } from "@/app/components/ui/ScoreBadge";
+import { ScoreBadge, ProfitBadge, OpportunityBadge, RecommendationBadge, NegotiationBadge } from "@/app/components/ui/ScoreBadge";
 import type { SearchResultItem } from "@/app/types/vehicle";
 
 interface VehicleTableProps {
@@ -159,6 +159,9 @@ export function VehicleTable({ vehicles, onSelectVehicle, selectedVehicleId }: V
               </th>
               <th className="whitespace-nowrap px-3 py-3 text-left text-xs font-medium uppercase tracking-wider text-secondary-500 dark:text-secondary-400">
                 Recomendación
+              </th>
+              <th className="whitespace-nowrap px-3 py-3 text-left text-xs font-medium uppercase tracking-wider text-secondary-500 dark:text-secondary-400">
+                Negociación
               </th>
             </tr>
           </thead>

@@ -8,6 +8,7 @@ import type {
   UploadPhotoRequest,
   InspectionObservation,
   InspectionPhoto,
+  VisionAnalysis,
 } from '../types/inspection';
 
 export const inspectionService = {
@@ -44,6 +45,11 @@ export const inspectionService = {
 
   async getSummary(sessionId: string): Promise<InspectionSummary> {
     const { data: result } = await api.get<InspectionSummary>(`/inspections/${sessionId}/summary`);
+    return result;
+  },
+
+  async analyzePhotos(sessionId: string): Promise<VisionAnalysis> {
+    const { data: result } = await api.post<VisionAnalysis>(`/inspections/${sessionId}/analyze`, {});
     return result;
   },
 };

@@ -11,6 +11,7 @@ import type {
   InspectionSummary as InspectionSummaryData,
   CatalogCategory,
   InspectionItemStatus,
+  VisionSuggestion,
 } from "../../types/inspection";
 
 type PageState = "loading" | "form" | "summary" | "error";
@@ -35,6 +36,8 @@ export function InspectionPage({
   const [summary, setSummary] = useState<InspectionSummaryData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isFinalizing, setIsFinalizing] = useState(false);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [visionSuggestions, setVisionSuggestions] = useState<VisionSuggestion[]>([]);
 
   // Initialize session
   useEffect(() => {
@@ -203,6 +206,40 @@ export function InspectionPage({
     }
   }, [session, onComplete]);
 
+  const handleAnalyzePhotos = useCallback(async () => {
+    if (!session) return;
+    setIsAnalyzing(true);
+    try {
+      const result = await inspectionService.analyzePhotos(session.id);
+      setVisionSuggestions(result.suggestions);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudieron analizar las fotografías");
+    } finally {
+      setIsAnalyzing(false);
+    }
+  }, [session]);
+
+  const handleSuggestion = useCallback(async (suggestion: VisionSuggestion, accept: boolean) => {
+    if (!session) return;
+    if (accept) {
+      await inspectionService.updateItem(session.id, {
+        category_id: suggestion.category_id,
+        item_id: suggestion.item_id,
+        status: suggestion.status,
+        notes: suggestion.notes,
+        estimated_repair_cost: suggestion.suggested_repair_cost,
+      });
+      setCatalog((previous) => previous.map((category) => category.id !== suggestion.category_id ? category : {
+        ...category,
+        items: category.items.map((item) => item.id !== suggestion.item_id ? item : {
+          ...item, status: suggestion.status, severity: suggestion.severity,
+          notes: suggestion.notes, estimated_repair_cost: suggestion.suggested_repair_cost,
+        }),
+      }));
+    }
+    setVisionSuggestions((previous) => previous.filter((item) => item.photo_id !== suggestion.photo_id));
+  }, [session]);
+
   const currentCategory = catalog[currentCategoryIndex];
   const totalItems = catalog.reduce((sum, cat) => sum + cat.items.length, 0);
   const reviewedItems = catalog.reduce(
@@ -279,6 +316,31 @@ export function InspectionPage({
         reviewedItems={reviewedItems}
         totalItems={totalItems}
       />
+
+      <div className="rounded-lg border border-gray-200 p-4">
+        <button
+          onClick={handleAnalyzePhotos}
+          disabled={isAnalyzing}
+          className="rounded-md bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700 disabled:opacity-50"
+        >
+          {isAnalyzing ? "Analizando fotografías..." : "Analizar fotografías"}
+        </button>
+        {visionSuggestions.length > 0 && (
+          <div className="mt-4 space-y-3">
+            <p className="text-sm font-medium text-gray-800">Sugerencias (no aplicadas)</p>
+            {visionSuggestions.map((suggestion) => (
+              <div key={suggestion.photo_id} className="rounded-md bg-violet-50 p-3 text-sm text-gray-700">
+                <p>{suggestion.notes}</p>
+                <p className="mt-1">Estado sugerido: {suggestion.status} · Confianza: {suggestion.confidence}</p>
+                <div className="mt-2 flex gap-2">
+                  <button onClick={() => handleSuggestion(suggestion, true)} className="rounded bg-green-600 px-3 py-1 text-white">Aceptar</button>
+                  <button onClick={() => handleSuggestion(suggestion, false)} className="rounded border border-gray-300 bg-white px-3 py-1">Rechazar</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       <CategoryStep
         category={currentCategory}

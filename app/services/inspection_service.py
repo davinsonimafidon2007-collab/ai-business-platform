@@ -46,6 +46,7 @@ from app.repositories.inspection_repository import (
 )
 from app.services.evaluation_engine import EvaluationEngine
 from app.services.negotiation_engine import NegotiationEngine
+from app.services.vision_service import VisionService
 
 
 class InspectionService:
@@ -63,12 +64,14 @@ class InspectionService:
         photo_repo: InspectionPhotoRepository,
         negotiation_engine: NegotiationEngine | None = None,
         evaluation_engine: EvaluationEngine | None = None,
+        vision_service: VisionService | None = None,
     ) -> None:
         self._session_repo = session_repo
         self._observation_repo = observation_repo
         self._photo_repo = photo_repo
         self._negotiation_engine = negotiation_engine or NegotiationEngine()
         self._evaluation_engine = evaluation_engine or EvaluationEngine()
+        self._vision_service = vision_service
 
     # ------------------------------------------------------------------
     # Session lifecycle
@@ -238,6 +241,27 @@ class InspectionService:
     ) -> list[InspectionPhoto]:
         """Obtiene todas las fotos de una observación."""
         return await self._photo_repo.get_by_observation(observation_id)
+
+    async def analyze_photos(
+        self, session_id: str | UUID, photo_ids: list[str] | None = None
+    ) -> dict[str, object]:
+        """Returns vision suggestions without changing the inspection session."""
+        if self._vision_service is None:
+            raise ValueError("Vision provider is not configured")
+        session = await self._session_repo.get_by_id(session_id)
+        if session is None:
+            raise ValueError(f"Session '{session_id}' not found")
+        photos = await self._photo_repo.get_by_session(session_id)
+        if photo_ids is not None:
+            requested = set(photo_ids)
+            photos = [photo for photo in photos if photo.id in requested]
+        observations = {
+            photo.id: observation
+            for photo in photos
+            if (observation := await self._observation_repo.get_by_id(photo.observation_id))
+            is not None
+        }
+        return await self._vision_service.analyze_photos(photos, observations)
 
     # ------------------------------------------------------------------
     # Finalization & Summary
