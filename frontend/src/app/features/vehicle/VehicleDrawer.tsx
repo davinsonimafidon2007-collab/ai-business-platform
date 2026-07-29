@@ -235,7 +235,7 @@ export function VehicleDrawer({ vehicle, onClose }: VehicleDrawerProps) {
                     <div className="mb-2">
                       <p className="text-xs font-medium text-secondary-500">Apertura</p>
                       <p className="text-xs text-secondary-600 dark:text-secondary-400 italic">
-                        "{vehicle.negotiation.negotiation_script.opening}"
+                        {`"${vehicle.negotiation.negotiation_script.opening}"`}
                       </p>
                     </div>
                   )}
@@ -259,7 +259,7 @@ export function VehicleDrawer({ vehicle, onClose }: VehicleDrawerProps) {
                     <div>
                       <p className="text-xs font-medium text-secondary-500">Cierre</p>
                       <p className="text-xs text-secondary-600 dark:text-secondary-400 italic">
-                        "{vehicle.negotiation.negotiation_script.closing}"
+                        {`"${vehicle.negotiation.negotiation_script.closing}"`}
                       </p>
                     </div>
                   )}

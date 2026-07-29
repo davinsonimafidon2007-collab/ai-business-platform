@@ -21,7 +21,7 @@ export function Navbar() {
       {user && (
         <div className="flex items-center gap-3">
           <span className="text-sm text-secondary-600 dark:text-secondary-400">
-            {user.name}
+            {user.full_name}
           </span>
           <Button variant="ghost" size="sm" onClick={logout}>
             Cerrar sesión
