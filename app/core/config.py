@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_access_token_expire_minutes: int = 30
     jwt_refresh_token_expire_minutes: int = 60 * 24 * 7  # 7 días
-    cors_origins: str = "http://localhost:3000,http://localhost:5173,http://localhost:8080"
+    cors_origins: str = "http://localhost:3000,http://localhost:5173,http://localhost:8080,capacitor://localhost,ionic://localhost,http://localhost"
     cors_allow_credentials: bool = True
     cors_allow_methods: str = "GET,POST,PUT,PATCH,DELETE,OPTIONS"
     cors_allow_headers: str = "*"
@@ -57,6 +57,21 @@ class Settings(BaseSettings):
     """Master toggle to enable/disable the background scheduler."""
 
     # =========================================================================
+    # OpenAI Vision provider
+    # =========================================================================
+    openai_api_key: str = ""
+    """OpenAI API key for GPT-4 Vision analysis of inspection photos."""
+
+    openai_model: str = "gpt-4o"
+    """Vision model to use (default: gpt-4o)."""
+
+    openai_max_tokens: int = 2000
+    """Max tokens for OpenAI vision response."""
+
+    openai_temperature: float = 0.1
+    """Temperature for OpenAI vision (low = deterministic)."""
+
+    # =========================================================================
     # Observability — Logging
     # =========================================================================
     log_level: str = "INFO"
@@ -86,6 +101,12 @@ class Settings(BaseSettings):
         if self.cors_allow_headers == "*":
             return ["*"]
         return [header.strip() for header in self.cors_allow_headers.split(",") if header.strip()]
+
+    # =========================================================================
+    # Upload directory for inspection photos
+    # =========================================================================
+    upload_dir: str = "uploads/inspection_photos"
+    """Directory where uploaded inspection photos are stored."""
 
     model_config = SettingsConfigDict(
         env_file=".env",

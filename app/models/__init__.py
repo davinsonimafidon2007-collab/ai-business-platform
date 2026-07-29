@@ -20,6 +20,13 @@ from app.models.user import User
 from app.models.vehicle import Vehicle
 from app.models.vehicle_evaluation import VehicleEvaluation
 from app.models.verification_token import VerificationToken
+from app.models.vision import (
+    VisionConfidence,
+    VisionImage,
+    VisionInspectionResult,
+    VisionObservation,
+    VisionSeverity,
+)
 
 __all__ = [
     "Base",
@@ -42,4 +49,9 @@ __all__ = [
     "Vehicle",
     "VehicleEvaluation",
     "VerificationToken",
+    "VisionConfidence",
+    "VisionImage",
+    "VisionInspectionResult",
+    "VisionObservation",
+    "VisionSeverity",
 ]

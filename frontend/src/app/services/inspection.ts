@@ -11,6 +11,8 @@ import type {
   VisionAnalysis,
 } from '../types/inspection';
 
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
 export const inspectionService = {
   async createSession(data: CreateSessionRequest): Promise<InspectionSession> {
     const { data: result } = await api.post<InspectionSession>('/inspections', data);
@@ -36,6 +38,36 @@ export const inspectionService = {
   ): Promise<InspectionPhoto> {
     const { data: result } = await api.post<InspectionPhoto>(`/inspections/${sessionId}/photos`, data);
     return result;
+  },
+
+  /**
+   * Uploads a photo file via multipart/form-data.
+   * This is the endpoint used from the mobile camera capture.
+   */
+  async uploadPhotoFile(
+    sessionId: string,
+    observationId: string,
+    file: File,
+  ): Promise<InspectionPhoto> {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await fetch(
+      `${API_BASE_URL}/api/v1/inspections/${sessionId}/photos/upload?observation_id=${observationId}`,
+      {
+        method: 'POST',
+        headers: {
+          // Let browser set Content-Type with boundary
+        },
+        credentials: 'include',
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error(`Error uploading photo: ${response.statusText}`);
+    }
+
+    return response.json();
   },
 
   async finalizeSession(sessionId: string): Promise<InspectionSession> {

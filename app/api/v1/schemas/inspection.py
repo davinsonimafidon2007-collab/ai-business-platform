@@ -178,3 +178,4 @@ class InspectionSummaryResponse(BaseModel):
     defect_items: list[dict[str, Any]] = []
     repair_estimate: dict[str, Any] = {}
     inspection_result: dict[str, Any] = {}
+    negotiation: dict[str, Any] | None = None

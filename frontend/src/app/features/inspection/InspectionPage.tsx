@@ -37,6 +37,7 @@ export function InspectionPage({
   const [error, setError] = useState<string | null>(null);
   const [isFinalizing, setIsFinalizing] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [visionSuggestions, setVisionSuggestions] = useState<VisionSuggestion[]>([]);
 
   // Initialize session
@@ -240,6 +241,53 @@ export function InspectionPage({
     setVisionSuggestions((previous) => previous.filter((item) => item.photo_id !== suggestion.photo_id));
   }, [session]);
 
+  const handleItemPhotoCapture = useCallback(async (itemId: string, _observationId: string | null, file: File) => {
+    if (!session) return;
+
+    // Get current category
+    const currentCat = catalog[currentCategoryIndex];
+    if (!currentCat) return;
+
+    // Find the item
+    const item = currentCat.items.find((i) => i.id === itemId);
+    if (!item) return;
+
+    setIsUploadingPhoto(true);
+    try {
+      // If no observation exists yet, first set a status to create one
+      if (!item.observation_id) {
+        const observation = await inspectionService.updateItem(session.id, {
+          category_id: currentCat.id,
+          item_id: itemId,
+          status: "UNKNOWN",
+        });
+        // Update catalog with observation_id
+        setCatalog((prev) =>
+          prev.map((cat) =>
+            cat.id === currentCat.id
+              ? {
+                  ...cat,
+                  items: cat.items.map((i) =>
+                    i.id === itemId ? { ...i, observation_id: observation.id } : i,
+                  ),
+                }
+              : cat,
+          ),
+        );
+        // Upload photo with new observation_id
+        await inspectionService.uploadPhotoFile(session.id, observation.id, file);
+      } else {
+        // Upload photo with existing observation_id
+        await inspectionService.uploadPhotoFile(session.id, item.observation_id, file);
+      }
+    } catch (err) {
+      console.error("Error uploading photo:", err);
+      setError(err instanceof Error ? err.message : "Error al subir fotografía");
+    } finally {
+      setIsUploadingPhoto(false);
+    }
+  }, [session, catalog, currentCategoryIndex]);
+
   const currentCategory = catalog[currentCategoryIndex];
   const totalItems = catalog.reduce((sum, cat) => sum + cat.items.length, 0);
   const reviewedItems = catalog.reduce(
@@ -347,6 +395,7 @@ export function InspectionPage({
         onItemStatusChange={handleItemStatusChange}
         onItemNotesChange={handleItemNotesChange}
         onItemCostChange={handleItemCostChange}
+        onItemPhotoCapture={handleItemPhotoCapture}
       />
 
       <div className="flex items-center justify-between border-t pt-4">

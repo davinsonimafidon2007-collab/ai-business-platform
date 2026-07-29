@@ -11,6 +11,7 @@ Esa lógica pertenece a NegotiationEngine y EvaluationEngine.
 
 from __future__ import annotations
 
+from dataclasses import asdict
 from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
@@ -39,11 +40,13 @@ from app.models.negotiation import (
     NegotiationInput,
     RepairEstimate,
 )
+from app.models.vehicle_evaluation import VehicleEvaluation
 from app.repositories.inspection_repository import (
     InspectionObservationRepository,
     InspectionPhotoRepository,
     InspectionSessionRepository,
 )
+from app.repositories.vehicle_evaluation_repository import VehicleEvaluationRepository
 from app.services.evaluation_engine import EvaluationEngine
 from app.services.negotiation_engine import NegotiationEngine
 from app.services.vision_service import VisionService
@@ -65,6 +68,7 @@ class InspectionService:
         negotiation_engine: NegotiationEngine | None = None,
         evaluation_engine: EvaluationEngine | None = None,
         vision_service: VisionService | None = None,
+        evaluation_repo: VehicleEvaluationRepository | None = None,
     ) -> None:
         self._session_repo = session_repo
         self._observation_repo = observation_repo
@@ -72,6 +76,7 @@ class InspectionService:
         self._negotiation_engine = negotiation_engine or NegotiationEngine()
         self._evaluation_engine = evaluation_engine or EvaluationEngine()
         self._vision_service = vision_service
+        self._evaluation_repo = evaluation_repo
 
     # ------------------------------------------------------------------
     # Session lifecycle
@@ -295,6 +300,67 @@ class InspectionService:
 
         # Calcular estadísticas
         summary = self._build_summary(session, observations)
+
+        # --- Ejecutar NegotiationEngine con los datos de la inspección ---
+        # Construir NegotiationInput a partir de los datos del summary
+        defect_items = self._build_defect_items(observations)
+        total_repair_cost = summary["costs"]["total_repair_cost"]
+        repair_estimate = RepairEstimate(
+            total_repair_cost=total_repair_cost,
+            parts_cost=summary["costs"]["parts_cost"],
+            labor_cost=summary["costs"]["labor_cost"],
+            paint_and_body_cost=summary["costs"]["paint_and_body_cost"],
+            diagnostic_cost=50.0 if total_repair_cost > 0 else 0.0,
+        )
+        inspection_result = InspectionResult(
+            defects=defect_items,
+            overall_condition=summary["overall_condition"] or 10,
+            has_accident_history=False,
+        )
+        # NegotiationInput requiere market_estimation, profit_analysis_data y vehicle_score_data
+        # Usamos datos mínimos (vacíos) ya que la inspección no tiene acceso directo a estos
+        # El NegotiationEngine tolera valores por defecto
+        from app.models.market import MarketEstimation
+        negotiation_input = NegotiationInput(
+            inspection_result=inspection_result,
+            repair_estimate=repair_estimate,
+            market_estimation=MarketEstimation(
+                market_price=0.0,
+                supply_level=50.0,
+                demand_level=50.0,
+                market_trend="stable",
+                confidence=50.0,
+            ),
+            asking_price=0.0,
+            profit_analysis_data={},
+            vehicle_score_data={},
+        )
+        negotiation_result = self._negotiation_engine.analyze(negotiation_input)
+
+        # Añadir NegotiationResult al summary
+        summary["negotiation"] = asdict(negotiation_result)
+        # Convertir enum recommendation a string
+        if "recommendation" in summary["negotiation"] and hasattr(summary["negotiation"]["recommendation"], "value"):
+            summary["negotiation"]["recommendation"] = summary["negotiation"]["recommendation"].value
+
+        # --- Actualizar VehicleEvaluation si tenemos repositorio ---
+        if self._evaluation_repo is not None:
+            try:
+                existing_eval = await self._evaluation_repo.get_by_vehicle_id(session.vehicle_id)
+                if existing_eval is not None:
+                    existing_eval.negotiation = negotiation_result
+                    existing_eval.updated_at = datetime.now(timezone.utc)
+                    await self._evaluation_repo.update(existing_eval)
+                else:
+                    # Crear VehicleEvaluation con el resultado de negociación
+                    evaluation = VehicleEvaluation(
+                        vehicle_id=session.vehicle_id,
+                        negotiation=negotiation_result,
+                    )
+                    await self._evaluation_repo.create(evaluation)
+            except Exception:
+                # Si falla la actualización de VehicleEvaluation, no bloquear la finalización
+                pass
 
         # Actualizar la sesión con los resultados
         session.status = InspectionSessionStatus.COMPLETED.value

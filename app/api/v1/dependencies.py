@@ -34,6 +34,7 @@ from app.services.search_engine import SearchEngineService
 from app.services.inspection_service import InspectionService
 from app.services.vision_service import VisionService
 from app.providers.vision_provider import MockVisionProvider
+from app.providers.openai_vision import OpenAIVisionProvider
 from app.services.vehicle_scorer import VehicleScorer
 from app.services.vehicle_service import VehicleService
 
@@ -153,17 +154,71 @@ def get_inspection_photo_repository(
     return InspectionPhotoRepository(session)
 
 
+def get_openai_vision_provider() -> OpenAIVisionProvider:
+    """Creates an OpenAIVisionProvider configured from application settings.
+
+    The API key, model, max_tokens, and temperature are read from
+    Settings (environment variables or .env file).
+
+    Returns:
+        Configured OpenAIVisionProvider instance.
+    """
+    return OpenAIVisionProvider(
+        api_key=settings.openai_api_key,
+        model=settings.openai_model,
+        max_tokens=settings.openai_max_tokens,
+        temperature=settings.openai_temperature,
+    )
+
+
+def get_vision_provider() -> OpenAIVisionProvider | MockVisionProvider:
+    """Returns either OpenAI or Mock provider depending on configuration.
+
+    If `openai_api_key` is set and non-empty, returns an OpenAIVisionProvider.
+    Otherwise falls back to MockVisionProvider for development/testing.
+
+    To switch providers in production, simply set the OPENAI_API_KEY
+    environment variable and the rest of the system will use it.
+    """
+    if settings.openai_api_key:
+        return OpenAIVisionProvider(
+            api_key=settings.openai_api_key,
+            model=settings.openai_model,
+            max_tokens=settings.openai_max_tokens,
+            temperature=settings.openai_temperature,
+        )
+    return MockVisionProvider()
+
+
+def get_vision_service(
+    provider: OpenAIVisionProvider | MockVisionProvider = Depends(get_vision_provider),
+) -> VisionService:
+    """Obtiene el servicio adaptador de visión."""
+    return VisionService(provider=provider)
+
+
+def get_vehicle_evaluation_repository(
+    session: AsyncSession = Depends(get_db_session),
+) -> VehicleEvaluationRepository:
+    """Obtiene el repositorio de evaluaciones de vehículos."""
+    from app.repositories.vehicle_evaluation_repository import VehicleEvaluationRepository
+    return VehicleEvaluationRepository(session)
+
+
 def get_inspection_service(
     session_repo: InspectionSessionRepository = Depends(get_inspection_session_repository),
     observation_repo: InspectionObservationRepository = Depends(get_inspection_observation_repository),
     photo_repo: InspectionPhotoRepository = Depends(get_inspection_photo_repository),
+    vision_service: VisionService = Depends(get_vision_service),
+    evaluation_repo: VehicleEvaluationRepository = Depends(get_vehicle_evaluation_repository),
 ) -> InspectionService:
     """Obtiene el servicio de orquestación de inspecciones."""
     return InspectionService(
         session_repo=session_repo,
         observation_repo=observation_repo,
         photo_repo=photo_repo,
-        vision_service=VisionService(MockVisionProvider()),
+        vision_service=vision_service,
+        evaluation_repo=evaluation_repo,
     )
 
 

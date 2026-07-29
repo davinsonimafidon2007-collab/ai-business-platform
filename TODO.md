@@ -1,31 +1,27 @@
-# TODO: Inspection Session Module — Integration Phase
+# TODO: Producción móvil + despliegue (Capacitor Android)
 
-## Backend Service
-- [ ] `app/services/inspection_service.py` — Orchestrator service
+## Fase 1: Corregir flujo de fotografías (BUG CRÍTICO)
+- [ ] **1.1** Backend: Endpoint `POST /{session_id}/photos/upload` multipart (UploadFile)
+- [ ] **1.2** Frontend: Agregar captura de foto con cámara en CategoryStep.tsx
+- [ ] **1.3** Frontend: Subir foto al backend (inspection.ts service)
+- [ ] **1.4** Frontend: Integrar captura/subida en InspectionPage.tsx
 
-## Backend API
-- [ ] `app/api/v1/schemas/inspection.py` — Pydantic schemas
-- [ ] `app/api/v1/routes/inspection.py` — REST endpoints
-- [ ] `app/api/v1/router.py` — Register inspection router
-- [ ] `app/api/v1/dependencies.py` — Add DI for InspectionService
+## Fase 2: Integrar Capacitor
+- [ ] **2.1** Instalar @capacitor/core, @capacitor/cli, @capacitor/camera
+- [ ] **2.2** Capacitor init (crear capacitor.config.ts)
+- [ ] **2.3** Build Next.js (npm run build)
+- [ ] **2.4** Capacitor add android
+- [ ] **2.5** Sincronizar (npx cap sync)
+- [ ] **2.6** Agregar permisos Android (Camera, Storage)
 
-## Frontend
-- [ ] `frontend/src/app/types/inspection.ts` — TypeScript interfaces
-- [ ] `frontend/src/app/services/inspection.ts` — API client
-- [ ] `frontend/src/app/features/inspection/InspectionProgressBar.tsx`
-- [ ] `frontend/src/app/features/inspection/CategoryStep.tsx`
-- [ ] `frontend/src/app/features/inspection/InspectionSummary.tsx`
-- [ ] `frontend/src/app/features/inspection/InspectionPage.tsx`
-- [ ] `frontend/src/app/inspection/page.tsx`
-- [ ] `frontend/src/app/inspection/[id]/page.tsx`
-- [ ] `frontend/src/app/layout/sidebar.tsx` — Add nav item
+## Fase 3: Configuración de producción
+- [ ] **3.1** Variables de entorno (frontend: .env.production)
+- [ ] **3.2** Configurar backend CORS para Android
+- [ ] **3.3** Configurar UPLOAD_DIR en backend
+- [ ] **3.4** Configurar OpenAI API Key en backend
 
-## Tests
-- [ ] `tests/unit/test_inspection_models.py`
-- [ ] `tests/unit/test_inspection_service.py`
-- [ ] `tests/integration/test_inspection_api.py`
+## Fase 4: Generar APK
+- [ ] **4.1** Build Android debug APK (npx cap open android && ./gradlew assembleDebug)
+- [ ] **4.2** Verificar APK generada
+- [ ] **4.3** Probar instalación y flujo completo
 
-## Final
-- [ ] Run all tests
-- [ ] Fix any errors
-- [ ] Confirm everything compiles and tests pass

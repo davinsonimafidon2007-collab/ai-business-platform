@@ -8,6 +8,7 @@ interface CategoryStepProps {
   onItemStatusChange: (itemId: string, status: InspectionItemStatus) => void;
   onItemNotesChange: (itemId: string, notes: string) => void;
   onItemCostChange: (itemId: string, cost: number | null) => void;
+  onItemPhotoCapture?: (itemId: string, observationId: string | null, file: File) => void;
 }
 
 const STATUS_OPTIONS: { value: InspectionItemStatus; label: string; color: string }[] = [
@@ -22,6 +23,7 @@ export function CategoryStep({
   onItemStatusChange,
   onItemNotesChange,
   onItemCostChange,
+  onItemPhotoCapture,
 }: CategoryStepProps) {
   return (
     <div className="space-y-4">
@@ -94,7 +96,35 @@ export function CategoryStep({
             )}
 
             {item.allows_photos && (
-              <div className="mt-3">
+              <div className="mt-3 space-y-2">
+                <div className="flex items-center gap-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Fotografía
+                  </label>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    className="hidden"
+                    id={`photo-${item.id}`}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file && onItemPhotoCapture) {
+                        onItemPhotoCapture(item.id, item.observation_id, file);
+                      }
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const input = document.getElementById(`photo-${item.id}`) as HTMLInputElement;
+                      if (input) input.click();
+                    }}
+                    className="inline-flex items-center gap-1 rounded-md bg-blue-50 px-3 py-1.5 text-sm font-medium text-blue-700 hover:bg-blue-100"
+                  >
+                    📷 Añadir fotografía
+                  </button>
+                </div>
                 <label className="block text-sm font-medium text-gray-700">
                   Notas
                 </label>

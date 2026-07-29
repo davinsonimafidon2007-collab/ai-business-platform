@@ -78,6 +78,36 @@ export interface InspectionSessionDetail {
   catalog: CatalogCategory[];
 }
 
+export interface NegotiationArgument {
+  argument: string;
+  economic_impact: number;
+  category: string;
+  severity: number;
+}
+
+export interface NegotiationScript {
+  opening: string;
+  defect_based_points: string[];
+  market_based_points: string[];
+  closing: string;
+}
+
+export interface NegotiationResult {
+  estimated_vehicle_value: number;
+  recommended_initial_offer: number;
+  recommended_counter_offer: number;
+  maximum_purchase_price: number;
+  walk_away_price: number;
+  expected_profit: number;
+  expected_roi: number;
+  negotiation_arguments: NegotiationArgument[];
+  negotiation_script: NegotiationScript;
+  recommendation: 'BUY' | 'NEGOTIATE' | 'WALK_AWAY';
+  leverage_score: number;
+  price_gap: number;
+  discount_needed: number;
+}
+
 export interface InspectionSummary {
   session_id: string;
   vehicle_id: string;
@@ -119,6 +149,7 @@ export interface InspectionSummary {
     overall_condition: number;
     has_accident_history: boolean;
   };
+  negotiation?: NegotiationResult;
 }
 
 export interface CreateSessionRequest {

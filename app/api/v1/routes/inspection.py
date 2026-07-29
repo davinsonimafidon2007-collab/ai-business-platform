@@ -6,9 +6,12 @@ These endpoints only handle HTTP concerns (parsing, validation, response).
 
 from __future__ import annotations
 
+import os
+import uuid
+from pathlib import Path
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
 
 from app.api.v1.dependencies import get_inspection_service
 from app.api.v1.schemas.inspection import (
@@ -23,6 +26,7 @@ from app.api.v1.schemas.inspection import (
     VisionAnalysisResponse,
     VisionAnalyzeRequest,
 )
+from app.core.config import settings
 from app.services.inspection_service import InspectionService
 
 router = APIRouter(prefix="/inspections", tags=["inspections"])
@@ -168,3 +172,63 @@ async def get_summary(
             detail=f"Inspection session '{session_id}' not found",
         )
     return InspectionSummaryResponse(**summary)
+
+
+UPLOAD_DIR = Path(os.environ.get("UPLOAD_DIR", "uploads/inspection_photos"))
+
+
+@router.post(
+    "/{session_id}/photos/upload",
+    status_code=status.HTTP_201_CREATED,
+    summary="Upload a photo file for an inspection observation",
+)
+async def upload_photo_file(
+    session_id: str,
+    observation_id: str,
+    file: UploadFile,
+    service: InspectionService = Depends(get_inspection_service),
+) -> PhotoResponse:
+    """Receives a multipart image file, saves it, and registers it.
+
+    - observation_id is passed as query param (?observation_id=...)
+    - The file is saved to the configured UPLOAD_DIR
+    - Returns the created InspectionPhoto record
+    """
+    # Validate session exists
+    session = await service.get_session(session_id)
+    if session is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Inspection session '{session_id}' not found",
+        )
+
+    # Validate file is an image
+    if file.content_type and not file.content_type.startswith("image/"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"File must be an image, got {file.content_type}",
+        )
+
+    # Create upload directory
+    session_dir = UPLOAD_DIR / session_id
+    session_dir.mkdir(parents=True, exist_ok=True)
+
+    # Generate unique filename
+    ext = Path(file.filename or "photo.jpg").suffix or ".jpg"
+    unique_name = f"{uuid.uuid4()}{ext}"
+    file_path = session_dir / unique_name
+
+    # Save file
+    content = await file.read()
+    file_path.write_bytes(content)
+
+    # Register in database
+    photo = await service.upload_photo(
+        session_id=session_id,
+        observation_id=observation_id,
+        file_path=str(file_path),
+        file_name=file.filename,
+        mime_type=file.content_type,
+        file_size_bytes=len(content),
+    )
+    return PhotoResponse(**photo.to_dict())

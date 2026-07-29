@@ -14,6 +14,8 @@ from app.providers.http_client import ProviderHttpClient
 from app.providers.registry import ProviderRegistry
 from app.providers.mobile_de import MobileDeProvider
 from app.providers.autoscout24 import AutoScout24Provider
+from app.providers.vision_provider import MockVisionProvider, VisionProvider
+from app.providers.openai_vision import OpenAIVisionProvider, VisionProviderError
 
 __all__ = [
     "VehicleProvider",
@@ -31,4 +33,9 @@ __all__ = [
     "ProviderNotFoundError",
     "ProviderParsingError",
     "ProviderMaxRetriesExceededError",
+    "MockVisionProvider",
+    "VisionProvider",
+    "OpenAIVisionProvider",
+    "VisionProviderError",
 ]
+
