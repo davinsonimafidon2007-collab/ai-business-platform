@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useForm } from "react-hook-form";
@@ -9,6 +9,7 @@ import { z } from "zod";
 import { Button } from "@/app/components/ui/button";
 import { Input } from "@/app/components/ui/input";
 import { api } from "@/app/services/api/client";
+import { signInWithGoogle } from "@/app/services/google-auth";
 import { useAuthStore } from "@/app/store/auth-store";
 import type { AuthResponse, User } from "@/app/types/auth";
 
@@ -21,9 +22,10 @@ type LoginForm = z.infer<typeof loginSchema>;
 
 export function LoginPage() {
   const router = useRouter();
-  const { setUser } = useAuthStore();
+  const { setUser, isAuthenticated } = useAuthStore();
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
 
   const {
     register,
@@ -32,6 +34,13 @@ export function LoginPage() {
   } = useForm<LoginForm>({
     resolver: zodResolver(loginSchema),
   });
+
+  // Redirect to dashboard if already authenticated
+  useEffect(() => {
+    if (isAuthenticated) {
+      router.push("/dashboard");
+    }
+  }, [isAuthenticated, router]);
 
   const onSubmit = async (data: LoginForm) => {
     setIsLoading(true);
@@ -55,6 +64,19 @@ export function LoginPage() {
       setError("Credenciales inválidas");
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const onGoogleLogin = async () => {
+    setIsGoogleLoading(true);
+    setError(null);
+    try {
+      await signInWithGoogle();
+      router.push("/dashboard");
+    } catch {
+      setError("Error al iniciar sesión con Google");
+    } finally {
+      setIsGoogleLoading(false);
     }
   };
 
@@ -94,6 +116,27 @@ export function LoginPage() {
             {isLoading ? "Iniciando sesión..." : "Iniciar sesión"}
           </Button>
         </form>
+
+        <div className="relative my-4">
+          <div className="absolute inset-0 flex items-center">
+            <div className="w-full border-t border-secondary-200 dark:border-secondary-700"></div>
+          </div>
+          <div className="relative flex justify-center text-xs uppercase">
+            <span className="bg-white px-2 text-secondary-500 dark:bg-secondary-900">
+              O
+            </span>
+          </div>
+        </div>
+
+        <Button
+          type="button"
+          variant="outline"
+          className="w-full"
+          onClick={onGoogleLogin}
+          disabled={isGoogleLoading}
+        >
+          {isGoogleLoading ? "Cargando..." : "Iniciar sesión con Google"}
+        </Button>
 
         <p className="text-center text-sm text-secondary-500">
           ¿No tienes cuenta?{" "}

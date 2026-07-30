@@ -16,7 +16,7 @@ from app.repositories.password_reset_token_repository import PasswordResetTokenR
 from app.repositories.refresh_token_repository import RefreshTokenRepository
 from app.repositories.user_repository import UserRepository
 from app.repositories.verification_token_repository import VerificationTokenRepository
-from app.schemas.auth import LoginRequest, RegisterRequest, TokenResponse
+from app.schemas.auth import GoogleAuthRequest, LoginRequest, RegisterRequest, TokenResponse
 from app.schemas.password_reset import (
     ForgotPasswordRequest,
     ForgotPasswordResponse,
@@ -57,6 +57,19 @@ async def login_user(
     refresh_service: RefreshTokenService = Depends(get_refresh_token_service),
 ) -> TokenResponse:
     user = await auth_service.authenticate_user(email=str(payload.email), password=payload.password)
+    access_token = auth_service.create_access_token(user_id=user.id)
+    refresh_token = refresh_service.create_refresh_token(user_id=user.id)
+    await refresh_service.create_refresh_token_record(user_id=user.id, token=refresh_token)
+    return TokenResponse(access_token=access_token, refresh_token=refresh_token)
+
+
+@router.post("/google", response_model=TokenResponse)
+async def google_login(
+    payload: GoogleAuthRequest,
+    auth_service: AuthService = Depends(get_auth_service),
+    refresh_service: RefreshTokenService = Depends(get_refresh_token_service),
+) -> TokenResponse:
+    user = await auth_service.authenticate_with_google(id_token=payload.id_token)
     access_token = auth_service.create_access_token(user_id=user.id)
     refresh_token = refresh_service.create_refresh_token(user_id=user.id)
     await refresh_service.create_refresh_token_record(user_id=user.id, token=refresh_token)

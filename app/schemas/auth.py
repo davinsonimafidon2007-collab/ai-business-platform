@@ -11,6 +11,10 @@ class LoginRequest(BaseModel):
     password: str = Field(..., min_length=8)
 
 
+class GoogleAuthRequest(BaseModel):
+    id_token: str
+
+
 class TokenResponse(BaseModel):
     access_token: str
     refresh_token: str

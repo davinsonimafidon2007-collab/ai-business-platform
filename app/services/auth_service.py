@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import asyncio
+import json
+import urllib.request
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -40,6 +43,38 @@ class AuthService:
 
         if not is_valid_password:
             raise InvalidCredentialsError("Invalid email or password")
+
+        return user
+
+    async def authenticate_with_google(self, *, id_token: str) -> User:
+        """Verify a Firebase ID token and return the corresponding user.
+
+        Creates the user if it does not exist yet.
+        """
+
+        def _verify_token() -> dict[str, Any]:
+            url = f"https://www.googleapis.com/oauth2/v3/tokeninfo?id_token={id_token}"
+            with urllib.request.urlopen(url) as response:
+                return json.loads(response.read())
+
+        try:
+            token_info = await asyncio.to_thread(_verify_token)
+        except Exception as exc:
+            raise AuthenticationError("Invalid Google token") from exc
+
+        email = token_info.get("email")
+        if not email:
+            raise AuthenticationError("Invalid Google token: no email")
+
+        user = await self.repository.get_by_email(email)
+        if user is None:
+            user = User(
+                email=email,
+                hashed_password="google_auth",
+                full_name=token_info.get("name"),
+                is_verified=True,
+            )
+            user = await self.repository.create(user)
 
         return user
 
