@@ -17,8 +17,8 @@ class SearchService:
     async def get_search(self, search_id: str | UUID) -> Search | None:
         return await self.repository.get_by_id(search_id)
 
-    async def list_searches(self, skip: int = 0, limit: int = 100) -> list[Search]:
-        return await self.repository.list_all(skip=skip, limit=limit)
+    async def list_searches_by_user(self, user_id: str, skip: int = 0, limit: int = 100) -> list[Search]:
+        return await self.repository.list_by_user(user_id, skip=skip, limit=limit)
 
     async def update_search(self, search: Search, data: dict) -> Search:
         for key, value in data.items():

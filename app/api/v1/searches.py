@@ -18,13 +18,22 @@ async def get_search_service(session: AsyncSession = Depends(get_db_session)) ->
     return SearchService(repository)
 
 
+async def _get_owned_search(search_id: str, current_user: User, service: SearchService):
+    search = await service.get_search(search_id)
+    if search is None or search.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Search not found")
+    return search
+
+
 @router.post("", response_model=SearchRead, status_code=status.HTTP_201_CREATED)
 async def create_search(
     payload: SearchCreate,
     service: SearchService = Depends(get_search_service),
     current_user: User = Depends(get_current_user),
 ) -> SearchRead:
-    search = await service.create_search(payload.model_dump())
+    data = payload.model_dump()
+    data["user_id"] = current_user.id
+    search = await service.create_search(data)
     return SearchRead.model_validate(search)
 
 
@@ -35,7 +44,7 @@ async def list_searches(
     service: SearchService = Depends(get_search_service),
     current_user: User = Depends(get_current_user),
 ) -> list[SearchRead]:
-    searches = await service.list_searches(skip=skip, limit=limit)
+    searches = await service.list_searches_by_user(current_user.id, skip=skip, limit=limit)
     return [SearchRead.model_validate(s) for s in searches]
 
 
@@ -45,9 +54,7 @@ async def get_search(
     service: SearchService = Depends(get_search_service),
     current_user: User = Depends(get_current_user),
 ) -> SearchRead:
-    search = await service.get_search(search_id)
-    if search is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Search not found")
+    search = await _get_owned_search(search_id, current_user, service)
     return SearchRead.model_validate(search)
 
 
@@ -58,9 +65,7 @@ async def update_search(
     service: SearchService = Depends(get_search_service),
     current_user: User = Depends(get_current_user),
 ) -> SearchRead:
-    search = await service.get_search(search_id)
-    if search is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Search not found")
+    search = await _get_owned_search(search_id, current_user, service)
     updated = await service.update_search(search, payload.model_dump(exclude_unset=True))
     return SearchRead.model_validate(updated)
 
@@ -71,8 +76,5 @@ async def delete_search(
     service: SearchService = Depends(get_search_service),
     current_user: User = Depends(get_current_user),
 ) -> None:
-    search = await service.get_search(search_id)
-    if search is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Search not found")
+    search = await _get_owned_search(search_id, current_user, service)
     await service.delete_search(search)
-

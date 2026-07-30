@@ -26,6 +26,16 @@ class SearchRepository:
         result = await self.session.execute(select(Search).order_by(Search.created_at.desc()).offset(skip).limit(limit))
         return list(result.scalars().all())
 
+    async def list_by_user(self, user_id: str, skip: int = 0, limit: int = 100) -> list[Search]:
+        result = await self.session.execute(
+            select(Search)
+            .where(Search.user_id == str(user_id))
+            .order_by(Search.created_at.desc())
+            .offset(skip)
+            .limit(limit)
+        )
+        return list(result.scalars().all())
+
     async def update(self, search: Search) -> Search:
         await self.session.commit()
         await self.session.refresh(search)

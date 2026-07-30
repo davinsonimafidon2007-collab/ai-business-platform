@@ -6,7 +6,7 @@ from app.models.role import Role
 
 
 def test_user_create_accepts_valid_email() -> None:
-    user = UserCreate(email="user@example.com", hashed_password="secret")
+    user = UserCreate(email="user@example.com", password="secret123")
 
     assert user.email == "user@example.com"
     assert user.is_active is True
@@ -14,7 +14,7 @@ def test_user_create_accepts_valid_email() -> None:
 
 def test_user_create_rejects_invalid_email() -> None:
     with pytest.raises(ValidationError):
-        UserCreate(email="not-an-email", hashed_password="secret")
+        UserCreate(email="not-an-email", password="secret123")
 
 
 def test_user_read_allows_model_attributes() -> None:

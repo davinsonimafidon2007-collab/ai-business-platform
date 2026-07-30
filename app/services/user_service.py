@@ -41,9 +41,6 @@ class UserService:
         if "full_name" in updates:
             user.full_name = updates["full_name"]
 
-        if "hashed_password" in updates and updates["hashed_password"] is not None:
-            user.hashed_password = updates["hashed_password"]
-
         if "is_active" in updates:
             user.is_active = updates["is_active"]
 
