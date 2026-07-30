@@ -1,10 +1,10 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { InspectionPage } from "../features/inspection/InspectionPage";
 
-export default function InspectionRoute() {
+function InspectionRouteContent() {
   const searchParams = useSearchParams();
   const vehicleIdFromUrl = searchParams.get("vehicle_id");
   const [vehicleId, setVehicleId] = useState<string | null>(vehicleIdFromUrl);
@@ -75,5 +75,13 @@ export default function InspectionRoute() {
         }}
       />
     </div>
+  );
+}
+
+export default function InspectionRoute() {
+  return (
+    <Suspense fallback={null}>
+      <InspectionRouteContent />
+    </Suspense>
   );
 }
