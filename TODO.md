@@ -1,27 +1,14 @@
-# TODO: Producción móvil + despliegue (Capacitor Android)
+# Fix Plan - Make Project Functional
 
-## Fase 1: Corregir flujo de fotografías (BUG CRÍTICO)
-- [ ] **1.1** Backend: Endpoint `POST /{session_id}/photos/upload` multipart (UploadFile)
-- [ ] **1.2** Frontend: Agregar captura de foto con cámara en CategoryStep.tsx
-- [ ] **1.3** Frontend: Subir foto al backend (inspection.ts service)
-- [ ] **1.4** Frontend: Integrar captura/subida en InspectionPage.tsx
+## Cycle 1: Database Unification
+- [ ] Fix `app/db/session.py` to use `DatabaseManager` (single engine)
+- [ ] Fix `app/database/manager.py` to remove `Base.metadata.create_all` (Alembic handles migrations)
+- [ ] Fix `main.py` to use shared `DatabaseManager` from `app/db/session.py`
 
-## Fase 2: Integrar Capacitor
-- [ ] **2.1** Instalar @capacitor/core, @capacitor/cli, @capacitor/camera
-- [ ] **2.2** Capacitor init (crear capacitor.config.ts)
-- [ ] **2.3** Build Next.js (npm run build)
-- [ ] **2.4** Capacitor add android
-- [ ] **2.5** Sincronizar (npx cap sync)
-- [ ] **2.6** Agregar permisos Android (Camera, Storage)
+## Cycle 2: Environment Configuration
+- [ ] Create `.env.example` with all required variables
 
-## Fase 3: Configuración de producción
-- [ ] **3.1** Variables de entorno (frontend: .env.production)
-- [ ] **3.2** Configurar backend CORS para Android
-- [ ] **3.3** Configurar UPLOAD_DIR en backend
-- [ ] **3.4** Configurar OpenAI API Key en backend
-
-## Fase 4: Generar APK
-- [ ] **4.1** Build Android debug APK (npx cap open android && ./gradlew assembleDebug)
-- [ ] **4.2** Verificar APK generada
-- [ ] **4.3** Probar instalación y flujo completo
-
+## Cycle 3: Verify & Test
+- [ ] Verify all imports resolve correctly
+- [ ] Run tests to check for regressions
+- [ ] Verify application starts without errors

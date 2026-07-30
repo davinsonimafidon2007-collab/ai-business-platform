@@ -8,8 +8,10 @@ class Settings(BaseSettings):
     app_description: str = "API for the AI Business Platform."
     app_version: str = "0.1.0"
     environment: Literal["development", "production", "test"] = "development"
+    app_url: str = "http://localhost:3000"
+    """Frontend URL for constructing email links and CORS."""
     database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/ai_business_platform"
-    jwt_secret_key: str = "change-me-in-production"
+    jwt_secret_key: str = ""
     jwt_algorithm: str = "HS256"
     jwt_access_token_expire_minutes: int = 30
     jwt_refresh_token_expire_minutes: int = 60 * 24 * 7  # 7 días
@@ -101,6 +103,42 @@ class Settings(BaseSettings):
         if self.cors_allow_headers == "*":
             return ["*"]
         return [header.strip() for header in self.cors_allow_headers.split(",") if header.strip()]
+
+    # =========================================================================
+    # SMTP / Email configuration
+    # =========================================================================
+    smtp_host: str = ""
+    """SMTP server hostname. Leave empty to log emails instead of sending."""
+
+    smtp_port: int = 587
+    """SMTP server port."""
+
+    smtp_user: str = ""
+    """SMTP username."""
+
+    smtp_password: str = ""
+    """SMTP password."""
+
+    smtp_from_email: str = "noreply@example.com"
+    """From email address for outgoing emails."""
+
+    smtp_use_tls: bool = True
+    """Use TLS for SMTP connection."""
+
+    # =========================================================================
+    # Redis configuration
+    # =========================================================================
+    redis_url: str = "redis://localhost:6379/0"
+    """Redis connection URL for rate limiting and caching."""
+
+    # =========================================================================
+    # Firebase configuration
+    # =========================================================================
+    firebase_credentials_json: str = ""
+    """Firebase service account credentials JSON string."""
+
+    firebase_credentials_path: str = ""
+    """Path to Firebase service account credentials JSON file."""
 
     # =========================================================================
     # Upload directory for inspection photos

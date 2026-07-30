@@ -1,15 +1,28 @@
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+"""Database session management.
 
+Provides a shared DatabaseManager instance and a FastAPI dependency
+for obtaining async database sessions. All components (routes, middleware,
+scheduler) use the same engine and session factory.
+"""
+
+from __future__ import annotations
+
+from collections.abc import AsyncGenerator
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.database.manager import DatabaseManager
+
+# Shared DatabaseManager instance — single engine, single session factory
 from app.core.config import settings
 
-engine = create_async_engine(settings.database_url, echo=False)
+db_manager = DatabaseManager(settings.database_url, echo=False)
 
-AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False)
+# Re-export AsyncSessionLocal for backward compatibility with middleware
+AsyncSessionLocal = db_manager.session_factory
 
 
 async def get_db_session() -> AsyncSession:
-    async with AsyncSessionLocal() as session:
-        try:
-            yield session
-        finally:
-            await session.close()
+    """FastAPI dependency that yields an async database session."""
+    async with db_manager.get_session() as session:
+        yield session

@@ -77,7 +77,7 @@ class ApiClient {
         }
 
         const response = await axios.post(
-          `${API_BASE_URL}/auth/refresh`,
+          `${API_BASE_URL}/api/v1/auth/refresh`,
           { refresh_token: refreshToken }
         );
 

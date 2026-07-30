@@ -108,7 +108,7 @@ class PasswordResetService:
 
     async def _send_reset_email(self, to_email: str, token: str) -> None:
         """Envía el email de reset de contraseña al usuario."""
-        reset_link = f"/api/v1/auth/reset-password?token={token}"
+        reset_link = f"{settings.app_url}/auth/reset-password?token={token}"
         expire_hours = settings.password_reset_token_expire_hours
         body_html = (
             f"<h1>Reset your password</h1>"

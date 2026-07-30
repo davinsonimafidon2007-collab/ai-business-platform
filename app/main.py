@@ -1,9 +1,11 @@
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
+from fastapi.responses import HTMLResponse
 
 from app.api.v1.auth import router as auth_router
 from app.api.v1.searches import router as searches_router
@@ -13,7 +15,7 @@ from app.api.v1.router import api_router
 from app.core.config import settings
 from app.core.exception_handlers import register_exception_handlers
 from app.core.logging import setup_logging
-from app.database.manager import DatabaseManager
+from app.db.session import db_manager
 from app.jobs.base import JobContext
 from app.jobs.factory import create_scheduler
 from app.jobs.scheduler import Scheduler
@@ -23,6 +25,21 @@ from app.middleware.rate_limit_middleware import RateLimitMiddleware
 from app.middleware.request_id import RequestIdMiddleware
 
 setup_logging()
+
+# ---------------------------------------------------------------------------
+# Startup validation — refuse to boot with insecure defaults
+# ---------------------------------------------------------------------------
+if not settings.jwt_secret_key:
+    raise RuntimeError(
+        "JWT_SECRET_KEY is not set. This is a security requirement. "
+        "Generate a strong secret key and set it as an environment variable."
+    )
+
+if len(settings.jwt_secret_key) < 32:
+    raise RuntimeError(
+        f"JWT_SECRET_KEY is too short ({len(settings.jwt_secret_key)} chars). "
+        "It must be at least 32 characters long."
+    )
 
 # ---------------------------------------------------------------------------
 # Scheduler lifecycle
@@ -36,7 +53,6 @@ async def scheduler_lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     Creates the DatabaseManager, instantiates the Scheduler with all
     registered jobs, starts it on startup and gracefully stops on shutdown.
     """
-    db_manager = DatabaseManager(settings.database_url, echo=False)
     await db_manager.init()
 
     context = JobContext(db_manager=db_manager, settings=settings)
@@ -84,10 +100,10 @@ app.add_middleware(
     allow_headers=settings.cors_headers_list,
 )
 
-app.include_router(auth_router)
-app.include_router(searches_router)
-app.include_router(users_router)
-app.include_router(vehicles_router)
+app.include_router(auth_router, prefix="/api/v1")
+app.include_router(searches_router, prefix="/api/v1")
+app.include_router(users_router, prefix="/api/v1")
+app.include_router(vehicles_router, prefix="/api/v1")
 app.include_router(api_router, prefix="/api/v1")
 
 

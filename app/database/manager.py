@@ -78,13 +78,16 @@ class DatabaseManager:
     # ------------------------------------------------------------------
 
     async def init(self) -> None:
-        """Inicializa la conexión y crea todas las tablas.
+        """Inicializa la conexión a la base de datos.
 
-        Crea todas las tablas definidas en Base.metadata si no existen.
-        Es seguro llamarlo múltiples veces (las tablas existentes se omiten).
+        Verifica que la conexión sea válida. Las tablas son gestionadas
+        exclusivamente por Alembic mediante migraciones.
         """
-        async with self._engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
+        # Verify connection is working
+        async with self._engine.connect() as conn:
+            await conn.execute(
+                __import__("sqlalchemy").text("SELECT 1")
+            )
 
     async def shutdown(self) -> None:
         """Cierra la conexión a la base de datos.

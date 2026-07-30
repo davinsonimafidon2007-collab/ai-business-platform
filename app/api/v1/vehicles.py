@@ -6,6 +6,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db_session
+from app.dependencies.auth import get_current_user
+from app.models.user import User
 from app.repositories.vehicle_evaluation_repository import VehicleEvaluationRepository
 from app.repositories.vehicle_repository import VehicleRepository
 from app.schemas.vehicle import VehicleCreate, VehicleRead, VehicleUpdate
@@ -30,6 +32,7 @@ async def get_vehicle_evaluation_service(session: AsyncSession = Depends(get_db_
 async def create_vehicle(
     payload: VehicleCreate,
     service: VehicleService = Depends(get_vehicle_service),
+    current_user: User = Depends(get_current_user),
 ) -> VehicleRead:
     vehicle = await service.create_vehicle(payload.model_dump())
     return VehicleRead.model_validate(vehicle)
@@ -40,6 +43,7 @@ async def list_vehicles(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
     service: VehicleService = Depends(get_vehicle_service),
+    current_user: User = Depends(get_current_user),
 ) -> list[VehicleRead]:
     vehicles = await service.list_vehicles(skip=skip, limit=limit)
     return [VehicleRead.model_validate(v) for v in vehicles]
@@ -49,6 +53,7 @@ async def list_vehicles(
 async def get_vehicle(
     vehicle_id: str,
     service: VehicleService = Depends(get_vehicle_service),
+    current_user: User = Depends(get_current_user),
 ) -> VehicleRead:
     vehicle = await service.get_vehicle(vehicle_id)
     if vehicle is None:
@@ -61,6 +66,7 @@ async def update_vehicle(
     vehicle_id: str,
     payload: VehicleUpdate,
     service: VehicleService = Depends(get_vehicle_service),
+    current_user: User = Depends(get_current_user),
 ) -> VehicleRead:
     vehicle = await service.get_vehicle(vehicle_id)
     if vehicle is None:
@@ -73,6 +79,7 @@ async def update_vehicle(
 async def delete_vehicle(
     vehicle_id: str,
     service: VehicleService = Depends(get_vehicle_service),
+    current_user: User = Depends(get_current_user),
 ) -> None:
     vehicle = await service.get_vehicle(vehicle_id)
     if vehicle is None:
@@ -91,6 +98,7 @@ async def create_vehicle_evaluation(
     payload: VehicleEvaluationCreate,
     vehicle_service: VehicleService = Depends(get_vehicle_service),
     evaluation_service: VehicleEvaluationService = Depends(get_vehicle_evaluation_service),
+    current_user: User = Depends(get_current_user),
 ) -> VehicleEvaluationRead:
     vehicle = await vehicle_service.get_vehicle(vehicle_id)
     if vehicle is None:
@@ -106,6 +114,7 @@ async def get_vehicle_evaluation(
     vehicle_id: str,
     vehicle_service: VehicleService = Depends(get_vehicle_service),
     evaluation_service: VehicleEvaluationService = Depends(get_vehicle_evaluation_service),
+    current_user: User = Depends(get_current_user),
 ) -> VehicleEvaluationRead:
     vehicle = await vehicle_service.get_vehicle(vehicle_id)
     if vehicle is None:
@@ -122,6 +131,7 @@ async def update_vehicle_evaluation(
     payload: VehicleEvaluationUpdate,
     vehicle_service: VehicleService = Depends(get_vehicle_service),
     evaluation_service: VehicleEvaluationService = Depends(get_vehicle_evaluation_service),
+    current_user: User = Depends(get_current_user),
 ) -> VehicleEvaluationRead:
     vehicle = await vehicle_service.get_vehicle(vehicle_id)
     if vehicle is None:
@@ -138,6 +148,7 @@ async def delete_vehicle_evaluation(
     vehicle_id: str,
     vehicle_service: VehicleService = Depends(get_vehicle_service),
     evaluation_service: VehicleEvaluationService = Depends(get_vehicle_evaluation_service),
+    current_user: User = Depends(get_current_user),
 ) -> None:
     vehicle = await vehicle_service.get_vehicle(vehicle_id)
     if vehicle is None:
@@ -146,3 +157,4 @@ async def delete_vehicle_evaluation(
     if evaluation is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Evaluation not found")
     await evaluation_service.delete_evaluation(evaluation)
+

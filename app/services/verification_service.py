@@ -3,6 +3,7 @@ from __future__ import annotations
 import secrets
 from datetime import datetime, timedelta, timezone
 
+from app.core.config import settings
 from app.exceptions import AuthenticationError, VerificationTokenExpiredError, VerificationTokenNotFoundError
 from app.models.user import User
 from app.models.verification_token import VerificationToken
@@ -103,7 +104,7 @@ class VerificationService:
 
     async def _send_verification_email(self, to_email: str, token: str) -> None:
         """Envía el email de verificación al usuario."""
-        verify_link = f"/api/v1/auth/verify?token={token}"
+        verify_link = f"{settings.app_url or 'http://localhost:3000'}/auth/verify?token={token}"
         body_html = (
             f"<h1>Verify your email</h1>"
             f"<p>Click the link below to verify your email address:</p>"

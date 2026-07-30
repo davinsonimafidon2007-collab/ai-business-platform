@@ -43,6 +43,7 @@ export const inspectionService = {
   /**
    * Uploads a photo file via multipart/form-data.
    * This is the endpoint used from the mobile camera capture.
+   * Includes Authorization header from localStorage.
    */
   async uploadPhotoFile(
     sessionId: string,
@@ -52,13 +53,17 @@ export const inspectionService = {
     const formData = new FormData();
     formData.append('file', file);
 
+    const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
     const response = await fetch(
       `${API_BASE_URL}/api/v1/inspections/${sessionId}/photos/upload?observation_id=${observationId}`,
       {
         method: 'POST',
-        headers: {
-          // Let browser set Content-Type with boundary
-        },
+        headers,
         credentials: 'include',
       },
     );

@@ -8,7 +8,7 @@ from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoin
 from starlette.responses import Response
 
 from app.core.config import settings
-from app.db.session import AsyncSessionLocal
+from app.db.session import db_manager
 from app.exceptions import AuthenticationError
 from app.models.user import User
 from app.repositories.api_key_repository import ApiKeyRepository
@@ -23,11 +23,12 @@ PUBLIC_PATHS: set[str] = {
     "/docs",
     "/redoc",
     "/openapi.json",
-    "/auth/register",
-    "/auth/login",
-    "/auth/refresh",
-    "/auth/forgot-password",
-    "/auth/reset-password",
+    "/api/v1/auth/register",
+    "/api/v1/auth/login",
+    "/api/v1/auth/refresh",
+    "/api/v1/auth/google",
+    "/api/v1/auth/forgot-password",
+    "/api/v1/auth/reset-password",
 }
 
 
@@ -48,7 +49,7 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
         call_next: RequestResponseEndpoint,
     ) -> Response:
         # Skip authentication for public paths
-        if request.url.path in PUBLIC_PATHS or request.url.path.startswith(("/auth/",)):
+        if request.url.path in PUBLIC_PATHS or request.url.path.startswith(("/api/v1/auth/",)):
             return await call_next(request)
 
         auth_header = request.headers.get("Authorization")
@@ -78,30 +79,24 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 
     async def _authenticate_jwt(self, token: str) -> User:
-        async with AsyncSessionLocal() as session:
-            try:
-                auth_service = AuthService(UserRepository(session))
-                payload = auth_service.decode_access_token(token)
-                user_id = payload.get("sub")
-                if not user_id:
-                    raise AuthenticationError("Invalid token")
-                user_service = UserService(UserRepository(session))
-                user = await user_service.get_user(user_id)
-                if not user.is_active:
-                    raise AuthenticationError("User is inactive")
-                return user
-            finally:
-                await session.close()
+        async with db_manager.get_session() as session:
+            auth_service = AuthService(UserRepository(session))
+            payload = auth_service.decode_access_token(token)
+            user_id = payload.get("sub")
+            if not user_id:
+                raise AuthenticationError("Invalid token")
+            user_service = UserService(UserRepository(session))
+            user = await user_service.get_user(user_id)
+            if not user.is_active:
+                raise AuthenticationError("User is inactive")
+            return user
 
     async def _authenticate_api_key(self, api_key: str) -> User:
-        async with AsyncSessionLocal() as session:
-            try:
-                api_key_service = ApiKeyService(ApiKeyRepository(session))
-                record = await api_key_service.validate_api_key(api_key)
-                user_repo = UserRepository(session)
-                user = await user_repo.get_by_id(record.user_id)
-                if user is None or not user.is_active:
-                    raise AuthenticationError("User not found or inactive")
-                return user
-            finally:
-                await session.close()
+        async with db_manager.get_session() as session:
+            api_key_service = ApiKeyService(ApiKeyRepository(session))
+            record = await api_key_service.validate_api_key(api_key)
+            user_repo = UserRepository(session)
+            user = await user_repo.get_by_id(record.user_id)
+            if user is None or not user.is_active:
+                raise AuthenticationError("User not found or inactive")
+            return user

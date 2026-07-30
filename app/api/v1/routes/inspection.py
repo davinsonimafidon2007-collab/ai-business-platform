@@ -6,10 +6,8 @@ These endpoints only handle HTTP concerns (parsing, validation, response).
 
 from __future__ import annotations
 
-import os
 import uuid
 from pathlib import Path
-from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
 
@@ -174,7 +172,7 @@ async def get_summary(
     return InspectionSummaryResponse(**summary)
 
 
-UPLOAD_DIR = Path(os.environ.get("UPLOAD_DIR", "uploads/inspection_photos"))
+UPLOAD_DIR = Path(settings.upload_dir)
 
 
 @router.post(

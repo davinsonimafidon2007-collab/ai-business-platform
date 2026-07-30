@@ -19,6 +19,9 @@ depends_on = None
 
 
 def upgrade() -> None:
+    # Enable pg_trgm extension for GIN trigram index on search_history.query
+    op.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm")
+
     # Create search_history table
     op.create_table(
         "search_history",
@@ -132,4 +135,3 @@ def downgrade() -> None:
         table_name="search_history",
     )
     op.drop_table("search_history")
-

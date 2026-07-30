@@ -1,8 +1,5 @@
 from __future__ import annotations
 
-import asyncio
-import json
-import urllib.request
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -11,6 +8,7 @@ from pwdlib import PasswordHash
 from pwdlib.exceptions import UnknownHashError
 
 from app.core.config import settings
+from app.core.firebase import verify_google_id_token
 from app.exceptions import AuthenticationError, InvalidCredentialsError, UserAlreadyExistsError
 from app.models.user import User
 from app.repositories.user_repository import UserRepository
@@ -49,18 +47,13 @@ class AuthService:
     async def authenticate_with_google(self, *, id_token: str) -> User:
         """Verify a Firebase ID token and return the corresponding user.
 
+        Uses the Firebase Admin SDK to verify the token.
         Creates the user if it does not exist yet.
         """
-
-        def _verify_token() -> dict[str, Any]:
-            url = f"https://www.googleapis.com/oauth2/v3/tokeninfo?id_token={id_token}"
-            with urllib.request.urlopen(url) as response:
-                return json.loads(response.read())
-
         try:
-            token_info = await asyncio.to_thread(_verify_token)
-        except Exception as exc:
-            raise AuthenticationError("Invalid Google token") from exc
+            token_info = await verify_google_id_token(id_token)
+        except ValueError as exc:
+            raise AuthenticationError(str(exc))
 
         email = token_info.get("email")
         if not email:
@@ -72,7 +65,7 @@ class AuthService:
                 email=email,
                 hashed_password="google_auth",
                 full_name=token_info.get("name"),
-                is_verified=True,
+                is_verified=token_info.get("email_verified", False),
             )
             user = await self.repository.create(user)
 
