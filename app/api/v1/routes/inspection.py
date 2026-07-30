@@ -32,6 +32,25 @@ from app.services.inspection_service import InspectionService
 router = APIRouter(prefix="/inspections", tags=["inspections"])
 
 
+async def _get_owned_session(
+    session_id: str,
+    current_user: User,
+    service: InspectionService,
+):
+    """Obtiene la sesión y verifica que pertenece al usuario actual.
+
+    Devuelve 404 tanto si no existe como si pertenece a otro usuario,
+    para no filtrar la existencia de sesiones ajenas.
+    """
+    session = await service.get_session(session_id)
+    if session is None or session.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Inspection session '{session_id}' not found",
+        )
+    return session
+
+
 @router.post(
     "",
     response_model=InspectionSessionResponse,
@@ -44,7 +63,7 @@ async def create_session(
     current_user: User = Depends(get_current_user),
 ) -> InspectionSessionResponse:
     """Creates a new inspection session for a vehicle."""
-    session = await service.create_session(data.vehicle_id)
+    session = await service.create_session(data.vehicle_id, current_user.id)
     return InspectionSessionResponse(**session.to_dict())
 
 
@@ -59,6 +78,7 @@ async def get_session(
     current_user: User = Depends(get_current_user),
 ) -> InspectionSessionDetailResponse:
     """Gets a session with all observations, photos, and catalog."""
+    await _get_owned_session(session_id, current_user, service)
     result = await service.get_session_with_details(session_id)
     if result is None:
         raise HTTPException(
@@ -80,6 +100,7 @@ async def update_item(
     current_user: User = Depends(get_current_user),
 ) -> ObservationResponse:
     """Creates or updates an observation for a catalog item."""
+    await _get_owned_session(session_id, current_user, service)
     try:
         observation = await service.update_item(
             session_id=session_id,
@@ -110,6 +131,7 @@ async def upload_photo(
     current_user: User = Depends(get_current_user),
 ) -> PhotoResponse:
     """Registers a photo associated with an observation."""
+    await _get_owned_session(session_id, current_user, service)
     photo = await service.upload_photo(
         session_id=session_id,
         observation_id=data.observation_id,
@@ -133,6 +155,7 @@ async def analyze_photos(
     current_user: User = Depends(get_current_user),
 ) -> VisionAnalysisResponse:
     """Analyzes photos but never applies suggested inspection changes."""
+    await _get_owned_session(session_id, current_user, service)
     try:
         result = await service.analyze_photos(session_id, data.photo_ids)
     except ValueError as exc:
@@ -151,6 +174,7 @@ async def finalize_session(
     current_user: User = Depends(get_current_user),
 ) -> InspectionSessionResponse:
     """Finalizes a session, generates summary, and marks as COMPLETED."""
+    await _get_owned_session(session_id, current_user, service)
     try:
         session = await service.finalize_session(session_id)
     except ValueError as e:
@@ -172,6 +196,7 @@ async def get_summary(
     current_user: User = Depends(get_current_user),
 ) -> InspectionSummaryResponse:
     """Gets the inspection summary (partial or complete)."""
+    await _get_owned_session(session_id, current_user, service)
     summary = await service.generate_summary(session_id)
     if summary is None:
         raise HTTPException(
@@ -202,13 +227,8 @@ async def upload_photo_file(
     - The file is saved to the configured UPLOAD_DIR
     - Returns the created InspectionPhoto record
     """
-    # Validate session exists
-    session = await service.get_session(session_id)
-    if session is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Inspection session '{session_id}' not found",
-        )
+    # Validate session exists and belongs to the current user
+    await _get_owned_session(session_id, current_user, service)
 
     # Validate file is an image
     if file.content_type and not file.content_type.startswith("image/"):

@@ -82,17 +82,19 @@ class InspectionService:
     # Session lifecycle
     # ------------------------------------------------------------------
 
-    async def create_session(self, vehicle_id: str) -> InspectionSession:
+    async def create_session(self, vehicle_id: str, user_id: str) -> InspectionSession:
         """Crea una nueva sesión de inspección para un vehículo.
 
         Args:
             vehicle_id: ID del vehículo a inspeccionar.
+            user_id: ID del usuario propietario de la sesión.
 
         Returns:
             InspectionSession creada en estado DRAFT.
         """
         session = InspectionSession(
             vehicle_id=vehicle_id,
+            user_id=user_id,
             status=InspectionSessionStatus.DRAFT.value,
             current_category_order=1,
         )

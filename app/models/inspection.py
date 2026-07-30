@@ -45,6 +45,11 @@ class InspectionSession(Base):
         ForeignKey("vehicles.id", ondelete="CASCADE"),
         nullable=False,
     )
+    user_id: Mapped[str] = mapped_column(
+        Uuid(as_uuid=False),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
     status: Mapped[str] = mapped_column(
         String(20),
         default=InspectionSessionStatus.DRAFT.value,
@@ -139,6 +144,7 @@ class InspectionSession(Base):
         return {
             "id": self.id,
             "vehicle_id": self.vehicle_id,
+            "user_id": self.user_id,
             "status": self.status,
             "current_category_order": self.current_category_order,
             "total_repair_cost": self.total_repair_cost,
