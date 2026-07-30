@@ -23,8 +23,8 @@ class VehicleService:
     async def get_vehicle_by_external_id(self, source: str, external_id: str) -> Vehicle | None:
         return await self.repository.get_by_external_id(source, external_id)
 
-    async def list_vehicles(self, skip: int = 0, limit: int = 100) -> list[Vehicle]:
-        return await self.repository.list_all(skip=skip, limit=limit)
+    async def list_vehicles_by_user(self, user_id: str, skip: int = 0, limit: int = 100) -> list[Vehicle]:
+        return await self.repository.list_by_user(user_id, skip=skip, limit=limit)
 
     async def update_vehicle(self, vehicle: Vehicle, data: dict) -> Vehicle:
         for key, value in data.items():

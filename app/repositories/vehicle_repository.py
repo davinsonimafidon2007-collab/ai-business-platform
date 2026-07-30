@@ -32,6 +32,23 @@ class VehicleRepository:
         result = await self.session.execute(select(Vehicle).offset(skip).limit(limit))
         return list(result.scalars().all())
 
+    async def list_by_user(self, user_id: str, skip: int = 0, limit: int = 100) -> list[Vehicle]:
+        result = await self.session.execute(
+            select(Vehicle)
+            .where(Vehicle.user_id == str(user_id))
+            .order_by(Vehicle.created_at.desc())
+            .offset(skip)
+            .limit(limit)
+        )
+        return list(result.scalars().all())
+
+    async def count_by_user(self, user_id: str) -> int:
+        from sqlalchemy import func
+        result = await self.session.execute(
+            select(func.count(Vehicle.id)).where(Vehicle.user_id == str(user_id))
+        )
+        return result.scalar() or 0
+
     async def update(self, vehicle: Vehicle) -> Vehicle:
         await self.session.commit()
         await self.session.refresh(vehicle)

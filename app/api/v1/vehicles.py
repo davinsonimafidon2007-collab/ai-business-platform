@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import get_db_session
 from app.dependencies.auth import get_current_user
 from app.models.user import User
+from app.models.vehicle import Vehicle
 from app.repositories.vehicle_evaluation_repository import VehicleEvaluationRepository
 from app.repositories.vehicle_repository import VehicleRepository
 from app.schemas.vehicle import VehicleCreate, VehicleRead, VehicleUpdate
@@ -28,13 +29,22 @@ async def get_vehicle_evaluation_service(session: AsyncSession = Depends(get_db_
     return VehicleEvaluationService(repository)
 
 
+async def _get_owned_vehicle(vehicle_id: str, current_user: User, service: VehicleService) -> Vehicle:
+    vehicle = await service.get_vehicle(vehicle_id)
+    if vehicle is None or vehicle.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vehicle not found")
+    return vehicle
+
+
 @router.post("", response_model=VehicleRead, status_code=status.HTTP_201_CREATED)
 async def create_vehicle(
     payload: VehicleCreate,
     service: VehicleService = Depends(get_vehicle_service),
     current_user: User = Depends(get_current_user),
 ) -> VehicleRead:
-    vehicle = await service.create_vehicle(payload.model_dump())
+    data = payload.model_dump()
+    data["user_id"] = current_user.id
+    vehicle = await service.create_vehicle(data)
     return VehicleRead.model_validate(vehicle)
 
 
@@ -45,7 +55,7 @@ async def list_vehicles(
     service: VehicleService = Depends(get_vehicle_service),
     current_user: User = Depends(get_current_user),
 ) -> list[VehicleRead]:
-    vehicles = await service.list_vehicles(skip=skip, limit=limit)
+    vehicles = await service.list_vehicles_by_user(current_user.id, skip=skip, limit=limit)
     return [VehicleRead.model_validate(v) for v in vehicles]
 
 
@@ -55,9 +65,7 @@ async def get_vehicle(
     service: VehicleService = Depends(get_vehicle_service),
     current_user: User = Depends(get_current_user),
 ) -> VehicleRead:
-    vehicle = await service.get_vehicle(vehicle_id)
-    if vehicle is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vehicle not found")
+    vehicle = await _get_owned_vehicle(vehicle_id, current_user, service)
     return VehicleRead.model_validate(vehicle)
 
 
@@ -68,9 +76,7 @@ async def update_vehicle(
     service: VehicleService = Depends(get_vehicle_service),
     current_user: User = Depends(get_current_user),
 ) -> VehicleRead:
-    vehicle = await service.get_vehicle(vehicle_id)
-    if vehicle is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vehicle not found")
+    vehicle = await _get_owned_vehicle(vehicle_id, current_user, service)
     updated = await service.update_vehicle(vehicle, payload.model_dump(exclude_unset=True))
     return VehicleRead.model_validate(updated)
 
@@ -81,9 +87,7 @@ async def delete_vehicle(
     service: VehicleService = Depends(get_vehicle_service),
     current_user: User = Depends(get_current_user),
 ) -> None:
-    vehicle = await service.get_vehicle(vehicle_id)
-    if vehicle is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vehicle not found")
+    vehicle = await _get_owned_vehicle(vehicle_id, current_user, service)
     await service.delete_vehicle(vehicle)
 
 
@@ -100,9 +104,7 @@ async def create_vehicle_evaluation(
     evaluation_service: VehicleEvaluationService = Depends(get_vehicle_evaluation_service),
     current_user: User = Depends(get_current_user),
 ) -> VehicleEvaluationRead:
-    vehicle = await vehicle_service.get_vehicle(vehicle_id)
-    if vehicle is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vehicle not found")
+    await _get_owned_vehicle(vehicle_id, current_user, vehicle_service)
     data = payload.model_dump()
     data["vehicle_id"] = vehicle_id
     evaluation = await evaluation_service.create_evaluation(data)
@@ -116,9 +118,7 @@ async def get_vehicle_evaluation(
     evaluation_service: VehicleEvaluationService = Depends(get_vehicle_evaluation_service),
     current_user: User = Depends(get_current_user),
 ) -> VehicleEvaluationRead:
-    vehicle = await vehicle_service.get_vehicle(vehicle_id)
-    if vehicle is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vehicle not found")
+    await _get_owned_vehicle(vehicle_id, current_user, vehicle_service)
     evaluation = await evaluation_service.get_evaluation_by_vehicle(vehicle_id)
     if evaluation is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Evaluation not found")
@@ -133,9 +133,7 @@ async def update_vehicle_evaluation(
     evaluation_service: VehicleEvaluationService = Depends(get_vehicle_evaluation_service),
     current_user: User = Depends(get_current_user),
 ) -> VehicleEvaluationRead:
-    vehicle = await vehicle_service.get_vehicle(vehicle_id)
-    if vehicle is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vehicle not found")
+    await _get_owned_vehicle(vehicle_id, current_user, vehicle_service)
     evaluation = await evaluation_service.get_evaluation_by_vehicle(vehicle_id)
     if evaluation is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Evaluation not found")
@@ -150,11 +148,8 @@ async def delete_vehicle_evaluation(
     evaluation_service: VehicleEvaluationService = Depends(get_vehicle_evaluation_service),
     current_user: User = Depends(get_current_user),
 ) -> None:
-    vehicle = await vehicle_service.get_vehicle(vehicle_id)
-    if vehicle is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vehicle not found")
+    await _get_owned_vehicle(vehicle_id, current_user, vehicle_service)
     evaluation = await evaluation_service.get_evaluation_by_vehicle(vehicle_id)
     if evaluation is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Evaluation not found")
     await evaluation_service.delete_evaluation(evaluation)
-

@@ -10,8 +10,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import get_db_session
 from app.dependencies.auth import get_current_user
 from app.models.user import User
-from app.models.search_history import SearchHistory
-from app.schemas.search_history import SearchHistoryRead
+from app.models.search import Search
+from app.models.vehicle import Vehicle
+from app.models.inspection import InspectionSession
+from app.models.opportunity import Opportunity
 
 router = APIRouter(tags=["Dashboard"])
 
@@ -21,53 +23,64 @@ router = APIRouter(tags=["Dashboard"])
     response_model=dict[str, Any],
     status_code=status.HTTP_200_OK,
     summary="Estadísticas del dashboard",
-    description="Devuelve estadísticas agregadas de búsquedas y oportunidades.",
+    description="Devuelve estadísticas agregadas del usuario autenticado.",
 )
 async def get_dashboard_stats(
     session: AsyncSession = Depends(get_db_session),
     current_user: User = Depends(get_current_user),
 ) -> dict[str, Any]:
-    """Obtiene estadísticas agregadas para el dashboard."""
+    """Obtiene estadísticas agregadas del usuario autenticado (no globales)."""
+    user_id = current_user.id
+    thirty_days_ago = datetime.now(timezone.utc) - timedelta(days=30)
 
-    # Total de búsquedas
+    # --- Búsquedas guardadas por el usuario ---
     total_searches_result = await session.execute(
-        select(func.count(SearchHistory.id))
+        select(func.count(Search.id)).where(Search.user_id == user_id)
     )
     total_searches = total_searches_result.scalar() or 0
 
-    # Búsquedas de los últimos 30 días
-    thirty_days_ago = datetime.now(timezone.utc) - timedelta(days=30)
     recent_searches_result = await session.execute(
-        select(func.count(SearchHistory.id)).where(
-            SearchHistory.timestamp >= thirty_days_ago
+        select(func.count(Search.id)).where(
+            Search.user_id == user_id, Search.created_at >= thirty_days_ago
         )
     )
     recent_searches = recent_searches_result.scalar() or 0
 
-    # Promedio de resultados por búsqueda
-    avg_results_result = await session.execute(
-        select(func.avg(SearchHistory.results_count)).where(
-            SearchHistory.results_count.is_not(None)
+    # --- Vehículos del usuario ---
+    total_vehicles_result = await session.execute(
+        select(func.count(Vehicle.id)).where(Vehicle.user_id == user_id)
+    )
+    total_vehicles = total_vehicles_result.scalar() or 0
+
+    # --- Inspecciones del usuario ---
+    total_inspections_result = await session.execute(
+        select(func.count(InspectionSession.id)).where(
+            InspectionSession.user_id == user_id
         )
     )
-    avg_results = avg_results_result.scalar() or 0.0
+    total_inspections = total_inspections_result.scalar() or 0
 
-    # Promedio de tiempo de ejecución
-    avg_time_result = await session.execute(
-        select(func.avg(SearchHistory.execution_time)).where(
-            SearchHistory.execution_time.is_not(None)
+    completed_inspections_result = await session.execute(
+        select(func.count(InspectionSession.id)).where(
+            InspectionSession.user_id == user_id,
+            InspectionSession.status == "COMPLETED",
         )
     )
-    avg_execution_time = avg_time_result.scalar() or 0.0
+    completed_inspections = completed_inspections_result.scalar() or 0
 
-    # Búsquedas por proveedor (desde providers_used)
-    # Nota: Esto es una simplificación, en producción se parsearía el JSON
-    provider_stats: dict[str, int] = {}
+    # --- Oportunidades sobre vehículos del usuario (join vía vehicle.user_id) ---
+    total_opportunities_result = await session.execute(
+        select(func.count(Opportunity.id))
+        .join(Vehicle, Vehicle.id == Opportunity.vehicle_id)
+        .where(Vehicle.user_id == user_id)
+    )
+    total_opportunities = total_opportunities_result.scalar() or 0
 
     return {
         "total_searches": total_searches,
         "recent_searches": recent_searches,
-        "average_results_per_search": round(avg_results, 1),
-        "average_execution_time": round(avg_execution_time, 2),
-        "provider_stats": provider_stats,
+        "total_vehicles": total_vehicles,
+        "total_inspections": total_inspections,
+        "completed_inspections": completed_inspections,
+        "total_opportunities": total_opportunities,
     }

@@ -10,10 +10,13 @@ import uuid
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.dependencies import get_inspection_service
+from app.db.session import get_db_session
 from app.dependencies.auth import get_current_user
 from app.models.user import User
+from app.repositories.vehicle_repository import VehicleRepository
 from app.api.v1.schemas.inspection import (
     InspectionSessionCreate,
     InspectionSessionDetailResponse,
@@ -30,6 +33,10 @@ from app.core.config import settings
 from app.services.inspection_service import InspectionService
 
 router = APIRouter(prefix="/inspections", tags=["inspections"])
+
+
+async def get_vehicle_repository(session: AsyncSession = Depends(get_db_session)) -> VehicleRepository:
+    return VehicleRepository(session)
 
 
 async def _get_owned_session(
@@ -60,9 +67,16 @@ async def _get_owned_session(
 async def create_session(
     data: InspectionSessionCreate,
     service: InspectionService = Depends(get_inspection_service),
+    vehicle_repo: VehicleRepository = Depends(get_vehicle_repository),
     current_user: User = Depends(get_current_user),
 ) -> InspectionSessionResponse:
     """Creates a new inspection session for a vehicle."""
+    vehicle = await vehicle_repo.get_by_id(data.vehicle_id)
+    if vehicle is None or vehicle.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Vehicle '{data.vehicle_id}' not found",
+        )
     session = await service.create_session(data.vehicle_id, current_user.id)
     return InspectionSessionResponse(**session.to_dict())
 
