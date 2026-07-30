@@ -1,11 +1,14 @@
 "use client";
 
 import React, { useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { InspectionPage } from "../features/inspection/InspectionPage";
 
 export default function InspectionRoute() {
-  const [vehicleId, setVehicleId] = useState<string | null>(null);
-  const [showForm, setShowForm] = useState(false);
+  const searchParams = useSearchParams();
+  const vehicleIdFromUrl = searchParams.get("vehicle_id");
+  const [vehicleId, setVehicleId] = useState<string | null>(vehicleIdFromUrl);
+  const [showForm, setShowForm] = useState(!!vehicleIdFromUrl);
 
   if (!showForm) {
     return (
@@ -15,8 +18,8 @@ export default function InspectionRoute() {
             Inspección de Vehículos
           </h1>
           <p className="mt-2 text-gray-600">
-            Realice una inspección detallada del vehículo seleccionando una
-            categoría y evaluando cada punto de inspección.
+            Seleccione un vehículo desde la sección de búsqueda para iniciar una
+            inspección, o ingrese manualmente el ID del vehículo.
           </p>
         </div>
 
@@ -31,7 +34,7 @@ export default function InspectionRoute() {
           <div className="mt-4 flex gap-3">
             <input
               type="text"
-              placeholder="ID del vehículo (UUID)"
+              placeholder="ID del vehículo"
               value={vehicleId ?? ""}
               onChange={(e) => setVehicleId(e.target.value)}
               className="block flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"

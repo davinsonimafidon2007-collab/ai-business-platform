@@ -1,6 +1,39 @@
+"use client";
+
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { useAuthStore } from "@/app/store/auth-store";
 
 export default function Home() {
+  const router = useRouter();
+  const { isAuthenticated, isLoading, initialize } = useAuthStore();
+
+  useEffect(() => {
+    initialize();
+  }, [initialize]);
+
+  useEffect(() => {
+    if (!isLoading && isAuthenticated) {
+      router.push("/dashboard/");
+    }
+  }, [isAuthenticated, isLoading, router]);
+
+  if (isLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="text-center">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary-600 border-t-transparent" />
+          <p className="mt-2 text-secondary-600">Cargando...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (isAuthenticated) {
+    return null;
+  }
+
   return (
     <div className="flex min-h-screen flex-col items-center justify-center p-8">
       <main className="flex flex-col items-center gap-8">

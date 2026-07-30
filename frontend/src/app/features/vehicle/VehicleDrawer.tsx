@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/app/components/ui/button";
 import { ScoreBadge, OpportunityBadge, RecommendationBadge, NegotiationBadge } from "@/app/components/ui/ScoreBadge";
 import type { SearchResultItem } from "@/app/types/vehicle";
@@ -12,6 +13,7 @@ interface VehicleDrawerProps {
 
 export function VehicleDrawer({ vehicle, onClose }: VehicleDrawerProps) {
   const drawerRef = useRef<HTMLDivElement>(null);
+  const router = useRouter();
 
   useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => {
@@ -267,6 +269,19 @@ export function VehicleDrawer({ vehicle, onClose }: VehicleDrawerProps) {
               )}
             </Section>
           )}
+
+          {/* Nueva inspección */}
+          <button
+            onClick={() => {
+              if (vehicle.external_id) {
+                router.push(`/inspection/?vehicle_id=${vehicle.external_id}`);
+              }
+            }}
+            disabled={!vehicle.external_id}
+            className="block w-full rounded-lg bg-green-600 px-4 py-2 text-center text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
+          >
+            Nueva inspección
+          </button>
 
           {/* URL */}
           {vehicle.url && (

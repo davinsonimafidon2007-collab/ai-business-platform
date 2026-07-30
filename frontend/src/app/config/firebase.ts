@@ -7,6 +7,8 @@ const firebaseConfig = {
   projectId: "ai-business-platform-e7043",
   storageBucket: "ai-business-platform-e7043.firebasestorage.app",
   messagingSenderId: "983773208764",
+  // appId: "1:983773208764:web:...", // TODO: Add from Firebase Console > Project Settings > Web App
+  // measurementId: "G-...",          // TODO: Add if Analytics is enabled
 };
 
 const app = initializeApp(firebaseConfig);
