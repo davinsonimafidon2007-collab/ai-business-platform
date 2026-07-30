@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useForm } from "react-hook-form";
@@ -13,16 +13,23 @@ import { signInWithGoogle } from "@/app/services/google-auth";
 import { useAuthStore } from "@/app/store/auth-store";
 import type { AuthResponse, User } from "@/app/types/auth";
 
-const loginSchema = z.object({
-  email: z.string().email("Email inválido"),
-  password: z.string().min(6, "Mínimo 6 caracteres"),
-});
+// El backend exige min_length=8 en RegisterRequest (ver app/schemas/auth.py).
+const registerSchema = z
+  .object({
+    email: z.string().email("Email inválido"),
+    password: z.string().min(8, "Mínimo 8 caracteres"),
+    confirmPassword: z.string().min(8, "Mínimo 8 caracteres"),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: "Las contraseñas no coinciden",
+    path: ["confirmPassword"],
+  });
 
-type LoginForm = z.infer<typeof loginSchema>;
+type RegisterForm = z.infer<typeof registerSchema>;
 
-export function LoginPage() {
+export function RegisterPage() {
   const router = useRouter();
-  const { setUser, isAuthenticated } = useAuthStore();
+  const { setUser } = useAuthStore();
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
@@ -31,22 +38,24 @@ export function LoginPage() {
     register,
     handleSubmit,
     formState: { errors },
-  } = useForm<LoginForm>({
-    resolver: zodResolver(loginSchema),
+  } = useForm<RegisterForm>({
+    resolver: zodResolver(registerSchema),
   });
 
-  // Redirect to dashboard if already authenticated
-  useEffect(() => {
-    if (isAuthenticated) {
-      router.push("/dashboard/");
-    }
-  }, [isAuthenticated, router]);
-
-  const onSubmit = async (data: LoginForm) => {
+  const onSubmit = async (data: RegisterForm) => {
     setIsLoading(true);
     setError(null);
 
     try {
+      // 1. Crear la cuenta.
+      await api.post("/auth/register", {
+        email: data.email,
+        password: data.password,
+      });
+
+      // 2. El endpoint de registro solo devuelve el usuario creado, no tokens
+      //    (ver app/api/v1/auth.py), así que iniciamos sesión justo después
+      //    para no obligar al usuario a escribir sus datos dos veces.
       const authRes = await api.post<AuthResponse>("/auth/login", {
         email: data.email,
         password: data.password,
@@ -61,20 +70,22 @@ export function LoginPage() {
 
       router.push("/dashboard/");
     } catch {
-      setError("Credenciales inválidas");
+      setError("No se pudo crear la cuenta. Prueba con otro email.");
     } finally {
       setIsLoading(false);
     }
   };
 
-  const onGoogleLogin = async () => {
+  const onGoogleRegister = async () => {
     setIsGoogleLoading(true);
     setError(null);
     try {
+      // authenticate_with_google crea el usuario automáticamente si no existe
+      // (ver app/services/auth_service.py), así que sirve igual para registro.
       await signInWithGoogle();
       router.push("/dashboard/");
     } catch {
-      setError("Error al iniciar sesión con Google");
+      setError("Error al registrarse con Google");
     } finally {
       setIsGoogleLoading(false);
     }
@@ -86,7 +97,7 @@ export function LoginPage() {
         <div className="text-center">
           <h1 className="text-2xl font-bold text-primary-600">AI Business</h1>
           <p className="mt-2 text-secondary-600 dark:text-secondary-400">
-            Inicia sesión en tu cuenta
+            Crea tu cuenta
           </p>
         </div>
 
@@ -107,13 +118,21 @@ export function LoginPage() {
             error={errors.password?.message}
             {...register("password")}
           />
+          <Input
+            id="confirmPassword"
+            label="Confirmar contraseña"
+            type="password"
+            placeholder="••••••••"
+            error={errors.confirmPassword?.message}
+            {...register("confirmPassword")}
+          />
 
           {error && (
             <p className="text-sm text-error text-center">{error}</p>
           )}
 
           <Button type="submit" className="w-full" disabled={isLoading}>
-            {isLoading ? "Iniciando sesión..." : "Iniciar sesión"}
+            {isLoading ? "Creando cuenta..." : "Registrarse"}
           </Button>
         </form>
 
@@ -132,19 +151,19 @@ export function LoginPage() {
           type="button"
           variant="outline"
           className="w-full"
-          onClick={onGoogleLogin}
+          onClick={onGoogleRegister}
           disabled={isGoogleLoading}
         >
-          {isGoogleLoading ? "Cargando..." : "Iniciar sesión con Google"}
+          {isGoogleLoading ? "Cargando..." : "Registrarse con Google"}
         </Button>
 
         <p className="text-center text-sm text-secondary-500">
-          ¿No tienes cuenta?{" "}
+          ¿Ya tienes cuenta?{" "}
           <Link
-            href="/auth/register/"
+            href="/auth/login/"
             className="text-primary-600 hover:text-primary-700"
           >
-            Registrarse
+            Iniciar sesión
           </Link>
         </p>
       </div>

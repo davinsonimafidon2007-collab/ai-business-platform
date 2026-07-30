@@ -5,11 +5,11 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/app/utils/cn";
 
 const navigation = [
-  { name: "Dashboard", href: "/dashboard", icon: "📊" },
-  { name: "Búsqueda", href: "/search", icon: "🔍" },
-  { name: "Vehículos", href: "/vehicles", icon: "🚗" },
-  { name: "Inspección", href: "/inspection", icon: "🔎" },
-  { name: "Historial", href: "/history", icon: "📋" },
+  { name: "Dashboard", href: "/dashboard/", icon: "📊" },
+  { name: "Búsqueda", href: "/search/", icon: "🔍" },
+  { name: "Vehículos", href: "/vehicles/", icon: "🚗" },
+  { name: "Inspección", href: "/inspection/", icon: "🔎" },
+  { name: "Historial", href: "/history/", icon: "📋" },
 ];
 
 export function Sidebar() {
@@ -18,7 +18,7 @@ export function Sidebar() {
   return (
     <aside className="fixed left-0 top-0 z-40 h-screen w-64 border-r border-secondary-200 bg-white dark:border-secondary-700 dark:bg-secondary-900">
       <div className="flex h-16 items-center border-b border-secondary-200 px-6 dark:border-secondary-700">
-        <Link href="/dashboard" className="text-lg font-bold text-primary-600">
+        <Link href="/dashboard/" className="text-lg font-bold text-primary-600">
           AI Business
         </Link>
       </div>

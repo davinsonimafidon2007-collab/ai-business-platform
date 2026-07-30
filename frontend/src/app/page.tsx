@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 export default function Home() {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center p-8">
@@ -9,18 +11,18 @@ export default function Home() {
           Vehicle import analysis and market intelligence platform
         </p>
         <div className="flex gap-4">
-          <a
-            href="/auth/login"
+          <Link
+            href="/auth/login/"
             className="rounded-lg bg-primary-600 px-6 py-3 text-white font-medium hover:bg-primary-700 transition-colors"
           >
             Iniciar Sesión
-          </a>
-          <a
-            href="/auth/register"
+          </Link>
+          <Link
+            href="/auth/register/"
             className="rounded-lg border border-primary-600 px-6 py-3 text-primary-600 font-medium hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors"
           >
             Registrarse
-          </a>
+          </Link>
         </div>
       </main>
     </div>

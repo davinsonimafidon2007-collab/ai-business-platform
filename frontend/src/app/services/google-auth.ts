@@ -15,6 +15,21 @@ const WEB_CLIENT_ID =
 const ANDROID_CLIENT_ID =
   "983773208764-7i0hfifq4ni324qnugvj0a79bu09fh4t.apps.googleusercontent.com";
 
+// The plugin requires initialize() to be called once before signIn() will
+// work on native Android/iOS — without it, signIn() fails silently at the
+// native layer and no account picker ever appears. Call this once at app
+// startup (see Providers in app/providers.tsx).
+export function initGoogleAuth(): void {
+  if (Capacitor.getPlatform() === "web") return;
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { GoogleAuth } = require("@codetrix-studio/capacitor-google-auth");
+  GoogleAuth.initialize({
+    clientId: ANDROID_CLIENT_ID,
+    scopes: ["profile", "email"],
+    grantOfflineAccess: true,
+  });
+}
+
 export async function signInWithGoogle(): Promise<void> {
   let idToken: string | null = null;
   const platform = Capacitor.getPlatform();
