@@ -164,6 +164,14 @@ export interface SearchAPIRequest {
   max_results?: number;
   min_price?: number | null;
   max_price?: number | null;
+  brand?: string;
+  model?: string;
+  min_year?: number;
+  max_year?: number;
+  min_mileage?: number;
+  max_mileage?: number;
+  fuel_type?: string;
+  transmission?: string;
 }
 
 // =============================================================================

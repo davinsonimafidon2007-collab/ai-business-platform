@@ -48,6 +48,14 @@ class SearchAPIRequest(BaseModel):
     max_price: float | None = Field(
         default=None, ge=0, description="Precio máximo (EUR)"
     )
+    brand: str | None = Field(default=None, description="Marca del vehículo")
+    model: str | None = Field(default=None, description="Modelo del vehículo")
+    min_year: int | None = Field(default=None, ge=1900, description="Año mínimo")
+    max_year: int | None = Field(default=None, ge=1900, description="Año máximo")
+    min_mileage: int | None = Field(default=None, ge=0, description="Km mínimos")
+    max_mileage: int | None = Field(default=None, ge=0, description="Km máximos")
+    fuel_type: str | None = Field(default=None, description="Tipo de combustible")
+    transmission: str | None = Field(default=None, description="Tipo de transmisión")
 
     def to_search_request(self) -> SearchRequest:
         """Convierte esta petición API al modelo interno SearchRequest.
@@ -60,6 +68,14 @@ class SearchAPIRequest(BaseModel):
             providers=self.providers,
             budget_min=self.min_price,
             budget_max=self.max_price,
+            brand=self.brand,
+            model=self.model,
+            min_year=self.min_year,
+            max_year=self.max_year,
+            min_mileage=self.min_mileage,
+            max_mileage=self.max_mileage,
+            fuel_type=self.fuel_type,
+            transmission=self.transmission,
         )
 
     @model_validator(mode="after")

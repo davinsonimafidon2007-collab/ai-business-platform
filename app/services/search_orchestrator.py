@@ -142,6 +142,24 @@ class SearchOrchestrator:
                 if request.budget_max is not None and (dto.price is None or dto.price > request.budget_max):
                     continue
 
+                # Aplicar filtros adicionales (marca, modelo, año, km, combustible, transmisión)
+                if request.brand is not None and (dto.brand is None or dto.brand.lower() != request.brand.lower()):
+                    continue
+                if request.model is not None and (dto.model is None or request.model.lower() not in dto.model.lower()):
+                    continue
+                if request.min_year is not None and (dto.year is None or dto.year < request.min_year):
+                    continue
+                if request.max_year is not None and (dto.year is None or dto.year > request.max_year):
+                    continue
+                if request.min_mileage is not None and (dto.mileage is None or dto.mileage < request.min_mileage):
+                    continue
+                if request.max_mileage is not None and (dto.mileage is None or dto.mileage > request.max_mileage):
+                    continue
+                if request.fuel_type is not None and (dto.fuel_type is None or dto.fuel_type.lower() != request.fuel_type.lower()):
+                    continue
+                if request.transmission is not None and (dto.transmission is None or dto.transmission.lower() != request.transmission.lower()):
+                    continue
+
                 try:
                     result = self._analyze_vehicle(dto)
                     all_results.append(result)

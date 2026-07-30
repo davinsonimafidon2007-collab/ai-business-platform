@@ -62,6 +62,14 @@ class SearchRequest(BaseModel):
     country: str = Field(default="ES", max_length=10)
     budget_min: float | None = Field(default=None, ge=0)
     budget_max: float | None = Field(default=None, ge=0)
+    brand: str | None = Field(default=None, description="Marca del vehículo")
+    model: str | None = Field(default=None, description="Modelo del vehículo")
+    min_year: int | None = Field(default=None, ge=1900, description="Año mínimo")
+    max_year: int | None = Field(default=None, ge=1900, description="Año máximo")
+    min_mileage: int | None = Field(default=None, ge=0, description="Km mínimos")
+    max_mileage: int | None = Field(default=None, ge=0, description="Km máximos")
+    fuel_type: str | None = Field(default=None, description="Tipo de combustible")
+    transmission: str | None = Field(default=None, description="Tipo de transmisión")
 
 
 class SearchResult(BaseModel):

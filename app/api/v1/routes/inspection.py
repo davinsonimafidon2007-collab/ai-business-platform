@@ -12,6 +12,8 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
 
 from app.api.v1.dependencies import get_inspection_service
+from app.dependencies.auth import get_current_user
+from app.models.user import User
 from app.api.v1.schemas.inspection import (
     InspectionSessionCreate,
     InspectionSessionDetailResponse,
@@ -39,6 +41,7 @@ router = APIRouter(prefix="/inspections", tags=["inspections"])
 async def create_session(
     data: InspectionSessionCreate,
     service: InspectionService = Depends(get_inspection_service),
+    current_user: User = Depends(get_current_user),
 ) -> InspectionSessionResponse:
     """Creates a new inspection session for a vehicle."""
     session = await service.create_session(data.vehicle_id)
@@ -53,6 +56,7 @@ async def create_session(
 async def get_session(
     session_id: str,
     service: InspectionService = Depends(get_inspection_service),
+    current_user: User = Depends(get_current_user),
 ) -> InspectionSessionDetailResponse:
     """Gets a session with all observations, photos, and catalog."""
     result = await service.get_session_with_details(session_id)
@@ -73,6 +77,7 @@ async def update_item(
     session_id: str,
     data: ObservationUpdate,
     service: InspectionService = Depends(get_inspection_service),
+    current_user: User = Depends(get_current_user),
 ) -> ObservationResponse:
     """Creates or updates an observation for a catalog item."""
     try:
@@ -102,6 +107,7 @@ async def upload_photo(
     session_id: str,
     data: PhotoUploadRequest,
     service: InspectionService = Depends(get_inspection_service),
+    current_user: User = Depends(get_current_user),
 ) -> PhotoResponse:
     """Registers a photo associated with an observation."""
     photo = await service.upload_photo(
@@ -124,6 +130,7 @@ async def analyze_photos(
     session_id: str,
     data: VisionAnalyzeRequest,
     service: InspectionService = Depends(get_inspection_service),
+    current_user: User = Depends(get_current_user),
 ) -> VisionAnalysisResponse:
     """Analyzes photos but never applies suggested inspection changes."""
     try:
@@ -141,6 +148,7 @@ async def analyze_photos(
 async def finalize_session(
     session_id: str,
     service: InspectionService = Depends(get_inspection_service),
+    current_user: User = Depends(get_current_user),
 ) -> InspectionSessionResponse:
     """Finalizes a session, generates summary, and marks as COMPLETED."""
     try:
@@ -161,6 +169,7 @@ async def finalize_session(
 async def get_summary(
     session_id: str,
     service: InspectionService = Depends(get_inspection_service),
+    current_user: User = Depends(get_current_user),
 ) -> InspectionSummaryResponse:
     """Gets the inspection summary (partial or complete)."""
     summary = await service.generate_summary(session_id)
@@ -185,6 +194,7 @@ async def upload_photo_file(
     observation_id: str,
     file: UploadFile,
     service: InspectionService = Depends(get_inspection_service),
+    current_user: User = Depends(get_current_user),
 ) -> PhotoResponse:
     """Receives a multipart image file, saves it, and registers it.
 
