@@ -46,6 +46,15 @@ class ApiKeyRepository:
         )
         return result.scalar_one_or_none()
 
+    async def list_active_by_prefix(self, prefix: str) -> list[ApiKey]:
+        result = await self.session.execute(
+            select(ApiKey).where(
+                ApiKey.prefix == prefix,
+                ApiKey.is_active == True,
+            )
+        )
+        return list(result.scalars().all())
+
     async def deactivate(self, api_key_id: str) -> None:
         await self.session.execute(
             update(ApiKey)

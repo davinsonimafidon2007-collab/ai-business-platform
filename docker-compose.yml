@@ -17,6 +17,7 @@ services:
       ENVIRONMENT: "${ENVIRONMENT:-development}"
       APP_URL: "${APP_URL:-http://localhost:3000}"
       ENABLE_SCHEDULER: "${ENABLE_SCHEDULER:-true}"
+      FIREBASE_CREDENTIALS_JSON: "${FIREBASE_CREDENTIALS_JSON}"
     depends_on:
       db:
         condition: service_healthy

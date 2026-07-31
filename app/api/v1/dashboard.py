@@ -76,6 +76,21 @@ async def get_dashboard_stats(
     )
     total_opportunities = total_opportunities_result.scalar() or 0
 
+    # --- Promedios de búsquedas (solo sobre las que tienen datos) ---
+    avg_results_result = await session.execute(
+        select(func.avg(Search.results_count)).where(
+            Search.user_id == user_id, Search.results_count.is_not(None)
+        )
+    )
+    average_results_per_search = avg_results_result.scalar() or 0
+
+    avg_time_result = await session.execute(
+        select(func.avg(Search.execution_time)).where(
+            Search.user_id == user_id, Search.execution_time.is_not(None)
+        )
+    )
+    average_execution_time = avg_time_result.scalar() or 0
+
     return {
         "total_searches": total_searches,
         "recent_searches": recent_searches,
@@ -83,4 +98,6 @@ async def get_dashboard_stats(
         "total_inspections": total_inspections,
         "completed_inspections": completed_inspections,
         "total_opportunities": total_opportunities,
+        "average_results_per_search": round(float(average_results_per_search), 2),
+        "average_execution_time": round(float(average_execution_time), 2),
     }

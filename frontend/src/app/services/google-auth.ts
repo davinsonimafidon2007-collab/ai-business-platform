@@ -24,7 +24,7 @@ export function initGoogleAuth(): void {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { GoogleAuth } = require("@codetrix-studio/capacitor-google-auth");
   GoogleAuth.initialize({
-    clientId: ANDROID_CLIENT_ID,
+    clientId: WEB_CLIENT_ID,
     scopes: ["profile", "email"],
     grantOfflineAccess: true,
   });
@@ -39,7 +39,7 @@ export async function signInWithGoogle(): Promise<void> {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { GoogleAuth } = require("@codetrix-studio/capacitor-google-auth");
     const response = await GoogleAuth.signIn({
-      clientId: ANDROID_CLIENT_ID,
+      clientId: WEB_CLIENT_ID,
       androidClientId: ANDROID_CLIENT_ID,
       iosClientId: WEB_CLIENT_ID,
     });

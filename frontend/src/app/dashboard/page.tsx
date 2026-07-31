@@ -69,7 +69,7 @@ export default function DashboardPage() {
             />
             <StatCard
               title="Tiempo promedio"
-              value={`${stats?.average_execution_time.toFixed(1) ?? 0}s`}
+              value={`${stats?.average_execution_time?.toFixed(1) ?? "0"}s`}
               icon="⏱️"
               subtitle="Por búsqueda"
             />

@@ -43,6 +43,9 @@ export const searchService = {
         query: searchData.query,
         providers: searchData.providers_used,
       }),
+      query: searchData.query,
+      results_count: searchData.results_count,
+      execution_time: searchData.execution_time,
     };
     const { data: result } = await api.post<SearchHistory>("/searches", payload);
     return result;

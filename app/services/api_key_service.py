@@ -69,10 +69,22 @@ class ApiKeyService:
     async def validate_api_key(self, api_key: str) -> ApiKey:
         """Validate an API key and return the associated record.
 
-        The key is hashed and looked up by hash. Updates last_used_at.
+        Como el hash es Argon2 (con sal aleatoria), no se puede buscar por
+        igualdad de hash. Todas las keys comparten el mismo prefijo fijo
+        (settings.api_key_prefix), así que se listan las activas con ese
+        prefijo y se verifica cada una con password_hasher.verify().
         """
-        key_hash = self.hash_api_key(api_key)
-        record = await self.repository.get_active_by_key_hash(key_hash)
+        prefix = f"{settings.api_key_prefix}_"
+        candidates = await self.repository.list_active_by_prefix(prefix)
+
+        record = None
+        for candidate in candidates:
+            try:
+                if password_hasher.verify(api_key, candidate.key_hash):
+                    record = candidate
+                    break
+            except Exception:
+                continue
 
         if record is None:
             raise AuthenticationError("Invalid API key")

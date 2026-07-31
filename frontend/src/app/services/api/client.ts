@@ -4,7 +4,31 @@ import axios, {
   InternalAxiosRequestConfig,
 } from "axios";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+// Detecta el protocolo desde la variable de entorno o desde el contexto del navegador
+// para evitar errores de Mixed Content en Android/WebView
+const getApiBaseUrl = (): string => {
+  const envUrl = process.env.NEXT_PUBLIC_API_URL;
+
+  if (envUrl) {
+    return envUrl;
+  }
+
+  // En desarrollo, usar el mismo protocolo que la página actual
+  if (typeof window !== "undefined") {
+    const protocol = window.location.protocol;
+    const host = window.location.hostname;
+    const port = window.location.port;
+
+    if (host === "localhost" || host === "127.0.0.1") {
+      return `${protocol}//${host}:8000`;
+    }
+  }
+
+  // Fallback para desarrollo local
+  return "http://localhost:8000";
+};
+
+const API_BASE_URL = getApiBaseUrl();
 
 class ApiClient {
   private client: AxiosInstance;

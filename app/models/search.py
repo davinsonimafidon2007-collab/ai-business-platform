@@ -5,7 +5,7 @@ from typing import Any
 from uuid import uuid4
 
 from pydantic import BaseModel, Field
-from sqlalchemy import DateTime, ForeignKey, String, Text, Uuid
+from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text, Uuid
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base
@@ -28,6 +28,9 @@ class Search(Base):
     brands: Mapped[str | None] = mapped_column(Text, nullable=True)
     models: Mapped[str | None] = mapped_column(Text, nullable=True)
     filters: Mapped[str | None] = mapped_column(Text, nullable=True)
+    query: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    results_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    execution_time: Mapped[float | None] = mapped_column(Float, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),

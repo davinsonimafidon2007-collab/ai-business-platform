@@ -11,6 +11,9 @@ class SearchBase(BaseModel):
     brands: str | None = None
     models: str | None = None
     filters: str | None = None
+    query: str | None = Field(default=None, max_length=500)
+    results_count: int | None = None
+    execution_time: float | None = None
 
 
 class SearchCreate(SearchBase):
@@ -18,10 +21,10 @@ class SearchCreate(SearchBase):
 
 
 class SearchRead(SearchBase):
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
     id: str
-    created_at: datetime
+    timestamp: datetime = Field(validation_alias="created_at", serialization_alias="timestamp")
 
 
 class SearchUpdate(BaseModel):
@@ -32,3 +35,6 @@ class SearchUpdate(BaseModel):
     brands: str | None = None
     models: str | None = None
     filters: str | None = None
+    query: str | None = Field(default=None, max_length=500)
+    results_count: int | None = None
+    execution_time: float | None = None

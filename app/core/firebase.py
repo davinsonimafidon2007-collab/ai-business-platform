@@ -91,7 +91,7 @@ async def verify_google_id_token(id_token: str) -> dict:
     from firebase_admin import auth as firebase_auth
 
     try:
-        decoded = firebase_auth.verify_id_token(id_token, app=app)
+        decoded = firebase_auth.verify_id_token(id_token, app=app, clock_skew_seconds=10)
         return {
             "uid": decoded.get("uid", ""),
             "email": decoded.get("email", ""),

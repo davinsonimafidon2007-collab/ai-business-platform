@@ -12,15 +12,22 @@ export function useSearchVehicles() {
   const queryClient = useQueryClient();
 
   return useMutation<SearchAPIResponse, Error, SearchAPIRequest>({
-    mutationFn: (params: SearchAPIRequest) =>
-      searchService.searchVehicles(params),
+    mutationFn: async (params: SearchAPIRequest) => {
+      const startedAt = performance.now();
+      const result = await searchService.searchVehicles(params);
+      const elapsedSeconds = (performance.now() - startedAt) / 1000;
+      return { ...result, __elapsedSeconds: elapsedSeconds } as SearchAPIResponse & {
+        __elapsedSeconds: number;
+      };
+    },
     onSuccess: (data, variables) => {
       queryClient.setQueryData(["searchResults"], data);
+      const elapsed = (data as SearchAPIResponse & { __elapsedSeconds?: number }).__elapsedSeconds ?? 0;
       // Save search to history (fire and forget, don't block the UI)
       searchService.saveSearchToHistory({
         query: variables.query,
         results_count: data.summary.total_results,
-        execution_time: 0, // Will be calculated by backend if needed
+        execution_time: elapsed,
         providers_used: variables.providers,
       }).catch(() => {
         // Silently fail - history is not critical

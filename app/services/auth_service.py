@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -63,7 +64,7 @@ class AuthService:
         if user is None:
             user = User(
                 email=email,
-                hashed_password="google_auth",
+                hashed_password=password_hasher.hash(secrets.token_urlsafe(32)),
                 full_name=token_info.get("name"),
                 is_verified=token_info.get("email_verified", False),
             )
