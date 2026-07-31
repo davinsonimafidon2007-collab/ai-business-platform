@@ -1,7 +1,12 @@
 "use client";
 
 import { Capacitor } from "@capacitor/core";
-import { signInWithPopup, signOut } from "firebase/auth";
+import {
+  signInWithPopup,
+  signInWithCredential,
+  GoogleAuthProvider,
+  signOut,
+} from "firebase/auth";
 import { auth, googleProvider } from "@/app/config/firebase";
 import { api } from "@/app/services/api/client";
 import { useAuthStore } from "@/app/store/auth-store";
@@ -27,6 +32,9 @@ export function initGoogleAuth(): void {
     clientId: WEB_CLIENT_ID,
     scopes: ["profile", "email"],
     grantOfflineAccess: true,
+  }).catch((err: unknown) => {
+    // eslint-disable-next-line no-console
+    console.error("GoogleAuth.initialize() failed:", err);
   });
 }
 
@@ -35,7 +43,8 @@ export async function signInWithGoogle(): Promise<void> {
   const platform = Capacitor.getPlatform();
 
   if (platform !== "web") {
-    // Android / iOS – use the native Capacitor Google Auth plugin
+    // Android / iOS – el plugin nativo devuelve un ID token de Google
+    // (emitido por accounts.google.com), NO un ID token de Firebase.
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { GoogleAuth } = require("@codetrix-studio/capacitor-google-auth");
     const response = await GoogleAuth.signIn({
@@ -43,7 +52,17 @@ export async function signInWithGoogle(): Promise<void> {
       androidClientId: ANDROID_CLIENT_ID,
       iosClientId: WEB_CLIENT_ID,
     });
-    idToken = response.authentication?.idToken ?? null;
+
+    const nativeIdToken = response.authentication?.idToken ?? null;
+    if (!nativeIdToken) {
+      throw new Error("No se recibió el token nativo de Google");
+    }
+
+    // Intercambiamos el token nativo de Google por una sesión de Firebase,
+    // para que el backend (que verifica tokens de Firebase) pueda validarlo.
+    const credential = GoogleAuthProvider.credential(nativeIdToken);
+    const firebaseResult = await signInWithCredential(auth, credential);
+    idToken = await firebaseResult.user.getIdToken();
   } else {
     // Web – use Firebase Auth popup
     const result = await signInWithPopup(auth, googleProvider);

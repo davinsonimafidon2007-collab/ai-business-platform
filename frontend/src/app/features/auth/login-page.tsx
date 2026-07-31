@@ -73,7 +73,9 @@ export function LoginPage() {
     try {
       await signInWithGoogle();
       router.push("/dashboard/");
-    } catch {
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error("Google login failed:", err);
       setError("Error al iniciar sesión con Google");
     } finally {
       setIsGoogleLoading(false);
