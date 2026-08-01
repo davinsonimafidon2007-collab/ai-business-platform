@@ -1,33 +1,11 @@
-# TODO: Fixes de Event Loop y Mejoras de Infraestructura
+# TODO — Fix requirements.txt y test de conexión Postgres
 
-## FIX 1 - Eliminar bloqueo del Event Loop en ComparableMarketEstimator
-- [ ] `comparable_market_estimator.py`: Eliminar `import asyncio`, `import concurrent.futures`
-- [ ] `comparable_market_estimator.py`: Eliminar método `_run_async()`
-- [ ] `comparable_market_estimator.py`: Hacer `estimate()` → `async def estimate()` 
-- [ ] `comparable_market_estimator.py`: Eliminar `estimate_async()` (ahora `estimate()` es async)
-- [ ] `market_estimator.py`: Cambiar `def estimate` → `async def estimate` en el Protocol
+- [x] Añadir `aiosmtplib>=3.0.0,<4.0.0` a `requirements.txt` (UTF-16 LE con BOM)
+- [x] Añadir `firebase-admin>=6.0.0,<7.0.0` a `requirements.txt` (UTF-16 LE con BOM)
+- [x] Corregir `tests/integration/test_postgres_connection.py`:
+  - `from app.db.session import engine` → `from app.db.session import db_manager`
+  - `async with engine.connect() as connection:` → `async with db_manager.engine.connect() as connection:`
+- [x] Verificar BOM/líneas de `requirements.txt` (63 → 65 líneas, BOM `fffe`)
+- [x] Verificar que `python -c "from app.main import app"` no lance `ModuleNotFoundError`
+- [x] `pip install -r requirements.txt` en un venv limpio para confirmar que UTF-16 no se corrompió
 
-## FIX 2 - Actualizar SearchOrchestrator._analyze_vehicle()
-- [ ] `search_orchestrator.py`: Simplificar llamada a `estimate()` (eliminar fallback `getattr`)
-
-## FIX 3 - Eliminar segundo bridge async (verificar)
-- [ ] `comparable_market_estimator.py`: Verificar que `_compute_and_cache` usa `await self._save_to_cache`
-
-## FIX 4 - Eliminar except silencioso
-- [ ] `search_orchestrator.py`: Importar logger y reemplazar `except Exception: continue/pass`
-- [ ] `comparable_market_estimator.py`: Reemplazar `except Exception: continue` en `_search_comparables`
-
-## FIX 5 - Eliminar print() en http_client.py
-- [ ] Verificar que no hay `print()` en `http_client.py`
-
-## FIX 6 - Construcción segura de URLs
-- [ ] Verificar que `urljoin` ya está en `http_client.py` y `base.py`
-
-## FIX 7 - Eliminar imports duplicados en vehicle_scorer.py
-- [ ] Verificar y eliminar imports duplicados si existen
-
-## Validación
-- [ ] Verificar sintaxis de todos los archivos modificados
-- [ ] Verificar que no quedan `ThreadPoolExecutor` ni `asyncio.run()` en el flujo
-- [ ] Verificar que no quedan `print()` en `http_client.py`
-- [ ] Verificar que todas las URLs usan `urljoin`
