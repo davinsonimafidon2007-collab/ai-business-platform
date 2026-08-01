@@ -12,10 +12,12 @@ from app.exceptions import AuthenticationError
 from app.models.refresh_token import RefreshToken
 from app.models.user import User
 from app.notifications.email_provider import SmtpEmailProvider
+from app.repositories.audit_log_repository import AuditLogRepository
 from app.repositories.password_reset_token_repository import PasswordResetTokenRepository
 from app.repositories.refresh_token_repository import RefreshTokenRepository
 from app.repositories.user_repository import UserRepository
 from app.repositories.verification_token_repository import VerificationTokenRepository
+from app.services.audit_service import AuditService
 from app.schemas.auth import GoogleAuthRequest, LoginRequest, RegisterRequest, TokenResponse
 from app.schemas.password_reset import (
     ForgotPasswordRequest,
@@ -43,9 +45,27 @@ async def get_refresh_token_service(session: AsyncSession = Depends(get_db_sessi
     return RefreshTokenService(repository)
 
 
+async def get_audit_service(session: AsyncSession = Depends(get_db_session)) -> AuditService:
+    repository = AuditLogRepository(session)
+    return AuditService(repository)
+
+
+def _client_ip(request: Request) -> str | None:
+    return request.client.host if request.client else None
+
+
+def _user_agent(request: Request) -> str | None:
+    return request.headers.get("user-agent")
+
+
 @router.post("/register", response_model=UserRead, status_code=status.HTTP_201_CREATED)
-async def register_user(payload: RegisterRequest, service: AuthService = Depends(get_auth_service)) -> UserRead:
+async def register_user(
+    payload: RegisterRequest,
+    service: AuthService = Depends(get_auth_service),
+    audit_service: AuditService = Depends(get_audit_service),
+) -> UserRead:
     user = await service.register_user(email=str(payload.email), password=payload.password)
+    await audit_service.log_user_created(user.id)
     return UserRead.model_validate(user)
 
 
@@ -55,32 +75,50 @@ async def login_user(
     payload: LoginRequest,
     auth_service: AuthService = Depends(get_auth_service),
     refresh_service: RefreshTokenService = Depends(get_refresh_token_service),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> TokenResponse:
-    user = await auth_service.authenticate_user(email=str(payload.email), password=payload.password)
+    try:
+        user = await auth_service.authenticate_user(email=str(payload.email), password=payload.password)
+    except AuthenticationError:
+        await audit_service.log_login_failed(
+            email=str(payload.email), ip_address=_client_ip(request), user_agent=_user_agent(request)
+        )
+        raise
+
     access_token = auth_service.create_access_token(user_id=user.id)
     refresh_token = refresh_service.create_refresh_token(user_id=user.id)
     await refresh_service.create_refresh_token_record(user_id=user.id, token=refresh_token)
+    await audit_service.log_login_success(
+        user.id, ip_address=_client_ip(request), user_agent=_user_agent(request)
+    )
     return TokenResponse(access_token=access_token, refresh_token=refresh_token)
 
 
 @router.post("/google", response_model=TokenResponse)
 async def google_login(
+    request: Request,
     payload: GoogleAuthRequest,
     auth_service: AuthService = Depends(get_auth_service),
     refresh_service: RefreshTokenService = Depends(get_refresh_token_service),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> TokenResponse:
     user = await auth_service.authenticate_with_google(id_token=payload.id_token)
     access_token = auth_service.create_access_token(user_id=user.id)
     refresh_token = refresh_service.create_refresh_token(user_id=user.id)
     await refresh_service.create_refresh_token_record(user_id=user.id, token=refresh_token)
+    await audit_service.log_login_success(
+        user.id, ip_address=_client_ip(request), user_agent=_user_agent(request)
+    )
     return TokenResponse(access_token=access_token, refresh_token=refresh_token)
 
 
 @router.post("/refresh", response_model=TokenResponse)
 async def refresh_access_token(
+    request: Request,
     payload: dict[str, Any] = Body(...),
     auth_service: AuthService = Depends(get_auth_service),
     refresh_service: RefreshTokenService = Depends(get_refresh_token_service),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> TokenResponse:
     refresh_token = payload.get("refresh_token")
     if not refresh_token:
@@ -94,18 +132,32 @@ async def refresh_access_token(
     new_access_token = auth_service.create_access_token(user_id=user_id)
     new_refresh_token = refresh_service.create_refresh_token(user_id=user_id)
     await refresh_service.create_refresh_token_record(user_id=user_id, token=new_refresh_token)
-    
+    await audit_service.log_refresh_token(
+        user_id, ip_address=_client_ip(request), user_agent=_user_agent(request)
+    )
+
     return TokenResponse(access_token=new_access_token, refresh_token=new_refresh_token)
 
 
 @router.post("/logout")
 async def logout(
+    request: Request,
     payload: dict[str, Any] = Body(...),
     refresh_service: RefreshTokenService = Depends(get_refresh_token_service),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> dict[str, str]:
     refresh_token = payload.get("refresh_token")
     if refresh_token:
+        try:
+            decoded = refresh_service.decode_refresh_token(refresh_token)
+            user_id = decoded.get("sub")
+        except AuthenticationError:
+            user_id = None
         await refresh_service.revoke_refresh_token(refresh_token)
+        if user_id:
+            await audit_service.log_logout(
+                user_id, ip_address=_client_ip(request), user_agent=_user_agent(request)
+            )
     return {"message": "Logged out successfully"}
 
 
@@ -170,8 +222,11 @@ async def forgot_password(
 
 @router.post("/reset-password", response_model=ResetPasswordResponse)
 async def reset_password(
+    request: Request,
     payload: ResetPasswordRequest,
     password_reset_service: PasswordResetService = Depends(get_password_reset_service),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> ResetPasswordResponse:
-    await password_reset_service.reset_password(payload.token, payload.new_password)
+    user_id = await password_reset_service.reset_password(payload.token, payload.new_password)
+    await audit_service.log_password_changed(user_id, ip_address=_client_ip(request))
     return ResetPasswordResponse()

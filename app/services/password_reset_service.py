@@ -70,12 +70,15 @@ class PasswordResetService:
         if self.email_provider is not None:
             await self._send_reset_email(user.email, raw_token)
 
-    async def reset_password(self, raw_token: str, new_password: str) -> None:
+    async def reset_password(self, raw_token: str, new_password: str) -> str:
         """Resetea la contraseña del usuario usando un token válido.
 
         Args:
             raw_token: Token de reset enviado al usuario.
             new_password: Nueva contraseña del usuario.
+
+        Returns:
+            El ID del usuario cuya contraseña fue reseteada.
 
         Raises:
             PasswordResetTokenNotFoundError: Si el token no existe.
@@ -105,6 +108,8 @@ class PasswordResetService:
 
         user.hashed_password = password_hasher.hash(new_password)
         await self.user_repository.update(user)
+
+        return token_record.user_id
 
     async def _send_reset_email(self, to_email: str, token: str) -> None:
         """Envía el email de reset de contraseña al usuario."""

@@ -363,8 +363,16 @@ class SearchOrchestrator:
         # 2. Mercado
         market_estimation = await self._market_estimator.estimate(vehicle)
 
-        # 3. Rentabilidad
-        profit_analysis = self._profit_analyzer.analyze(vehicle)
+        # 3. Rentabilidad (usando el precio de reventa real estimado por el
+        #    motor de mercado, en vez del multiplicador fijo por defecto)
+        estimated_sale_price = (
+            market_estimation.market_price
+            if market_estimation and market_estimation.market_price > 0
+            else None
+        )
+        profit_analysis = self._profit_analyzer.analyze(
+            vehicle, estimated_sale_price=estimated_sale_price
+        )
 
         # 4. Oportunidad
         opportunity = self._opportunity_finder.analyze(
