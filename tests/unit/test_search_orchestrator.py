@@ -76,6 +76,10 @@ class MarketEstimatorStub:
             comparable_count=self.comparable_count,
         )
 
+    async def estimate_async(self, vehicle: object) -> MarketEstimation:
+        """Versión async para compatibilidad con el orquestador."""
+        return self.estimate(vehicle)
+
 
 @dataclass
 class VehicleScorerStub:
@@ -1127,6 +1131,11 @@ class TestIntegrationWithMocks:
                 market_price=20000.0, confidence=70.0
             )
         )
+        market_estimator.estimate_async = AsyncMock(
+            return_value=MarketEstimation(
+                market_price=20000.0, confidence=70.0
+            )
+        )
 
         profit_analyzer = MagicMock()
         profit_analyzer.analyze = MagicMock(
@@ -1180,7 +1189,8 @@ class TestIntegrationWithMocks:
         # Verificar que todos los servicios fueron llamados
         vehicle_service.search_from_provider.assert_called_once()
         vehicle_scorer.score.assert_called_once()
-        market_estimator.estimate.assert_called_once()
+        # Ahora se usa estimate_async cuando está disponible
+        market_estimator.estimate_async.assert_called_once()
         profit_analyzer.analyze.assert_called_once()
         opportunity_finder.analyze.assert_called_once()
 
@@ -1378,6 +1388,11 @@ class TestEdgeCases:
         estimator = MagicMock()
         estimator.estimate.return_value = MarketEstimation(
             market_price=1000.0, confidence=50.0
+        )
+        estimator.estimate_async = AsyncMock(
+            return_value=MarketEstimation(
+                market_price=1000.0, confidence=50.0
+            )
         )
 
         analyzer = MagicMock()

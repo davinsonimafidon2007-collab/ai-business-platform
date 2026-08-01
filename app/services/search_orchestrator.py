@@ -32,6 +32,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.core.logging import get_logger
 from app.models.negotiation import (
     DefectItem,
     InspectionResult,
@@ -52,6 +53,8 @@ from app.providers.registry import ProviderRegistry
 from app.services.vehicle_service import VehicleService
 from app.services.vehicle_scorer import VehicleScorer
 from app.services.profit_analyzer import ProfitAnalyzer, RiskLevel
+
+logger = get_logger(__name__)
 
 
 class SearchOrchestrator:
@@ -131,7 +134,7 @@ class SearchOrchestrator:
                     provider, request.query, **kwargs
                 )
             except Exception:
-                # Si falla la búsqueda en un provider, continuamos con el siguiente
+                logger.exception("Error al buscar en provider %s", provider_name)
                 continue
 
             # Analizar cada vehículo
@@ -161,10 +164,10 @@ class SearchOrchestrator:
                     continue
 
                 try:
-                    result = self._analyze_vehicle(dto)
+                    result = await self._analyze_vehicle(dto)
                     all_results.append(result)
                 except Exception:
-                    # Si falla el análisis de un vehículo, continuamos con el siguiente
+                    logger.exception("Error al analizar vehículo %s", getattr(dto, "external_id", "unknown"))
                     continue
 
         # Limitar resultados
@@ -345,7 +348,7 @@ class SearchOrchestrator:
     # Métodos internos
     # ------------------------------------------------------------------
 
-    def _analyze_vehicle(self, vehicle: Any) -> SearchResult:
+    async def _analyze_vehicle(self, vehicle: Any) -> SearchResult:
         """Ejecuta el pipeline completo de análisis sobre un vehículo.
 
         Args:
@@ -358,7 +361,7 @@ class SearchOrchestrator:
         vehicle_score = self._vehicle_scorer.score(vehicle)
 
         # 2. Mercado
-        market_estimation = self._market_estimator.estimate(vehicle)
+        market_estimation = await self._market_estimator.estimate(vehicle)
 
         # 3. Rentabilidad
         profit_analysis = self._profit_analyzer.analyze(vehicle)
@@ -472,5 +475,5 @@ class SearchOrchestrator:
             )
             return self._negotiation_engine.analyze(negotiation_input)
         except Exception:
-            # Si falla la negociación, devolvemos None (no bloquea el resto)
+            logger.exception("Error al ejecutar la negociación para el vehículo")
             return None

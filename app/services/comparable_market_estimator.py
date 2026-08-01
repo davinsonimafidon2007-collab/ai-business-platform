@@ -7,13 +7,11 @@ Arquitectura de componentes internos:
     - ComparableMarketEstimator: orquesta el flujo completo con caché.
 
 Mantiene compatibilidad completa con el protocolo ``MarketEstimator``
-(``def estimate(self, vehicle: object) -> MarketEstimation``).
+(``async def estimate(self, vehicle: object) -> MarketEstimation``).
 """
 
 from __future__ import annotations
 
-import asyncio
-import concurrent.futures
 import hashlib
 import json
 import math
@@ -48,12 +46,15 @@ from app.config.comparable_market import (
     WEIGHT_YEAR_SIMILARITY,
     YEAR_TOLERANCE,
 )
+from app.core.logging import get_logger
 from app.models.cached_market import CachedMarketData
 from app.models.market import MarketEstimation
 from app.providers.dto import VehicleSearchResult
 from app.providers.registry import ProviderRegistry
 from app.repositories.cached_market_repository import CachedMarketRepository
 from app.services.vehicle_service import VehicleService
+
+logger = get_logger(__name__)
 
 
 # =============================================================================
@@ -389,8 +390,8 @@ class ComparableMarketEstimator:
         self._cache_ttl = timedelta(seconds=cache_ttl_seconds)
         self._local_cache: dict[str, MarketEstimation] = {}
 
-    def estimate(self, vehicle: object) -> MarketEstimation:
-        """Estima las condiciones de mercado para un vehículo.
+    async def estimate(self, vehicle: object) -> MarketEstimation:
+        """Estima las condiciones de mercado para un vehículo (corutina).
 
         Args:
             vehicle: Objeto con atributos VehicleData (brand, model, year, etc.).
@@ -398,19 +399,6 @@ class ComparableMarketEstimator:
         Returns:
             ``MarketEstimation`` con la estimación de mercado.
         """
-        return self._run_async(self._estimate_async(vehicle))
-
-    # ------------------------------------------------------------------
-    # Async bridge
-    # ------------------------------------------------------------------
-
-    @staticmethod
-    def _run_async(coro: Any) -> Any:
-        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-            future = executor.submit(lambda: asyncio.run(coro))
-            return future.result()
-
-    async def _estimate_async(self, vehicle: object) -> MarketEstimation:
         market_hash = self._compute_market_hash(vehicle)
         if market_hash in self._local_cache:
             return self._local_cache[market_hash]
@@ -453,6 +441,7 @@ class ComparableMarketEstimator:
                 if results:
                     provider_sources.add(provider_name)
             except Exception:
+                logger.exception("Error al buscar comparables en provider %s", provider_name)
                 continue
         total_candidates = len(all_candidates)
         comparables = self._filter.filter_comparables(vehicle, all_candidates)
@@ -504,10 +493,12 @@ class ComparableMarketEstimator:
         )
         self._local_cache[market_hash] = estimation
         if vehicle_id and vehicle_source:
-            self._run_async(self._save_to_cache(
+            # Guardado asíncrono directo en el mismo event loop,
+            # sin bridges sync->async.
+            await self._save_to_cache(
                 vehicle_id=vehicle_id, vehicle_source=vehicle_source,
                 market_hash=market_hash, estimation=estimation,
-            ))
+            )
         return estimation
 
     async def _save_to_cache(
@@ -524,7 +515,11 @@ class ComparableMarketEstimator:
         try:
             await self._cached_market_repo.save(cached)
         except Exception:
-            pass
+            logger.warning(
+                "No se pudo guardar la estimación de mercado en caché "
+                "(external_id=%s, provider=%s)",
+                vehicle_id, vehicle_source, exc_info=True,
+            )
 
     # ------------------------------------------------------------------
     # Utilidades

@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 from abc import ABC, abstractmethod
 from typing import Any, ClassVar
+from urllib.parse import urljoin
 
 from bs4 import BeautifulSoup
 
@@ -129,7 +130,7 @@ class VehicleProvider(ABC):
         if external_id.startswith("http"):
             url = external_id
         else:
-            url = f"{self._base_url}{self._vehicle_detail_path}{external_id}"
+            url = urljoin(f"{self._base_url}/", f"{self._vehicle_detail_path.lstrip('/')}{external_id}")
 
         html = await self._download_url(url)
         return self._parse_vehicle_detail(html, url)
@@ -333,7 +334,7 @@ class VehicleProvider(ABC):
         if href.startswith("//"):
             return f"https:{href}"
         if href.startswith("/"):
-            return f"{self._base_url}{href}"
+            return urljoin(f"{self._base_url}/", href.lstrip("/"))
         return href
 
     def _extract_external_id(self, url: str | None) -> str | None:
@@ -380,7 +381,7 @@ class VehicleProvider(ABC):
         if url.startswith("//"):
             return f"https:{url}"
         if url.startswith("/"):
-            return f"{self._base_url}{url}"
+            return urljoin(f"{self._base_url}/", url.lstrip("/"))
         return url
 
     def _extract_title(self, soup: Any) -> str | None:

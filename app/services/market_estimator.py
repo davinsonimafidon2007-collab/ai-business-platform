@@ -21,8 +21,8 @@ class MarketEstimator(Protocol):
     ``MarketEstimation``.
     """
 
-    def estimate(self, vehicle: object) -> MarketEstimation:
-        """Estima las condiciones de mercado para un vehículo.
+    async def estimate(self, vehicle: object) -> MarketEstimation:
+        """Estima las condiciones de mercado para un vehículo (corutina).
 
         Args:
             vehicle: Objeto que implementa VehicleData (Vehicle, DTO, etc.).

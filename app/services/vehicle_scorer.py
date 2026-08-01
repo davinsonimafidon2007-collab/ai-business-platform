@@ -58,9 +58,7 @@ from app.config.scoring import (
     VERY_HIGH_MILEAGE_THRESHOLD,
     VERY_OLD_PENALTY_RATIO,
     VERY_OLD_AGE_YEARS,
-    PRICE_WEIGHT,
     MAX_RELEVANT_IMAGES,
-    IMPORTANT_FIELDS,
 )
 
 # =============================================================================

@@ -6,6 +6,7 @@ import asyncio
 import random
 import time
 from typing import Any
+from urllib.parse import urljoin
 
 import httpx
 from tenacity import (
@@ -17,12 +18,15 @@ from tenacity import (
 )
 
 from app.core.config import settings
+from app.core.logging import get_logger
 from app.providers.exceptions import (
     ProviderConnectionError,
     ProviderMaxRetriesExceededError,
     ProviderRateLimitError,
     ProviderTimeoutError,
 )
+
+logger = get_logger(__name__)
 
 
 class ProviderHttpClient:
@@ -131,9 +135,15 @@ class ProviderHttpClient:
             if isinstance(exception, httpx.HTTPStatusError) and exception.response.status_code == 429:
                 retry_after = exception.response.headers.get("Retry-After")
                 wait_time = int(retry_after) if retry_after else retry_state.next_action.sleep if retry_state.next_action else 1
-                print(f"Rate limit alcanzado en {self.provider_name}. Esperando {wait_time}s antes de reintentar...")
+                logger.warning(
+                    "Rate limit alcanzado en %s. Esperando %ss antes de reintentar...",
+                    self.provider_name, wait_time,
+                )
             else:
-                print(f"Reintentando petición a {self.provider_name} (intento {retry_state.attempt_number}/{self.max_retries})...")
+                logger.info(
+                    "Reintentando petición a %s (intento %s/%s)...",
+                    self.provider_name, retry_state.attempt_number, self.max_retries,
+                )
 
     async def request(
         self,
@@ -162,7 +172,10 @@ class ProviderHttpClient:
             ProviderMaxRetriesExceededError: Si se exceden los reintentos
         """
         request_headers = self._build_headers(headers)
-        full_url = url if not self.base_url else (self.base_url + url if not url.startswith("http") else url)
+        if not self.base_url or url.startswith("http"):
+            full_url = url
+        else:
+            full_url = urljoin(f"{self.base_url}/", url.lstrip("/"))
 
         try:
             async for attempt in AsyncRetrying(
