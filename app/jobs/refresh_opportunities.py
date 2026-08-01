@@ -1,90 +1,99 @@
-"""RefreshOpportunityJob — Recalculates stored opportunity analyses.
+"""RefreshOpportunityJob — Recalcula el análisis de oportunidad de cada vehículo.
 
-This job reads all stored opportunities, re-runs the OpportunityFinder
-analysis on the associated vehicles, and updates the opportunity scores
-and recommendations in the database.
+Para cada vehículo almacenado, ejecuta EvaluationEngine (el mismo motor que usa
+POST /vehicles/{id}/evaluation) y guarda/actualiza el registro de Opportunity
+correspondiente.
 """
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from app.jobs.base import Job, JobContext, JobResult
+
+_CLASSIFICATION_TO_RISK = {
+    "verde": "LOW",
+    "amarillo": "MEDIUM",
+    "rojo": "HIGH",
+}
 
 
 class RefreshOpportunityJob(Job):
-    """Periodic job that recalculates opportunity scores.
-
-    Iterates over stored vehicles, re-applies the full analysis
-    pipeline (scoring, profit, market, opportunity), and persists
-    updated Opportunity records.
-    """
+    """Job periódico que recalcula el análisis de oportunidad de cada vehículo."""
 
     @property
     def name(self) -> str:
         return "refresh_opportunities"
 
     async def execute(self, context: JobContext) -> JobResult:
-        """Recalculate opportunities for all stored vehicles.
-
-        Args:
-            context: JobContext with db_manager and settings.
-
-        Returns:
-            JobResult with count of recalculated opportunities.
-        """
         logger = context.logger
         logger.info("Starting opportunity recalculation...")
 
         try:
             async with context.db_manager.get_session() as session:
-                from app.repositories.opportunity_repository import (
-                    OpportunityRepository,
-                )
+                from app.models.opportunity import Opportunity
+                from app.repositories.opportunity_repository import OpportunityRepository
                 from app.repositories.vehicle_repository import VehicleRepository
+                from app.services.evaluation_engine import EvaluationEngine
 
                 opp_repo = OpportunityRepository(session)
                 vehicle_repo = VehicleRepository(session)
+                engine = EvaluationEngine()
 
-                # Get stored vehicles and opportunities
                 vehicles = await vehicle_repo.list_all(limit=1000)
-                stored_opps = await opp_repo.list(limit=1000)
-
-                logger.info(
-                    "Found %d vehicles and %d stored opportunities",
-                    len(vehicles),
-                    len(stored_opps),
-                )
-
-                # Build vehicle_id index for stored opportunities
-                vehicle_opp_map: dict[str, list] = {}
-                for opp in stored_opps:
-                    vid = opp.vehicle_id if hasattr(opp, "vehicle_id") else ""
-                    if vid not in vehicle_opp_map:
-                        vehicle_opp_map[vid] = []
-                    vehicle_opp_map[vid].append(opp)
+                logger.info("Recalculating opportunities for %d vehicles", len(vehicles))
 
                 updated_count = 0
-                for vehicle in vehicles:
-                    vid = str(vehicle.id) if hasattr(vehicle, "id") else ""
-                    opps_for_vehicle = vehicle_opp_map.get(vid, [])
+                failed_count = 0
 
-                    # Log count per vehicle for observability
-                    if opps_for_vehicle:
-                        updated_count += len(opps_for_vehicle)
+                for vehicle in vehicles:
+                    try:
+                        result = engine.evaluate(vehicle)
+
+                        existing = await opp_repo.get_by_vehicle_id(vehicle.id)
+                        risk = _CLASSIFICATION_TO_RISK.get(result.classification, "MEDIUM")
+
+                        if existing:
+                            opp = existing[0]
+                            opp.opportunity_score = float(result.score)
+                            opp.recommendation = result.recommendation
+                            opp.roi = round(result.profit_margin_percent, 2)
+                            opp.risk = risk
+                            opp.profit = round(result.gross_profit, 2)
+                            opp.analyzed_at = datetime.now(timezone.utc)
+                        else:
+                            opp = Opportunity(
+                                vehicle_id=vehicle.id,
+                                opportunity_score=float(result.score),
+                                recommendation=result.recommendation,
+                                roi=round(result.profit_margin_percent, 2),
+                                risk=risk,
+                                profit=round(result.gross_profit, 2),
+                                analyzed_at=datetime.now(timezone.utc),
+                            )
+
+                        await opp_repo.save(opp)
+                        updated_count += 1
+                    except Exception:
+                        logger.exception(
+                            "Failed to recalculate opportunity for vehicle %s", vehicle.id
+                        )
+                        failed_count += 1
 
                 logger.info(
-                    "Opportunity recalculation complete. "
-                    "Found %d opportunities across %d vehicles",
+                    "Opportunity recalculation complete. Updated: %d, Failed: %d",
                     updated_count,
-                    len(vehicles),
+                    failed_count,
                 )
 
                 return JobResult(
-                    success=True,
-                    message=f"Found {updated_count} opportunities across "
-                    f"{len(vehicles)} vehicles",
+                    success=failed_count == 0,
+                    message=f"Recalculated {updated_count} opportunities "
+                    f"({failed_count} failed) across {len(vehicles)} vehicles",
                     data={
                         "vehicle_count": len(vehicles),
-                        "opportunity_count": updated_count,
+                        "updated_count": updated_count,
+                        "failed_count": failed_count,
                     },
                 )
 
@@ -94,4 +103,3 @@ class RefreshOpportunityJob(Job):
                 success=False,
                 message=f"Opportunity recalculation failed: {exc}",
             )
-

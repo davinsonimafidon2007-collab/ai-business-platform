@@ -57,7 +57,7 @@ async def test_create_vehicle(client: AsyncClient) -> None:
         "price": 35000.0,
         "currency": "EUR",
     }
-    response = await client.post("/vehicles", json=payload)
+    response = await client.post("/api/v1/vehicles", json=payload)
     assert response.status_code == status.HTTP_201_CREATED
     data = response.json()
     assert data["source"] == "mobile.de"
@@ -71,14 +71,14 @@ async def test_create_vehicle(client: AsyncClient) -> None:
 @pytest.mark.asyncio
 async def test_list_vehicles(client: AsyncClient) -> None:
     # Create two vehicles
-    await client.post("/vehicles", json={
+    await client.post("/api/v1/vehicles", json={
         "source": "mobile.de", "external_id": "ext-001", "brand": "BMW", "model": "X5",
     })
-    await client.post("/vehicles", json={
+    await client.post("/api/v1/vehicles", json={
         "source": "autoscout24", "external_id": "ext-002", "brand": "Audi", "model": "A4",
     })
 
-    response = await client.get("/vehicles")
+    response = await client.get("/api/v1/vehicles")
     assert response.status_code == status.HTTP_200_OK
     data = response.json()
     assert len(data) == 2
@@ -86,91 +86,82 @@ async def test_list_vehicles(client: AsyncClient) -> None:
 
 @pytest.mark.asyncio
 async def test_get_vehicle_not_found(client: AsyncClient) -> None:
-    response = await client.get("/vehicles/non-existent-id")
+    response = await client.get("/api/v1/vehicles/non-existent-id")
     assert response.status_code == status.HTTP_404_NOT_FOUND
 
 
 @pytest.mark.asyncio
 async def test_update_vehicle(client: AsyncClient) -> None:
-    create_resp = await client.post("/vehicles", json={
+    create_resp = await client.post("/api/v1/vehicles", json={
         "source": "mobile.de", "external_id": "ext-001", "brand": "BMW", "model": "X5",
     })
     vehicle_id = create_resp.json()["id"]
 
-    response = await client.patch(f"/vehicles/{vehicle_id}", json={"price": 30000.0})
+    response = await client.patch(f"/api/v1/vehicles/{vehicle_id}", json={"price": 30000.0})
     assert response.status_code == status.HTTP_200_OK
     assert response.json()["price"] == 30000.0
 
 
 @pytest.mark.asyncio
 async def test_delete_vehicle(client: AsyncClient) -> None:
-    create_resp = await client.post("/vehicles", json={
+    create_resp = await client.post("/api/v1/vehicles", json={
         "source": "mobile.de", "external_id": "ext-001", "brand": "BMW", "model": "X5",
     })
     vehicle_id = create_resp.json()["id"]
 
-    response = await client.delete(f"/vehicles/{vehicle_id}")
+    response = await client.delete(f"/api/v1/vehicles/{vehicle_id}")
     assert response.status_code == status.HTTP_204_NO_CONTENT
 
 
 @pytest.mark.asyncio
 async def test_create_vehicle_evaluation(client: AsyncClient) -> None:
-    create_resp = await client.post("/vehicles", json={
+    """POST /vehicles/{id}/evaluation calcula la evaluación en el servidor (sin body)."""
+    create_resp = await client.post("/api/v1/vehicles", json={
         "source": "mobile.de", "external_id": "ext-001", "brand": "BMW", "model": "X5",
+        "year": 2020, "mileage": 50000, "price": 35000.0,
     })
     vehicle_id = create_resp.json()["id"]
 
-    payload = {
-        "vehicle_id": vehicle_id,
-        "estimated_market_price_es": 40000.0,
-        "estimated_import_cost": 5000.0,
-        "estimated_registration_cost": 2000.0,
-        "estimated_total_cost": 42000.0,
-        "estimated_profit": 2000.0,
-        "profit_margin_percent": 5.0,
-        "score": 75,
-        "classification": "YELLOW",
-        "warnings": "Import costs may vary",
-        "recommendation": "Consider negotiating price",
-    }
-    response = await client.post(f"/vehicles/{vehicle_id}/evaluation", json=payload)
+    # El endpoint ya no acepta body: calcula todo con EvaluationEngine
+    response = await client.post(f"/api/v1/vehicles/{vehicle_id}/evaluation")
     assert response.status_code == status.HTTP_201_CREATED
     data = response.json()
-    assert data["score"] == 75
-    assert data["classification"] == "YELLOW"
+    # Los valores los calcula el servidor, no el cliente
+    assert "score" in data
+    assert "classification" in data
+    assert data["classification"] in ("verde", "amarillo", "rojo")
 
 
 @pytest.mark.asyncio
 async def test_get_vehicle_evaluation(client: AsyncClient) -> None:
-    create_resp = await client.post("/vehicles", json={
+    create_resp = await client.post("/api/v1/vehicles", json={
         "source": "mobile.de", "external_id": "ext-001", "brand": "BMW", "model": "X5",
+        "year": 2020, "mileage": 50000, "price": 35000.0,
     })
     vehicle_id = create_resp.json()["id"]
 
-    await client.post(f"/vehicles/{vehicle_id}/evaluation", json={
-        "vehicle_id": vehicle_id,
-        "score": 85,
-        "classification": "GREEN",
-    })
+    # Crear evaluación (sin body — la calcula el servidor)
+    eval_resp = await client.post(f"/api/v1/vehicles/{vehicle_id}/evaluation")
+    assert eval_resp.status_code == status.HTTP_201_CREATED
+    created = eval_resp.json()
 
-    response = await client.get(f"/vehicles/{vehicle_id}/evaluation")
+    response = await client.get(f"/api/v1/vehicles/{vehicle_id}/evaluation")
     assert response.status_code == status.HTTP_200_OK
-    assert response.json()["score"] == 85
-    assert response.json()["classification"] == "GREEN"
+    assert response.json()["score"] == created["score"]
+    assert response.json()["classification"] == created["classification"]
 
 
 @pytest.mark.asyncio
 async def test_delete_vehicle_evaluation(client: AsyncClient) -> None:
-    create_resp = await client.post("/vehicles", json={
+    create_resp = await client.post("/api/v1/vehicles", json={
         "source": "mobile.de", "external_id": "ext-001", "brand": "BMW", "model": "X5",
+        "year": 2020, "mileage": 50000, "price": 35000.0,
     })
     vehicle_id = create_resp.json()["id"]
 
-    await client.post(f"/vehicles/{vehicle_id}/evaluation", json={
-        "vehicle_id": vehicle_id,
-        "score": 50,
-        "classification": "RED",
-    })
+    # Crear evaluación (sin body — la calcula el servidor)
+    eval_resp = await client.post(f"/api/v1/vehicles/{vehicle_id}/evaluation")
+    assert eval_resp.status_code == status.HTTP_201_CREATED
 
-    response = await client.delete(f"/vehicles/{vehicle_id}/evaluation")
+    response = await client.delete(f"/api/v1/vehicles/{vehicle_id}/evaluation")
     assert response.status_code == status.HTTP_204_NO_CONTENT

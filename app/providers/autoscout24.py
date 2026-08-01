@@ -102,5 +102,10 @@ class AutoScout24Provider(VehicleProvider):
         if nodes:
             return nodes
 
+        import logging
+        logging.getLogger(__name__).warning(
+            "autoscout24: ninguna estrategia de selector encontró anuncios. "
+            "Es probable que AutoScout24 haya cambiado su HTML — revisar selectores."
+        )
         return []
 

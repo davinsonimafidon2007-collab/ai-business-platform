@@ -255,7 +255,7 @@ class TestRefreshOpportunityJob:
 
     @pytest.mark.asyncio
     async def test_execute_with_data(self, context: JobContext) -> None:
-        """Executes successfully with vehicles and opportunities."""
+        """Executes successfully: recalculates opportunities for vehicles."""
         mock_session = AsyncMock()
         mock_session.__aenter__ = AsyncMock(return_value=mock_session)
         mock_session.__aexit__ = AsyncMock(return_value=None)
@@ -268,6 +268,9 @@ class TestRefreshOpportunityJob:
             patch(
                 "app.repositories.opportunity_repository.OpportunityRepository"
             ) as mock_opp_repo,
+            patch(
+                "app.services.evaluation_engine.EvaluationEngine"
+            ) as mock_engine_class,
         ):
             # Mock vehicles
             mock_vehicle = MagicMock()
@@ -278,25 +281,34 @@ class TestRefreshOpportunityJob:
             )
             mock_vehicle_repo.return_value = mock_vehicle_repo_instance
 
-            # Mock opportunities
-            mock_opp = MagicMock()
-            mock_opp.vehicle_id = "v1"
+            # Mock opportunity repo: no existing opp → create new
             mock_opp_repo_instance = AsyncMock()
-            mock_opp_repo_instance.list = AsyncMock(
-                return_value=[mock_opp]
-            )
+            mock_opp_repo_instance.get_by_vehicle_id = AsyncMock(return_value=[])
+            mock_opp_repo_instance.save = AsyncMock(return_value=MagicMock())
             mock_opp_repo.return_value = mock_opp_repo_instance
+
+            # Mock EvaluationEngine.evaluate → returns a result-like object
+            mock_result = MagicMock()
+            mock_result.score = 75
+            mock_result.classification = "verde"
+            mock_result.recommendation = "Buena oportunidad"
+            mock_result.profit_margin_percent = 20.0
+            mock_result.gross_profit = 1500.0
+            mock_engine_instance = MagicMock()
+            mock_engine_instance.evaluate = MagicMock(return_value=mock_result)
+            mock_engine_class.return_value = mock_engine_instance
 
             job = RefreshOpportunityJob()
             result = await job.execute(context)
 
         assert result.success is True
         assert result.data["vehicle_count"] == 1
-        assert result.data["opportunity_count"] == 1
+        assert result.data["updated_count"] == 1
+        assert result.data["failed_count"] == 0
 
     @pytest.mark.asyncio
     async def test_execute_empty(self, context: JobContext) -> None:
-        """Executes successfully with no data."""
+        """Executes successfully with no vehicles."""
         mock_session = AsyncMock()
         mock_session.__aenter__ = AsyncMock(return_value=mock_session)
         mock_session.__aexit__ = AsyncMock(return_value=None)
@@ -309,20 +321,25 @@ class TestRefreshOpportunityJob:
             patch(
                 "app.repositories.opportunity_repository.OpportunityRepository"
             ) as mock_opp_repo,
+            patch(
+                "app.services.evaluation_engine.EvaluationEngine"
+            ) as mock_engine_class,
         ):
             mock_vehicle_repo_instance = AsyncMock()
             mock_vehicle_repo_instance.list_all = AsyncMock(return_value=[])
             mock_vehicle_repo.return_value = mock_vehicle_repo_instance
 
             mock_opp_repo_instance = AsyncMock()
-            mock_opp_repo_instance.list = AsyncMock(return_value=[])
             mock_opp_repo.return_value = mock_opp_repo_instance
+
+            mock_engine_class.return_value = MagicMock()
 
             job = RefreshOpportunityJob()
             result = await job.execute(context)
 
         assert result.success is True
         assert result.data["vehicle_count"] == 0
+        assert result.data["updated_count"] == 0
 
 
 # =============================================================================

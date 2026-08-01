@@ -75,5 +75,10 @@ class MobileDeProvider(VehicleProvider):
         if nodes:
             return nodes
 
+        import logging
+        logging.getLogger(__name__).warning(
+            "mobile_de: ninguna estrategia de selector encontró anuncios. "
+            "Es probable que mobile.de haya cambiado su HTML — revisar selectores."
+        )
         return []
 

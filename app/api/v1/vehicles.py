@@ -12,7 +12,7 @@ from app.models.vehicle import Vehicle
 from app.repositories.vehicle_evaluation_repository import VehicleEvaluationRepository
 from app.repositories.vehicle_repository import VehicleRepository
 from app.schemas.vehicle import VehicleCreate, VehicleRead, VehicleUpdate
-from app.schemas.vehicle_evaluation import VehicleEvaluationCreate, VehicleEvaluationRead, VehicleEvaluationUpdate
+from app.schemas.vehicle_evaluation import VehicleEvaluationRead, VehicleEvaluationUpdate
 from app.services.vehicle_evaluation_service import VehicleEvaluationService
 from app.services.vehicle_service import VehicleService
 
@@ -99,15 +99,17 @@ async def delete_vehicle(
 @router.post("/{vehicle_id}/evaluation", response_model=VehicleEvaluationRead, status_code=status.HTTP_201_CREATED)
 async def create_vehicle_evaluation(
     vehicle_id: str,
-    payload: VehicleEvaluationCreate,
     vehicle_service: VehicleService = Depends(get_vehicle_service),
     evaluation_service: VehicleEvaluationService = Depends(get_vehicle_evaluation_service),
     current_user: User = Depends(get_current_user),
 ) -> VehicleEvaluationRead:
-    await _get_owned_vehicle(vehicle_id, current_user, vehicle_service)
-    data = payload.model_dump()
-    data["vehicle_id"] = vehicle_id
-    evaluation = await evaluation_service.create_evaluation(data)
+    """Calcula (o recalcula) la evaluación real del vehículo con EvaluationEngine.
+
+    No acepta valores del cliente: todos los campos se calculan en el servidor
+    a partir de los datos del vehículo, para evitar que se puedan falsear.
+    """
+    vehicle = await _get_owned_vehicle(vehicle_id, current_user, vehicle_service)
+    evaluation = await evaluation_service.evaluate_vehicle(vehicle)
     return VehicleEvaluationRead.model_validate(evaluation)
 
 

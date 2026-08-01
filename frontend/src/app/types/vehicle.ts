@@ -110,6 +110,40 @@ export interface NegotiationResult {
 }
 
 // =============================================================================
+// Stored Vehicle (from GET /vehicles)
+// =============================================================================
+export interface Vehicle {
+  id: string;
+  source: string;
+  external_id: string;
+  url: string | null;
+  brand: string;
+  model: string;
+  category: string | null;
+  version: string | null;
+  year: number | null;
+  mileage: number | null;
+  fuel_type: string | null;
+  transmission: string | null;
+  power_hp: number | null;
+  displacement_cc: number | null;
+  doors: number | null;
+  color: string | null;
+  emissions: string | null;
+  location: string | null;
+  seller_type: string | null;
+  first_registration: string | null;
+  price: number | null;
+  currency: string | null;
+  vin: string | null;
+  description: string | null;
+  images: string | null;
+  equipment: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// =============================================================================
 // Search Result Item
 // =============================================================================
 export interface SearchResultItem {

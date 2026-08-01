@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -9,6 +10,16 @@ from app.core.config import settings
 from app.exceptions import AuthenticationError
 from app.models.refresh_token import RefreshToken
 from app.repositories.refresh_token_repository import RefreshTokenRepository
+
+
+def _hash_token(token: str) -> str:
+    """Hash determinista del refresh token para no guardarlo en claro en BBDD.
+
+    SHA-256 simple (sin HMAC) es suficiente aquí porque el propio token ya es
+    un JWT de alta entropía firmado con JWT_SECRET_KEY — no hace falta un
+    secreto adicional, solo evitar que quede legible tal cual en la tabla.
+    """
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
 class RefreshTokenService:
@@ -32,7 +43,7 @@ class RefreshTokenService:
     async def create_refresh_token_record(self, *, user_id: str, token: str) -> RefreshToken:
         expires_at = datetime.now(timezone.utc) + timedelta(minutes=settings.jwt_refresh_token_expire_minutes)
         refresh_token = RefreshToken(
-            token=token,
+            token=_hash_token(token),
             user_id=user_id,
             expires_at=expires_at,
         )
@@ -40,7 +51,7 @@ class RefreshTokenService:
 
     async def validate_refresh_token(self, token: str) -> RefreshToken:
         payload = self.decode_refresh_token(token)
-        refresh_token = await self.repository.get_by_token(token)
+        refresh_token = await self.repository.get_by_token(_hash_token(token))
         
         if refresh_token is None:
             raise AuthenticationError("Refresh token not found")
@@ -54,7 +65,7 @@ class RefreshTokenService:
         return refresh_token
 
     async def revoke_refresh_token(self, token: str) -> None:
-        await self.repository.revoke_by_token(token)
+        await self.repository.revoke_by_token(_hash_token(token))
 
     async def revoke_all_user_tokens(self, user_id: str) -> None:
         await self.repository.revoke_all_by_user_id(user_id)
