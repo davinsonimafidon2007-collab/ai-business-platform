@@ -119,15 +119,21 @@ async def refresh_access_token(
     auth_service: AuthService = Depends(get_auth_service),
     refresh_service: RefreshTokenService = Depends(get_refresh_token_service),
     audit_service: AuditService = Depends(get_audit_service),
+    session: AsyncSession = Depends(get_db_session),
 ) -> TokenResponse:
     refresh_token = payload.get("refresh_token")
     if not refresh_token:
         raise AuthenticationError("Refresh token is required")
-    
+
     refresh_token_record = await refresh_service.validate_refresh_token(refresh_token)
     user_id = refresh_token_record.user_id
-    
-    # Rotación: revocar el refresh token usado y crear uno nuevo
+
+    user_repo = UserRepository(session)
+    user = await user_repo.get_by_id(user_id)
+    if user is None or not user.is_active:
+        await refresh_service.revoke_refresh_token(refresh_token)
+        raise AuthenticationError("User is inactive")
+
     await refresh_service.revoke_refresh_token(refresh_token)
     new_access_token = auth_service.create_access_token(user_id=user_id)
     new_refresh_token = refresh_service.create_refresh_token(user_id=user_id)

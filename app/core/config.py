@@ -1,5 +1,6 @@
 from typing import Literal
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -13,6 +14,24 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/ai_business_platform"
     jwt_secret_key: str = ""
     jwt_algorithm: str = "HS256"
+
+    @model_validator(mode="after")
+    def validate_jwt_secret_for_env(self) -> "Settings":
+        if self.environment == "test":
+            if not self.jwt_secret_key:
+                object.__setattr__(
+                    self,
+                    "jwt_secret_key",
+                    "test_secret_key_that_is_at_least_32_characters_long_1234567890",
+                )
+            return self
+
+        if not self.jwt_secret_key or len(self.jwt_secret_key) < 32:
+            raise ValueError(
+                "JWT_SECRET_KEY must be set and at least 32 characters in "
+                f"environment={self.environment!r}"
+            )
+        return self
     jwt_access_token_expire_minutes: int = 30
     jwt_refresh_token_expire_minutes: int = 60 * 24 * 7  # 7 días
     cors_origins: str = "http://localhost:3000,http://localhost:5173,http://localhost:8080,capacitor://localhost,ionic://localhost,http://localhost,https://localhost"

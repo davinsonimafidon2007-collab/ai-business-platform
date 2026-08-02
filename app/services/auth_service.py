@@ -43,6 +43,9 @@ class AuthService:
         if not is_valid_password:
             raise InvalidCredentialsError("Invalid email or password")
 
+        if not user.is_active:
+            raise AuthenticationError("User is inactive")
+
         return user
 
     async def authenticate_with_google(self, *, id_token: str) -> User:
@@ -69,6 +72,9 @@ class AuthService:
                 is_verified=token_info.get("email_verified", False),
             )
             user = await self.repository.create(user)
+
+        if not user.is_active:
+            raise AuthenticationError("User is inactive")
 
         return user
 
