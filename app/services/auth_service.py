@@ -73,8 +73,14 @@ class AuthService:
         return user
 
     def create_access_token(self, *, user_id: str | Any) -> str:
-        expire_at = datetime.now(timezone.utc) + timedelta(minutes=settings.jwt_access_token_expire_minutes)
-        payload = {"sub": str(user_id), "exp": expire_at}
+        expire_at = datetime.now(timezone.utc) + timedelta(
+            minutes=settings.jwt_access_token_expire_minutes
+        )
+        # RFC 7519: exp debe ser NumericDate (segundos Unix), no datetime
+        payload = {
+            "sub": str(user_id),
+            "exp": int(expire_at.timestamp()),
+        }
         return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
 
     def decode_access_token(self, token: str) -> dict[str, Any]:

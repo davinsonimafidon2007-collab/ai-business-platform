@@ -6,10 +6,12 @@ GET /providers — Lista todos los proveedores registrados.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.api.v1.dependencies import get_provider
 from app.api.v1.schemas.vehicle import ProviderListResponse, VehicleDetailResponse
+from app.dependencies.auth import get_current_user
+from app.models.user import User
 from app.providers.dto import VehicleDetail
 from app.providers.registry import ProviderRegistry
 
@@ -70,6 +72,7 @@ def _build_vehicle_detail_response(detail: VehicleDetail) -> VehicleDetailRespon
 async def get_vehicle_detail(
     provider: str,
     id: str,
+    current_user: User = Depends(get_current_user),
 ) -> VehicleDetailResponse:
     """Obtiene el detalle de un vehículo desde un proveedor.
 
@@ -117,7 +120,9 @@ async def get_vehicle_detail(
         },
     },
 )
-def list_providers() -> ProviderListResponse:
+def list_providers(
+    current_user: User = Depends(get_current_user),
+) -> ProviderListResponse:
     """Lista todos los proveedores registrados."""
     return ProviderListResponse(providers=ProviderRegistry.list_providers())
 

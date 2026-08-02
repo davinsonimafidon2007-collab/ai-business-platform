@@ -27,8 +27,14 @@ class RefreshTokenService:
         self.repository = repository
 
     def create_refresh_token(self, *, user_id: str | Any) -> str:
-        expire_at = datetime.now(timezone.utc) + timedelta(minutes=settings.jwt_refresh_token_expire_minutes)
-        payload = {"sub": str(user_id), "exp": expire_at, "type": "refresh"}
+        expire_at = datetime.now(timezone.utc) + timedelta(
+            minutes=settings.jwt_refresh_token_expire_minutes
+        )
+        payload = {
+            "sub": str(user_id),
+            "exp": int(expire_at.timestamp()),
+            "type": "refresh",
+        }
         return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
 
     def decode_refresh_token(self, token: str) -> dict[str, Any]:
@@ -58,8 +64,8 @@ class RefreshTokenService:
         
         if refresh_token.is_revoked:
             raise AuthenticationError("Refresh token has been revoked")
-        
-        if refresh_token.expires_at < datetime.now(timezone.utc):
+
+        if refresh_token.expires_at is None or refresh_token.expires_at < datetime.now(timezone.utc):
             raise AuthenticationError("Refresh token has expired")
         
         return refresh_token

@@ -10,7 +10,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, status
 
 from app.api.v1.dependencies import get_search_engine_service
-from app.dependencies.auth import get_current_user
+from app.dependencies.auth import get_current_user, require_search
 from app.models.user import User
 from app.api.v1.schemas.search import (
     SearchAPIRequest,
@@ -260,7 +260,7 @@ def _build_search_result_item(result: Any) -> SearchResultItem:
 async def search_vehicles(
     request: SearchAPIRequest,
     search_engine: SearchEngineService = Depends(get_search_engine_service),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_search),
 ) -> SearchAPIResponse:
     """Ejecuta una búsqueda completa de vehículos.
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import secrets
 from datetime import datetime, timedelta, timezone
 
@@ -16,6 +17,11 @@ from app.notifications.email_provider import EmailProvider
 from app.repositories.password_reset_token_repository import PasswordResetTokenRepository
 from app.repositories.user_repository import UserRepository
 from app.services.auth_service import password_hasher
+
+
+def _hash_token(token: str) -> str:
+    """Hash determinista del token (SHA-256). El raw solo viaja por email."""
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
 class PasswordResetService:
@@ -61,7 +67,7 @@ class PasswordResetService:
 
         token_record = PasswordResetToken(
             user_id=str(user.id),
-            token=raw_token,
+            token=_hash_token(raw_token),
             expires_at=expires_at,
         )
         await self.token_repository.create(token_record)
@@ -85,14 +91,14 @@ class PasswordResetService:
             PasswordResetTokenExpiredError: Si el token ha expirado o ya fue usado.
             PasswordResetError: Si el usuario asociado no se encuentra.
         """
-        token_record = await self.token_repository.get_by_token(raw_token)
+        token_record = await self.token_repository.get_by_token(_hash_token(raw_token))
         if token_record is None:
             raise PasswordResetTokenNotFoundError("Password reset token not found")
 
         if token_record.is_used:
             raise PasswordResetTokenExpiredError("Password reset token has already been used")
 
-        if token_record.expires_at < datetime.now(timezone.utc):
+        if token_record.expires_at is None or token_record.expires_at < datetime.now(timezone.utc):
             raise PasswordResetTokenExpiredError("Password reset token has expired")
 
         # Marcar token como usado (uso único)

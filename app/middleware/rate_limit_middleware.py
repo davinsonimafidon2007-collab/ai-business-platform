@@ -61,46 +61,54 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         request: Request,
         call_next: RequestResponseEndpoint,
     ) -> Response:
-        # Skip rate limiting for health endpoint
-        if request.url.path == "/health":
+        path = request.url.path
+
+        # Health (montado bajo /api/v1 y posible alias raíz)
+        if path in ("/health", "/api/v1/health"):
             return await call_next(request)
 
-        # Determine the rate limit key and limit based on auth method
         client_ip = request.client.host if request.client else "unknown"
         user = getattr(request.state, "user", None)
         auth_method = getattr(request.state, "auth_method", None)
 
-        # Check endpoint-level rate limit
-        endpoint_key = f"{request.method}:{request.url.path}"
-        if not self._check_limit(self._endpoint_limits, endpoint_key, DEFAULT_RATE_LIMIT):
+        # Límites específicos por endpoint sensible (antes del genérico)
+        endpoint_key = f"{request.method}:{path}"
+        if path in ("/api/v1/auth/login", "/api/v1/auth/google") and request.method == "POST":
+            endpoint_limit = settings.rate_limit_login
+        elif path == "/api/v1/auth/register" and request.method == "POST":
+            endpoint_limit = settings.rate_limit_register
+        else:
+            endpoint_limit = DEFAULT_RATE_LIMIT
+
+        if not self._check_limit(self._endpoint_limits, endpoint_key, endpoint_limit):
             return JSONResponse(
                 status_code=429,
                 content={"detail": "Too many requests. Please try again later."},
                 headers={"Retry-After": str(self.window_seconds)},
             )
 
-        if auth_method == "jwt" and user:
-            # Rate limit by user ID with role-based limits
-            role = user.role if hasattr(user, "role") else Role.USER
-            limit = ROLE_RATE_LIMITS.get(role, DEFAULT_RATE_LIMIT)
-            if not self._check_limit(self._user_limits, user.id, limit):
+        # Límites por identidad
+        if user is not None and auth_method == "jwt":
+            role = getattr(user, "role", None)
+            limit = ROLE_RATE_LIMITS.get(role, DEFAULT_RATE_LIMIT) if role else DEFAULT_RATE_LIMIT
+            if not self._check_limit(self._user_limits, str(user.id), limit):
                 return JSONResponse(
                     status_code=429,
                     content={"detail": "Too many requests. Please try again later."},
                     headers={"Retry-After": str(self.window_seconds)},
                 )
-        elif auth_method == "api_key" and user:
-            # Rate limit by user ID with role-based limits
-            role = user.role if hasattr(user, "role") else Role.USER
-            limit = ROLE_RATE_LIMITS.get(role, DEFAULT_RATE_LIMIT)
-            if not self._check_limit(self._api_key_limits, user.id, limit):
+        elif auth_method == "api_key":
+            # Usar el mismo techo de usuario autenticado (premium si role disponible)
+            role = getattr(user, "role", None) if user is not None else None
+            limit = ROLE_RATE_LIMITS.get(role, DEFAULT_RATE_LIMIT) if role else DEFAULT_RATE_LIMIT
+            api_key_id = request.headers.get("X-API-Key", "")[:16] or client_ip
+            if not self._check_limit(self._api_key_limits, api_key_id, limit):
                 return JSONResponse(
                     status_code=429,
                     content={"detail": "Too many requests. Please try again later."},
                     headers={"Retry-After": str(self.window_seconds)},
                 )
         else:
-            # Rate limit by IP for unauthenticated requests
             if not self._check_limit(self._ip_limits, client_ip, DEFAULT_RATE_LIMIT):
                 return JSONResponse(
                     status_code=429,

@@ -80,6 +80,8 @@ def require_permission(permission: str):
 
 require_search = require_permission("search")
 require_manage_users = require_permission("manage_users")
+require_manage_roles = require_permission("manage_roles")
 require_manage_api_keys = require_permission("manage_api_keys")
+require_manage_own_api_keys = require_permission("manage_own_api_keys")
 require_view_admin = require_permission("view_admin")
 require_view_audit_logs = require_permission("view_audit_logs")

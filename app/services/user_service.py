@@ -4,6 +4,7 @@ from typing import Any
 from uuid import UUID
 
 from app.exceptions import UserAlreadyExistsError, UserNotFoundError
+from app.models.role import Role
 from app.models.user import User
 from app.repositories.user_repository import UserRepository
 
@@ -44,6 +45,11 @@ class UserService:
         if "is_active" in updates:
             user.is_active = updates["is_active"]
 
+        return await self.repository.update(user)
+
+    async def update_user_role(self, user_id: UUID | str, role: Role) -> User:
+        user = await self.get_user(user_id)
+        user.role = role
         return await self.repository.update(user)
 
     async def delete_user(self, user_id: UUID | str) -> None:

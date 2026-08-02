@@ -94,6 +94,21 @@ class SearchHistoryRepository:
         )
         return list(result.scalars().all())
 
+    async def list_by_user(
+        self,
+        user_id: str,
+        skip: int = 0,
+        limit: int = 100,
+    ) -> list[SearchHistory]:
+        result = await self.session.execute(
+            select(SearchHistory)
+            .where(SearchHistory.user_id == user_id)
+            .order_by(SearchHistory.timestamp.desc())
+            .offset(skip)
+            .limit(limit)
+        )
+        return list(result.scalars().all())
+
     async def delete(self, search_history: SearchHistory) -> None:
         """Deletes a search history record.
 

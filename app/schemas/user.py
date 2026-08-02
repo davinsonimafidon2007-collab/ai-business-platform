@@ -35,3 +35,9 @@ class UserUpdate(BaseModel):
     email: EmailStr | None = None
     full_name: Optional[str] = Field(default=None, max_length=255)
     is_active: bool | None = None
+
+
+class UserRoleUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    role: Role
