@@ -15,6 +15,7 @@ from app.api.v1.router import api_router
 from app.core.config import settings
 from app.core.exception_handlers import register_exception_handlers
 from app.core.logging import setup_logging
+from app.core.redis import close_redis, init_redis
 from app.db.session import db_manager
 from app.jobs.base import JobContext
 from app.jobs.factory import create_scheduler
@@ -53,6 +54,7 @@ async def scheduler_lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     Creates the DatabaseManager, instantiates the Scheduler with all
     registered jobs, starts it on startup and gracefully stops on shutdown.
     """
+    await init_redis()
     await db_manager.init()
 
     context = JobContext(db_manager=db_manager, settings=settings)
@@ -68,6 +70,7 @@ async def scheduler_lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             await scheduler.stop()
 
         await db_manager.shutdown()
+        await close_redis()
 
 
 # ---------------------------------------------------------------------------

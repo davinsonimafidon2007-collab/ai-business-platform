@@ -1,0 +1,90 @@
+"""Async Redis client for shared caching.
+
+Fails soft: if Redis is unavailable, get/set become no-ops and the app
+continues using Postgres cache + live computation.
+"""
+
+from __future__ import annotations
+
+import logging
+from typing import Any
+
+import redis.asyncio as redis
+
+from app.core.config import settings
+
+logger = logging.getLogger(__name__)
+
+_client: redis.Redis | None = None
+
+
+async def init_redis() -> None:
+    """Create the shared connection pool. Call from app lifespan."""
+    global _client
+    if _client is not None:
+        return
+    try:
+        _client = redis.from_url(
+            settings.redis_url,
+            encoding="utf-8",
+            decode_responses=True,
+            socket_connect_timeout=2.0,
+            socket_timeout=2.0,
+        )
+        await _client.ping()
+        logger.info("Redis connected: %s", settings.redis_url)
+    except Exception:
+        logger.exception("Redis unavailable — cache L1 disabled")
+        _client = None
+
+
+async def close_redis() -> None:
+    """Close the shared client. Call from app lifespan shutdown."""
+    global _client
+    if _client is not None:
+        try:
+            await _client.aclose()
+        except Exception:
+            logger.exception("Error closing Redis")
+        _client = None
+
+
+def get_redis() -> redis.Redis | None:
+    """Return the live client or None if Redis is down / not initialized."""
+    return _client
+
+
+async def cache_get(key: str) -> str | None:
+    client = get_redis()
+    if client is None:
+        return None
+    try:
+        return await client.get(key)
+    except Exception:
+        logger.warning("Redis GET failed for key=%s", key, exc_info=True)
+        return None
+
+
+async def cache_set(key: str, value: str, ttl_seconds: int) -> None:
+    client = get_redis()
+    if client is None:
+        return
+    try:
+        await client.set(key, value, ex=max(1, int(ttl_seconds)))
+    except Exception:
+        logger.warning("Redis SET failed for key=%s", key, exc_info=True)
+
+
+async def cache_delete(key: str) -> None:
+    client = get_redis()
+    if client is None:
+        return
+    try:
+        await client.delete(key)
+    except Exception:
+        logger.warning("Redis DELETE failed for key=%s", key, exc_info=True)
+
+
+def market_cache_key(market_hash: str) -> str:
+    """Stable key for market estimation cache entries."""
+    return f"market:est:{market_hash}"

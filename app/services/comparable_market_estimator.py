@@ -47,6 +47,7 @@ from app.config.comparable_market import (
     YEAR_TOLERANCE,
 )
 from app.core.logging import get_logger
+from app.core.redis import cache_get, cache_set, market_cache_key
 from app.models.cached_market import CachedMarketData
 from app.models.market import MarketEstimation
 from app.providers.dto import VehicleSearchResult
@@ -402,6 +403,18 @@ class ComparableMarketEstimator:
         market_hash = self._compute_market_hash(vehicle)
         if market_hash in self._local_cache:
             return self._local_cache[market_hash]
+
+        redis_key = market_cache_key(market_hash)
+        try:
+            cached_json = await cache_get(redis_key)
+            if cached_json:
+                payload = json.loads(cached_json)
+                estimation = self._from_cache_payload(payload)
+                self._local_cache[market_hash] = estimation
+                return estimation
+        except (TypeError, ValueError):
+            logger.warning("Redis market cache payload invalid for key=%s", redis_key)
+
         vehicle_id = self._get_external_id(vehicle)
         vehicle_source = self._get_source(vehicle)
         if vehicle_id and vehicle_source:
@@ -492,6 +505,7 @@ class ComparableMarketEstimator:
             ],
         )
         self._local_cache[market_hash] = estimation
+        await self._save_to_redis(market_hash=market_hash, estimation=estimation)
         if vehicle_id and vehicle_source:
             # Guardado asíncrono directo en el mismo event loop,
             # sin bridges sync->async.
@@ -500,6 +514,22 @@ class ComparableMarketEstimator:
                 market_hash=market_hash, estimation=estimation,
             )
         return estimation
+
+    async def _save_to_redis(self, market_hash: str, estimation: MarketEstimation) -> None:
+        """Persist L1 Redis cache with graceful degradation when Redis is down."""
+        payload = {
+            "market_price": estimation.market_price,
+            "confidence": estimation.confidence,
+            "supply_level": estimation.supply_level,
+            "demand_level": estimation.demand_level,
+            "market_trend": estimation.market_trend,
+            "comparable_count": estimation.comparable_count,
+            "notes": estimation.notes,
+        }
+        try:
+            await cache_set(market_cache_key(market_hash), json.dumps(payload, ensure_ascii=False), int(self._cache_ttl.total_seconds()))
+        except Exception:
+            logger.warning("No se pudo guardar la estimación en Redis (market_hash=%s)", market_hash, exc_info=True)
 
     async def _save_to_cache(
         self, vehicle_id: str, vehicle_source: str, market_hash: str, estimation: MarketEstimation,
@@ -549,6 +579,24 @@ class ComparableMarketEstimator:
             return "underpriced"
         else:
             return "fair"
+
+    @staticmethod
+    def _from_cache_payload(payload: dict[str, Any]) -> MarketEstimation:
+        notes = payload.get("notes") or []
+        if isinstance(notes, str):
+            try:
+                notes = json.loads(notes)
+            except (json.JSONDecodeError, TypeError):
+                notes = [notes]
+        return MarketEstimation(
+            market_price=float(payload.get("market_price", 0.0) or 0.0),
+            confidence=float(payload.get("confidence", 0.0) or 0.0),
+            supply_level=float(payload.get("supply_level", 50.0) or 50.0),
+            demand_level=float(payload.get("demand_level", 50.0) or 50.0),
+            market_trend=str(payload.get("market_trend") or "stable"),
+            comparable_count=int(payload.get("comparable_count", 0) or 0),
+            notes=[str(item) for item in notes],
+        )
 
     @staticmethod
     def _from_cached(cached: CachedMarketData) -> MarketEstimation:
