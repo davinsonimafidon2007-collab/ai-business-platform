@@ -196,7 +196,8 @@ async def test_http_client_close():
 
     # Cerrar el cliente
     await http_client.close()
-    assert http_client._client.is_closed
+    # El cliente se limpia (None) tras cerrarse
+    assert http_client._client is None
 
 
 @pytest.mark.asyncio
@@ -308,3 +309,78 @@ async def test_http_client_custom_default_headers():
     custom_headers = {"X-Custom": "value"}
     http_client = ProviderHttpClient(provider_name="test", default_headers=custom_headers)
     assert http_client.default_headers["X-Custom"] == "value"
+
+
+# --- Task 2 anti-bot tests ---
+
+@pytest.mark.asyncio
+async def test_http_client_403_raises_provider_connection_error():
+    """HTTP 403 anti-bot → ProviderConnectionError (sin reintentos infinitos)."""
+    client = ProviderHttpClient(
+        provider_name="mobile_de",
+        base_url="https://suchen.mobile.de",
+        timeout=5.0,
+        max_retries=2,
+    )
+    mock_response = MagicMock()
+    mock_response.status_code = 403
+    mock_response.text = "Zugriff verweigert / Access denied"
+    mock_response.raise_for_status = MagicMock(
+        side_effect=httpx.HTTPStatusError(
+            "403",
+            request=MagicMock(),
+            response=mock_response,
+        )
+    )
+
+    with patch.object(
+        httpx.AsyncClient, "request", new_callable=AsyncMock, return_value=mock_response
+    ):
+        with pytest.raises(ProviderConnectionError, match="403"):
+            await client.get("/fahrzeuge/search.html")
+
+
+@pytest.mark.asyncio
+async def test_http_client_builds_cookie_header():
+    client = ProviderHttpClient(
+        provider_name="test",
+        cookies="sid=abc; consent=1",
+    )
+    headers = client._build_headers()
+    assert headers.get("Cookie") == "sid=abc; consent=1"
+    assert "User-Agent" in headers
+    assert "Sec-Fetch-Mode" in headers
+
+
+@pytest.mark.asyncio
+async def test_http_client_proxy_passed_to_async_client():
+    client = ProviderHttpClient(
+        provider_name="test",
+        proxy="http://user:pass@proxy.example:8080",
+        timeout=5.0,
+        max_retries=1,
+    )
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.text = "ok"
+    mock_response.raise_for_status = MagicMock()
+
+    with patch("httpx.AsyncClient") as mock_cls:
+        instance = MagicMock()
+        instance.is_closed = False
+        instance.request = AsyncMock(return_value=mock_response)
+        instance.aclose = AsyncMock()
+        mock_cls.return_value = instance
+
+        await client.get("https://example.com/")
+        kwargs = mock_cls.call_args.kwargs
+        assert kwargs.get("proxy") == "http://user:pass@proxy.example:8080"
+
+    await client.close()
+
+
+def test_default_user_agents_are_modern():
+    client = ProviderHttpClient(provider_name="test")
+    uas = client._default_user_agents()
+    assert any("Chrome/131" in ua or "Chrome/12" in ua for ua in uas)
+    assert any("Firefox" in ua for ua in uas)

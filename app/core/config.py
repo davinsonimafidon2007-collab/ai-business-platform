@@ -58,6 +58,12 @@ class Settings(BaseSettings):
     provider_http_max_retries: int = 3
     provider_http_retry_backoff_min: int = 1
     provider_http_retry_backoff_max: int = 60
+    # Proxy residencial (ej. http://user:pass@host:port). Vacío = sin proxy.
+    provider_http_proxy: str = ""
+    # Cookie header de navegador real (ej. "sid=abc; consent=1")
+    provider_http_cookies: str = ""
+    # Delay mínimo entre peticiones (ms). 0 = off. Prod: 800–1500
+    provider_http_min_delay_ms: int = 0
 
     # =========================================================================
     # Scheduler / Jobs configuration
