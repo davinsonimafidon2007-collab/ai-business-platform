@@ -40,58 +40,81 @@ class RefreshOpportunityJob(Job):
                 vehicle_repo = VehicleRepository(session)
                 engine = EvaluationEngine()
 
-                vehicles = await vehicle_repo.list_all(limit=1000)
-                logger.info("Recalculating opportunities for %d vehicles", len(vehicles))
-
+                page_size = 200
+                skip = 0
                 updated_count = 0
                 failed_count = 0
+                total_seen = 0
 
-                for vehicle in vehicles:
-                    try:
-                        result = engine.evaluate(vehicle)
+                while True:
+                    vehicles = await vehicle_repo.list_all(skip=skip, limit=page_size)
+                    if not vehicles:
+                        break
 
-                        existing = await opp_repo.get_by_vehicle_id(vehicle.id)
-                        risk = _CLASSIFICATION_TO_RISK.get(result.classification, "MEDIUM")
+                    total_seen += len(vehicles)
+                    logger.info(
+                        "Processing vehicles batch skip=%d count=%d",
+                        skip,
+                        len(vehicles),
+                    )
 
-                        if existing:
-                            opp = existing[0]
-                            opp.opportunity_score = float(result.score)
-                            opp.recommendation = result.recommendation
-                            opp.roi = round(result.profit_margin_percent, 2)
-                            opp.risk = risk
-                            opp.profit = round(result.gross_profit, 2)
-                            opp.analyzed_at = datetime.now(timezone.utc)
-                        else:
-                            opp = Opportunity(
-                                vehicle_id=vehicle.id,
-                                opportunity_score=float(result.score),
-                                recommendation=result.recommendation,
-                                roi=round(result.profit_margin_percent, 2),
-                                risk=risk,
-                                profit=round(result.gross_profit, 2),
-                                analyzed_at=datetime.now(timezone.utc),
+                    for vehicle in vehicles:
+                        try:
+                            result = engine.evaluate(vehicle)
+
+                            existing = await opp_repo.get_by_vehicle_id(vehicle.id)
+                            risk = _CLASSIFICATION_TO_RISK.get(
+                                result.classification, "MEDIUM"
                             )
 
-                        await opp_repo.save(opp)
-                        updated_count += 1
-                    except Exception:
-                        logger.exception(
-                            "Failed to recalculate opportunity for vehicle %s", vehicle.id
-                        )
-                        failed_count += 1
+                            if existing:
+                                opp = existing[0]
+                                opp.opportunity_score = float(result.score)
+                                opp.recommendation = result.recommendation
+                                opp.roi = round(result.profit_margin_percent, 2)
+                                opp.risk = risk
+                                opp.profit = round(result.gross_profit, 2)
+                                opp.analyzed_at = datetime.now(timezone.utc)
+                            else:
+                                opp = Opportunity(
+                                    vehicle_id=vehicle.id,
+                                    opportunity_score=float(result.score),
+                                    recommendation=result.recommendation,
+                                    roi=round(result.profit_margin_percent, 2),
+                                    risk=risk,
+                                    profit=round(result.gross_profit, 2),
+                                    analyzed_at=datetime.now(timezone.utc),
+                                )
+
+                            await opp_repo.save(opp)
+                            updated_count += 1
+                        except Exception:
+                            logger.exception(
+                                "Failed to recalculate opportunity for vehicle %s",
+                                vehicle.id,
+                            )
+                            failed_count += 1
+
+                    if len(vehicles) < page_size:
+                        break
+                    skip += page_size
 
                 logger.info(
-                    "Opportunity recalculation complete. Updated: %d, Failed: %d",
+                    "Opportunity recalculation complete. "
+                    "Updated: %d, Failed: %d, Total seen: %d",
                     updated_count,
                     failed_count,
+                    total_seen,
                 )
 
                 return JobResult(
                     success=failed_count == 0,
-                    message=f"Recalculated {updated_count} opportunities "
-                    f"({failed_count} failed) across {len(vehicles)} vehicles",
+                    message=(
+                        f"Recalculated {updated_count} opportunities "
+                        f"({failed_count} failed) across {total_seen} vehicles"
+                    ),
                     data={
-                        "vehicle_count": len(vehicles),
+                        "vehicle_count": total_seen,
                         "updated_count": updated_count,
                         "failed_count": failed_count,
                     },

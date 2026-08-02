@@ -21,6 +21,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.config.negotiation import (
+    ACCIDENT_DISCOUNT_PERCENT,
     BUY_MAX_DISCOUNT_NEEDED,
     BUY_MIN_LEVERAGE_SCORE,
     COUNTER_OFFER_MULTIPLIER,
@@ -36,6 +37,7 @@ from app.config.negotiation import (
     MAX_SCRIPT_DEFECT_POINTS,
     MAX_SCRIPT_MARKET_POINTS,
     MIN_MARGIN_FOR_BUY,
+    MIN_OFFER_PERCENT_OF_VALUE,
     MIN_PROFIT_FOR_NEGOTIATE,
     MIN_ROI_FOR_BUY,
     NEGOTIATE_MIN_LEVERAGE_SCORE,
@@ -173,11 +175,10 @@ class NegotiationEngine:
 
         repair_cost = input_data.repair_estimate.total_repair_cost
 
-        # Descuento por accidentes
+        # Descuento por accidentes (mismo % que en argumentos de negociación)
         accident_discount = 0.0
         if input_data.inspection_result.has_accident_history:
-            # Descuento del 10-20% sobre el precio de mercado si hay historial de accidentes
-            accident_discount = market_price * 0.10
+            accident_discount = market_price * ACCIDENT_DISCOUNT_PERCENT
 
         estimated_value = market_price - repair_cost - accident_discount
         return max(estimated_value, 0.0)
@@ -304,8 +305,9 @@ class NegotiationEngine:
     ) -> float:
         """Calcula la oferta inicial recomendada.
 
-        La oferta inicial es un porcentaje del valor estimado, ajustado
-        por el apalancamiento. A mayor leverage, menor oferta inicial.
+        Base: 90% del valor estimado, menos descuento por leverage (hasta 15%).
+        Suelo: MIN_OFFER_PERCENT_OF_VALUE del valor estimado (no del asking).
+        Techo: nunca superar el asking_price ni el valor estimado.
         """
         if estimated_value <= 0:
             return asking_price * 0.80 if asking_price > 0 else 0.0
@@ -313,13 +315,18 @@ class NegotiationEngine:
         # Base: 90% del valor estimado
         base_offer = estimated_value * MAX_INITIAL_OFFER_PERCENT_OF_VALUE
 
-        # Ajuste por leverage: hasta 15% adicional de descuento
+        # Ajuste por leverage: hasta 15% adicional de descuento sobre el valor
         leverage_discount = (leverage_score / 100.0) * 0.15 * estimated_value
         offer = base_offer - leverage_discount
 
-        # No ofrecer menos del 60% del asking price (oferta irreal)
-        min_offer = asking_price * 0.60 if asking_price > 0 else 0.0
+        # Suelo: no bajar del % mínimo del valor estimado
+        min_offer = estimated_value * MIN_OFFER_PERCENT_OF_VALUE
         offer = max(offer, min_offer)
+
+        # Techo: no superar asking ni valor estimado
+        if asking_price > 0:
+            offer = min(offer, asking_price)
+        offer = min(offer, estimated_value)
 
         return offer
 
@@ -537,7 +544,7 @@ class NegotiationEngine:
 
         # --- Historial de accidentes ---
         if input_data.inspection_result.has_accident_history:
-            impact = market_price * 0.15 if market_price > 0 else 1500.0
+            impact = market_price * ACCIDENT_DISCOUNT_PERCENT if market_price > 0 else 1500.0
             notes = f" {input_data.inspection_result.accident_notes}" if input_data.inspection_result.accident_notes else ""
             arguments.append(NegotiationArgument(
                 argument=(
@@ -663,28 +670,23 @@ class NegotiationEngine:
               (tanto original como recalculado).
             - NEGOTIATE: casos intermedios con apalancamiento suficiente.
         """
-        # Verificar beneficio original (antes de recalcular con nueva oferta)
-        profit_data = input_data.profit_analysis_data
-        original_net_profit = profit_data.get("net_profit", profit_data.get("netProfit", 0.0)) or 0.0
-
-        # WALK_AWAY: descuento excesivo necesario o beneficio negativo
+        # WALK_AWAY: descuento excesivo necesario
         if discount_needed >= WALK_AWAY_MIN_DISCOUNT_NEEDED:
             return NegotiationRecommendation.WALK_AWAY
 
-        # Si el beneficio original es negativo, WALK_AWAY
-        if original_net_profit < MIN_PROFIT_FOR_NEGOTIATE:
-            return NegotiationRecommendation.WALK_AWAY
-
+        # WALK_AWAY: incluso con la oferta recomendada el beneficio es negativo/nulo
         if expected_profit < MIN_PROFIT_FOR_NEGOTIATE:
             return NegotiationRecommendation.WALK_AWAY
 
-        # BUY: descuento pequeño o buen ROI/margen
+        # BUY: descuento pequeño necesario
         if discount_needed <= BUY_MAX_DISCOUNT_NEEDED:
             return NegotiationRecommendation.BUY
 
+        profit_data = input_data.profit_analysis_data
         roi = profit_data.get("roi_percentage", profit_data.get("roi", 0.0)) or 0.0
         margin = profit_data.get("profit_margin_percentage", 0.0) or 0.0
 
+        # BUY: buen ROI y margen en el análisis de rentabilidad
         if roi >= MIN_ROI_FOR_BUY and margin >= MIN_MARGIN_FOR_BUY:
             return NegotiationRecommendation.BUY
 
@@ -692,7 +694,7 @@ class NegotiationEngine:
         if leverage_score >= NEGOTIATE_MIN_LEVERAGE_SCORE:
             return NegotiationRecommendation.NEGOTIATE
 
-        # Si no hay suficiente apalancamiento y el descuento necesario es alto
+        # Sin apalancamiento y descuento alto → abandonar
         if discount_needed > 10.0:
             return NegotiationRecommendation.WALK_AWAY
 

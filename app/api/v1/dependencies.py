@@ -119,7 +119,10 @@ def get_http_client() -> ProviderHttpClient:
 
 
 def get_mobile_de_provider() -> MobileDeProvider:
-    """Obtiene el provider de mobile.de."""
+    """Obtiene el provider de mobile.de.
+
+    base_url debe coincidir con MobileDeProvider.BASE_URL (suchen.mobile.de).
+    """
     return MobileDeProvider(base_url="https://suchen.mobile.de")
 
 

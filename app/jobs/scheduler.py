@@ -259,30 +259,36 @@ class Scheduler:
     # ------------------------------------------------------------------
 
     async def _run_periodic(self, name: str, entry: ScheduledJob) -> None:
-        """Background loop for a single periodic job."""
+        """Background loop for a single periodic job.
+
+        Ejecuta el job una vez al arrancar y después espera ``interval``
+        entre ejecuciones. Así no hay que esperar 1h/24h tras un restart.
+        """
         cancel_event = entry.cancel_event
         if cancel_event is None:
             return
 
+        first_run = True
+
         while self._running and not cancel_event.is_set():
-            now = datetime.now(timezone.utc)
-            entry.metrics.next_execution = now + timedelta(seconds=entry.interval)
+            if not first_run:
+                now = datetime.now(timezone.utc)
+                entry.metrics.next_execution = now + timedelta(seconds=entry.interval)
+                try:
+                    await self._wait_with_cancellation(
+                        entry.interval, cancel_event
+                    )
+                except asyncio.CancelledError:
+                    break
 
-            try:
-                # Wait for the interval, but allow early cancellation
-                await self._wait_with_cancellation(
-                    entry.interval, cancel_event
-                )
-            except asyncio.CancelledError:
-                break
-
-            if cancel_event.is_set() or not self._running:
-                break
+                if cancel_event.is_set() or not self._running:
+                    break
+            else:
+                first_run = False
+                entry.metrics.next_execution = datetime.now(timezone.utc)
 
             entry.metrics.status = JobStatus.RUNNING
             result = await self._execute_with_semaphore(entry.job)
-
-            # Update metrics
             entry.job._record_execution(result)
 
         entry.metrics.status = JobStatus.CANCELLED

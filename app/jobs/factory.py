@@ -44,9 +44,10 @@ def create_scheduler(context: JobContext) -> Scheduler:
         CleanupExpiredCacheJob(),
         interval=context.settings.cache_refresh_interval,
     )
+    # Cleanup de historial: correr a diario; el TTL se usa solo como cutoff de edad
     scheduler.register(
         CleanupOldSearchesJob(),
-        interval=context.settings.search_history_ttl,
+        interval=86400,  # 24 horas
     )
 
     return scheduler

@@ -55,10 +55,21 @@ MAX_INITIAL_OFFER_PERCENT_OF_VALUE: float = 0.90
 """Oferta inicial máxima como porcentaje del valor estimado (90%)."""
 
 MAX_PURCHASE_PRICE_MULTIPLIER: float = 1.05
-"""Precio máximo como multiplicador del valor estimado (105%)."""
+"""Precio máximo que se puede pagar como multiplicador del valor estimado (105%)."""
 
-WALK_AWAY_MULTIPLIER: float = 1.10
-"""Walk-away price como multiplicador del valor estimado (110%)."""
+# CRÍTICO: walk-away DEBE ser <= max purchase.
+# El comprador abandona cuando el vendedor exige más que el techo de compra.
+WALK_AWAY_MULTIPLIER: float = 1.05
+"""Walk-away price = mismo techo que max purchase (105% del valor estimado)."""
+
+# Suelo de oferta inicial: no bajar del X% del valor estimado (no del asking).
+# Evita ofertas irreales cuando el asking está muy hinchado.
+MIN_OFFER_PERCENT_OF_VALUE: float = 0.70
+"""Oferta inicial mínima como porcentaje del valor estimado (70%)."""
+
+# Descuento por historial de accidentes (único valor, usado en valor Y en argumentos)
+ACCIDENT_DISCOUNT_PERCENT: float = 0.10
+"""Descuento sobre market_price si hay historial de accidentes (10%)."""
 
 # =============================================================================
 # Umbrales de negociación

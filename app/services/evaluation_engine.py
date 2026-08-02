@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 
 from app.core.config import settings
@@ -45,25 +46,31 @@ class EvaluationEngine:
     # Se pueden sobreescribir mediante Settings o variables de entorno
 
     # Costes fijos
-    DEFAULT_ITV_COST: float = 150.0  # Coste base de la ITV
-    DEFAULT_GESTORIA_COST: float = 350.0  # Coste base de gestoría
-    DEFAULT_TRANSPORT_COST_PER_CUBIC_METER: float = 250.0  # €/m³
+    DEFAULT_ITV_COST: float = 150.0
+    DEFAULT_GESTORIA_COST: float = 350.0
+    DEFAULT_TRANSPORT_COST_PER_CUBIC_METER: float = 250.0
 
-    # Impuestos
-    IVA_RATE: float = 0.21  # 21% IVA en España
-    IMPORT_TAX_RATE: float = 0.10  # 10% impuesto de importación (fuera de UE)
+    # Impuestos — supuestos documentados para importación DE (UE) → ES
+    # Vehículos usados intra-UE: NO se aplica IVA pleno sobre el precio de compra alemán.
+    # El coste fiscal relevante en España es el impuesto de matriculación (IEDMT)
+    # y tasas. Se usa un proxy simplificado hasta tener tabla CO2 real.
+    IVA_RATE: float = 0.21  # Solo para proveedores fuera de UE (no DE)
+    IMPORT_TAX_RATE: float = 0.10  # Solo fuera de UE
 
-    # Matriculación
-    REGISTRATION_TAX_RATE: float = 0.04  # 4% impuesto de matriculación
-    REGISTRATION_FEE: float = 200.0  # Tasas de tráfico
+    # Matriculación España (proxy; idealmente basado en g/km CO2)
+    REGISTRATION_TAX_RATE: float = 0.045  # ~4.5% proxy IEDMT
+    REGISTRATION_FEE: float = 200.0
+
+    # Markup de reventa DE→ES (tesis del negocio: precio ES > precio DE)
+    DE_TO_ES_MARKET_MARKUP: float = 1.18  # 18% sobre precio de compra DE
 
     # Margen mínimo aceptable
-    MIN_PROFIT_MARGIN_PERCENT: float = 15.0  # Margen mínimo para clasificación "verde"
-    WARNING_PROFIT_MARGIN_PERCENT: float = 8.0  # Margen mínimo para clasificación "amarillo"
+    MIN_PROFIT_MARGIN_PERCENT: float = 15.0
+    WARNING_PROFIT_MARGIN_PERCENT: float = 8.0
 
     # Umbrales de score
-    GREEN_SCORE_THRESHOLD: int = 70  # Score mínimo para "verde"
-    YELLOW_SCORE_THRESHOLD: int = 40  # Score mínimo para "amarillo"
+    GREEN_SCORE_THRESHOLD: int = 70
+    YELLOW_SCORE_THRESHOLD: int = 40
 
     # Factores de depreciación por antigüedad
     AGE_DEPRECIATION_RATES: dict[int, float] = None  # Se inicializa en __init__
@@ -79,6 +86,10 @@ class EvaluationEngine:
             5: 0.55,  # 5 años: 55% depreciación
         }
         # Para más de 5 años, usar 55% + 5% por año adicional
+
+    @staticmethod
+    def _current_year() -> int:
+        return datetime.now().year
 
     def evaluate(self, vehicle: Vehicle) -> EvaluationResult:
         """Evalúa un vehículo y calcula todos los costes y rentabilidad.
@@ -99,13 +110,13 @@ class EvaluationEngine:
         # 2. Coste de transporte
         transport_cost = self._calculate_transport_cost(vehicle)
 
-        # 3. Impuestos de importación (si viene de fuera de la UE)
-        import_tax = self._calculate_import_tax(vehicle_cost)
+        # 3. Impuestos de importación (solo fuera de UE; DE = 0)
+        import_tax = self._calculate_import_tax(vehicle_cost, vehicle)
 
-        # 4. IVA
-        iva = self._calculate_iva(vehicle_cost + import_tax)
+        # 4. IVA (solo fuera de UE; DE usados = 0 en este modelo)
+        iva = self._calculate_iva(vehicle_cost + import_tax, vehicle)
 
-        # 5. Impuesto de matriculación
+        # 5. Impuesto de matriculación (España)
         registration_tax = self._calculate_registration_tax(vehicle_cost)
 
         # 6. Tasas de matriculación
@@ -192,37 +203,31 @@ class EvaluationEngine:
 
         # Ajustar por antigüedad (vehículos más antiguos pueden necesitar transporte especial)
         if vehicle.year:
-            current_year = 2024  # Se puede hacer dinámico
+            current_year = self._current_year()
             age = current_year - vehicle.year
             if age > 15:
                 base_cost *= 1.2  # 20% más para vehículos muy antiguos
 
         return base_cost
 
-    def _calculate_import_tax(self, vehicle_cost: float) -> float:
-        """Calcula el impuesto de importación.
+    def _calculate_import_tax(self, vehicle_cost: float, vehicle: Vehicle | None = None) -> float:
+        """Impuesto de importación. Cero para proveedores UE (mobile_de, autoscout24)."""
+        source = (getattr(vehicle, "source", None) or "").lower() if vehicle else ""
+        # Proveedores actuales son UE
+        if source in ("mobile_de", "autoscout24", "mobile.de", ""):
+            return 0.0
+        return vehicle_cost * self.IMPORT_TAX_RATE
 
-        Args:
-            vehicle_cost: Coste del vehículo.
+    def _calculate_iva(self, base: float, vehicle: Vehicle | None = None) -> float:
+        """IVA. Cero para usados intra-UE en este modelo simplificado.
 
-        Returns:
-            Impuesto de importación en euros.
+        Nota: el tratamiento real depende de si el vendedor es particular o
+        profesional y del régimen de IVA del país de origen. Hasta tener
+        esa información en el listing, no aplicamos IVA pleno a DE.
         """
-        # Alemania está en la UE, pero si el vehículo viene de fuera,
-        # se aplica este impuesto
-        # Por defecto, asumimos que viene de Alemania (UE), así que 0
-        # Pero dejamos la lógica preparada para futuros proveedores fuera de la UE
-        return 0.0
-
-    def _calculate_iva(self, base: float) -> float:
-        """Calcula el IVA.
-
-        Args:
-            base: Base imponible.
-
-        Returns:
-            IVA en euros.
-        """
+        source = (getattr(vehicle, "source", None) or "").lower() if vehicle else ""
+        if source in ("mobile_de", "autoscout24", "mobile.de", ""):
+            return 0.0
         return base * self.IVA_RATE
 
     def _calculate_registration_tax(self, vehicle_cost: float) -> float:
@@ -237,51 +242,33 @@ class EvaluationEngine:
         return vehicle_cost * self.REGISTRATION_TAX_RATE
 
     def _estimate_sale_price_in_spain(self, vehicle: Vehicle) -> float:
-        """Estima el precio de venta del vehículo en España.
+        """Estima el precio de reventa en España a partir del precio de compra en DE.
 
-        Args:
-            vehicle: Vehículo a evaluar.
-
-        Returns:
-            Precio estimado de venta en euros.
+        Tesis del negocio: el mercado español paga más que el alemán para el
+        mismo vehículo premium. Se parte del precio DE y se aplica un markup
+        DE→ES, con ajustes por kilometraje excesivo y marca.
+        NO se deprecia el precio DE por antigüedad (ya está reflejada en el
+        precio de compra del anuncio).
         """
         if not vehicle.price or vehicle.price <= 0:
             return 0.0
 
-        # Partir del precio de compra
         base_price = vehicle.price
 
-        # Aplicar depreciación por antigüedad
-        if vehicle.year:
-            current_year = 2024
-            age = current_year - vehicle.year
-
-            if age in self.AGE_DEPRECIATION_RATES:
-                depreciation = self.AGE_DEPRECIATION_RATES[age]
-            elif age > 5:
-                # Más de 5 años: 55% + 5% por año adicional
-                depreciation = 0.55 + (age - 5) * 0.05
-                # Limitar a 80% máximo de depreciación
-                depreciation = min(depreciation, 0.80)
-            else:
-                depreciation = 0.0
-
-            base_price = base_price * (1 - depreciation)
-
-        # Ajustar por kilometraje
-        if vehicle.mileage and vehicle.mileage > 0:
-            # Depreciación adicional por kilometraje
-            # Asumimos promedio de 15,000 km/año
-            expected_mileage = max(0, (2024 - vehicle.year if vehicle.year else 0)) * 15000
+        # Penalización solo por kilometraje excesivo respecto a la media
+        if vehicle.mileage and vehicle.mileage > 0 and vehicle.year:
+            age = max(0, self._current_year() - vehicle.year)
+            expected_mileage = age * 15000
             if vehicle.mileage > expected_mileage:
                 excess_km = vehicle.mileage - expected_mileage
-                mileage_penalty = (excess_km / 10000) * 0.02  # 2% por cada 10,000 km extra
-                base_price = base_price * (1 - min(mileage_penalty, 0.15))  # Máximo 15% de penalización
+                mileage_penalty = (excess_km / 10000) * 0.02  # 2% por cada 10k km extra
+                base_price = base_price * (1 - min(mileage_penalty, 0.15))
 
-        # Ajustar por marca (algunas marcas mantienen mejor el valor)
+        # Prima de marca (mantiene valor)
         brand_premium: dict[str, float] = {
             "porsche": 1.10,
             "mercedes-benz": 1.05,
+            "mercedes": 1.05,
             "bmw": 1.05,
             "audi": 1.03,
             "volkswagen": 1.00,
@@ -289,16 +276,13 @@ class EvaluationEngine:
             "lexus": 1.10,
             "honda": 1.05,
         }
-
         if vehicle.brand:
-            brand_lower = vehicle.brand.lower()
+            brand_lower = vehicle.brand.lower().strip()
             if brand_lower in brand_premium:
                 base_price = base_price * brand_premium[brand_lower]
 
-        # Añadir margen de comercialización (10-15%)
-        markup = 1.12  # 12% de margen
-        estimated_price = base_price * markup
-
+        # Markup de mercado DE→ES
+        estimated_price = base_price * self.DE_TO_ES_MARKET_MARKUP
         return estimated_price
 
     def _calculate_score(
@@ -328,7 +312,7 @@ class EvaluationEngine:
 
         # Ajustar por antigüedad (hasta +10 puntos)
         if vehicle.year:
-            current_year = 2024
+            current_year = self._current_year()
             age = current_year - vehicle.year
             if age <= 3:
                 score += 10

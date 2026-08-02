@@ -494,27 +494,51 @@ class VehicleProvider(ABC):
         return None
 
     def _extract_year(self, soup: Any) -> int | None:
-        """Extrae el año de registro del vehículo."""
+        """Extrae el año de primera matriculación / fabricación.
+
+        Prioriza patrones explícitos (EZ, Erstzulassung, matrícula).
+        Evita el fallback genérico ``\b(20xx)\b`` que captura años de
+        copyright del footer (2024–2026).
+        """
         text = soup.get_text()
-        # Patrón: "01/2020" como año de primera matriculación
-        match = re.search(r"(?:0[1-9]|1[0-2])/(20\d{2})", text)
-        if match:
-            try:
-                return int(match.group(1))
-            except ValueError:
-                return None
-        # Patrón: "1ª matriculación: 2020" o "primer registro 2020"
-        match = re.search(r"(?:matriculaci[oó]n|registro|primera)[^\d]*(\d{4})", text, re.IGNORECASE)
-        if match:
-            year = int(match.group(1))
-            if 1900 <= year <= 2100:
-                return year
-        # Patrón: año de fabricación "año 2020"
-        match = re.search(r"\b(20\d{2})\b", text)
+
+        # 1) "EZ 03/2020", "03/2020", "Erstzulassung 03/2020"
+        match = re.search(
+            r"(?:EZ|Erstzulassung|1[ªa].?\s*matriculaci[oó]n|primera\s+matriculaci[oó]n)?\s*"
+            r"(?:0[1-9]|1[0-2])/((?:19|20)\d{2})",
+            text,
+            re.IGNORECASE,
+        )
         if match:
             year = int(match.group(1))
-            if 1990 <= year <= 2100:
+            if 1980 <= year <= 2100:
                 return year
+
+        # 2) "EZ 2020", "Erstzulassung: 2020", "Baujahr 2020"
+        match = re.search(
+            r"(?:EZ|Erstzulassung|Baujahr|Jahr|año|year|matriculaci[oó]n|registro)"
+            r"[^\d]{0,20}((?:19|20)\d{2})",
+            text,
+            re.IGNORECASE,
+        )
+        if match:
+            year = int(match.group(1))
+            if 1980 <= year <= 2100:
+                return year
+
+        # 3) data-year attribute si existe
+        tag = soup.select_one("[data-year]") if hasattr(soup, "select_one") else None
+        if tag is not None:
+            raw = tag.get("data-year")
+            if raw:
+                try:
+                    year = int(str(raw).strip()[:4])
+                    if 1980 <= year <= 2100:
+                        return year
+                except ValueError:
+                    pass
+
+        # Sin fallback genérico de cualquier 20xx en la página
         return None
 
     def _extract_fuel(self, soup: Any) -> str | None:
@@ -534,15 +558,48 @@ class VehicleProvider(ABC):
         return None
 
     def _extract_power(self, soup: Any) -> int | None:
-        """Extrae la potencia en caballos (hp)."""
+        """Extrae la potencia en caballos (hp / PS).
+
+        Acepta formatos DE y ES:
+          - "150 PS", "150 hp", "150 cv"
+          - "110 kW (150 PS)" → prioriza el valor entre paréntesis en PS/hp
+          - "110 kW" solo → convierte kW → PS (× 1.35962)
+        """
         text = soup.get_text()
-        # Patrón: "150 hp" o "150 HP" o "150cv"
-        match = re.search(r"(\d{2,4})\s*(?:hp|cv|ch)", text, re.IGNORECASE)
+
+        # 1) "110 kW (150 PS)" o "110 kW (150 hp)"
+        match = re.search(
+            r"\d+\s*kW\s*\(\s*(\d{2,4})\s*(?:PS|hp|cv|ch)\s*\)",
+            text,
+            re.IGNORECASE,
+        )
         if match:
             try:
                 return int(match.group(1))
             except ValueError:
-                return None
+                pass
+
+        # 2) "150 PS" / "150 hp" / "150 cv" / "150 ch"
+        match = re.search(
+            r"(?<!\d)(\d{2,4})\s*(?:PS|hp|cv|ch)\b",
+            text,
+            re.IGNORECASE,
+        )
+        if match:
+            try:
+                return int(match.group(1))
+            except ValueError:
+                pass
+
+        # 3) Solo kW → convertir a PS aproximados
+        match = re.search(r"(?<!\d)(\d{2,4})\s*kW\b", text, re.IGNORECASE)
+        if match:
+            try:
+                kw = int(match.group(1))
+                return int(round(kw * 1.35962))
+            except ValueError:
+                pass
+
         return None
 
     def _extract_location(self, soup: Any) -> str | None:
