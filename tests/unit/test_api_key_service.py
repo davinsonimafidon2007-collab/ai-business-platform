@@ -94,7 +94,7 @@ class TestApiKeyService:
             prefix="abp_live_",
             is_active=True,
         )
-        mock_repository.get_active_by_key_hash.return_value = mock_record
+        mock_repository.list_active_by_prefix.return_value = [mock_record]
 
         result = await api_key_service.validate_api_key(api_key)
         assert result.id == "test-id"
@@ -107,7 +107,7 @@ class TestApiKeyService:
         mock_repository: MagicMock,
     ) -> None:
         """Test that an invalid API key raises an error."""
-        mock_repository.get_active_by_key_hash.return_value = None
+        mock_repository.list_active_by_prefix.return_value = []
 
         with pytest.raises(Exception) as exc_info:
             await api_key_service.validate_api_key("invalid_key")
@@ -131,7 +131,7 @@ class TestApiKeyService:
             is_active=True,
             expires_at=datetime.now(timezone.utc) - timedelta(days=1),
         )
-        mock_repository.get_active_by_key_hash.return_value = mock_record
+        mock_repository.list_active_by_prefix.return_value = [mock_record]
 
         with pytest.raises(Exception) as exc_info:
             await api_key_service.validate_api_key(api_key)
@@ -161,3 +161,4 @@ class TestApiKeyService:
         assert len(keys) == 2
         assert keys[0].name == "Key 1"
         assert keys[1].name == "Key 2"
+

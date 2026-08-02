@@ -22,9 +22,10 @@ def service(repos: tuple[AsyncMock, AsyncMock, AsyncMock]) -> InspectionService:
 async def test_create_session_starts_as_draft(service: InspectionService, repos: tuple[AsyncMock, AsyncMock, AsyncMock]) -> None:
     created = InspectionSession(vehicle_id="00000000-0000-0000-0000-000000000001")
     repos[0].create.return_value = created
-    result = await service.create_session(created.vehicle_id)
+    result = await service.create_session(created.vehicle_id, user_id="00000000-0000-0000-0000-000000000099")
     assert result is created
     assert repos[0].create.call_args.args[0].status == "DRAFT"
+    assert repos[0].create.call_args.args[0].user_id == "00000000-0000-0000-0000-000000000099"
 
 
 @pytest.mark.asyncio

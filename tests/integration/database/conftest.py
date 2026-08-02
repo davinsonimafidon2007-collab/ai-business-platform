@@ -84,6 +84,7 @@ async def sample_vehicle(session: AsyncSession) -> Vehicle:
     in the database before testing opportunity or evaluation repos.
     """
     vehicle = Vehicle(
+        user_id="00000000-0000-0000-0000-000000000099",
         source="test_provider",
         external_id="test_ext_123",
         brand="TestBrand",

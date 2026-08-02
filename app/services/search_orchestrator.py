@@ -30,6 +30,7 @@ Flujo:
 
 from __future__ import annotations
 
+import inspect
 from typing import Any
 
 from app.core.logging import get_logger
@@ -360,8 +361,16 @@ class SearchOrchestrator:
         # 1. Scoring
         vehicle_score = self._vehicle_scorer.score(vehicle)
 
-        # 2. Mercado
-        market_estimation = await self._market_estimator.estimate(vehicle)
+# 2. Mercado — prefiere estimate_async si existe, fallback a estimate
+        estimate_method = getattr(self._market_estimator, "estimate_async", None)
+        if estimate_method is not None:
+            market_estimation = await estimate_method(vehicle)
+        else:
+            result = self._market_estimator.estimate(vehicle)
+            if inspect.iscoroutine(result):
+                market_estimation = await result
+            else:
+                market_estimation = result
 
         # 3. Rentabilidad (usando el precio de reventa real estimado por el
         #    motor de mercado, en vez del multiplicador fijo por defecto)

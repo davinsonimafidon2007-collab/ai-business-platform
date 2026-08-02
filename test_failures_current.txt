@@ -1,0 +1,63 @@
+﻿FAILED tests/integration/api/test_search_api.py::TestSearchEndpoint::test_empty_search
+FAILED tests/integration/api/test_search_api.py::TestSearchEndpoint::test_min_price_greater_than_max_returns_422
+FAILED tests/integration/api/test_search_api.py::TestSearchEndpoint::test_min_price_max_price_mapping
+FAILED tests/integration/api/test_search_api.py::TestSearchEndpoint::test_missing_query_returns_422
+FAILED tests/integration/api/test_search_api.py::TestSearchEndpoint::test_search_has_results
+FAILED tests/integration/api/test_search_api.py::TestSearchEndpoint::test_search_has_summary
+FAILED tests/integration/api/test_search_api.py::TestSearchEndpoint::test_search_result_has_analysis
+FAILED tests/integration/api/test_search_api.py::TestSearchEndpoint::test_search_result_has_vehicle_info
+FAILED tests/integration/api/test_search_api.py::TestSearchEndpoint::test_search_returns_200
+FAILED tests/integration/api/test_search_api.py::TestSearchEndpoint::test_search_serializes_to_json
+FAILED tests/integration/test_auth_api.py::test_register_and_login_user - Con...
+FAILED tests/integration/test_auth_api.py::test_request_and_verify_email - Co...
+FAILED tests/integration/test_auth_api.py::test_verify_with_already_used_token_returns_error
+FAILED tests/integration/test_auth_api.py::test_verify_with_expired_token_returns_error
+FAILED tests/integration/test_inspection_api.py::test_create_and_get_session
+FAILED tests/integration/test_inspection_api.py::test_update_photo_finalize_and_summary
+FAILED tests/integration/test_password_reset_api.py::test_forgot_password_invalidates_previous_tokens
+FAILED tests/integration/test_password_reset_api.py::test_forgot_password_returns_success_for_existing_user
+FAILED tests/integration/test_password_reset_api.py::test_reset_password_successfully
+FAILED tests/integration/test_password_reset_api.py::test_reset_password_with_already_used_token_returns_error
+FAILED tests/integration/test_password_reset_api.py::test_reset_password_with_expired_token_returns_error
+FAILED tests/integration/test_postgres_connection.py::test_database_connection
+FAILED tests/integration/test_rbac_api.py::test_admin_access_is_allowed - ass...
+FAILED tests/integration/test_rbac_api.py::test_authenticated_user_without_permission_is_forbidden
+FAILED tests/integration/test_rbac_api.py::test_missing_jwt_returns_401 - ass...
+FAILED tests/integration/test_rbac_api.py::test_user_access_is_allowed - asse...
+FAILED tests/integration/test_rbac_api.py::test_user_is_forbidden_from_admin_endpoint
+FAILED tests/integration/test_search_engine.py::TestSearchEngineSearch::test_full_pipeline_executed
+FAILED tests/integration/test_searches_api.py::test_create_search - assert 40...
+FAILED tests/integration/test_searches_api.py::test_delete_search - KeyError:...
+FAILED tests/integration/test_searches_api.py::test_list_searches - assert 40...
+FAILED tests/integration/test_searches_api.py::test_update_search - KeyError:...
+FAILED tests/integration/test_security_api.py::TestApiKeyAuthentication::test_api_key_endpoint_exists
+FAILED tests/integration/test_security_api.py::TestApiKeyManagement::test_api_key_validation_with_valid_key
+FAILED tests/integration/test_security_api.py::TestJWTAuthentication::test_access_with_valid_token
+FAILED tests/integration/test_security_api.py::TestJWTAuthentication::test_login
+FAILED tests/integration/test_security_api.py::TestJWTAuthentication::test_login_with_wrong_password
+FAILED tests/integration/test_security_api.py::TestJWTIntegration::test_jwt_refresh_token_rotation
+FAILED tests/integration/test_security_api.py::TestJWTIntegration::test_jwt_token_contains_user_id
+FAILED tests/integration/test_security_api.py::TestJWTIntegration::test_logout_revokes_refresh_token
+FAILED tests/integration/test_security_api.py::TestRefreshToken::test_refresh_token_flow
+FAILED tests/integration/test_user_api.py::test_create_and_fetch_user - asser...
+FAILED tests/integration/test_user_api.py::test_delete_user - KeyError: 'id'
+FAILED tests/integration/test_user_api.py::test_list_users - assert 404 == 200
+FAILED tests/integration/test_user_api.py::test_update_user - KeyError: 'id'
+FAILED tests/integration/test_vehicles_api.py::test_create_vehicle - assert 4...
+FAILED tests/integration/test_vehicles_api.py::test_create_vehicle_evaluation
+FAILED tests/integration/test_vehicles_api.py::test_delete_vehicle - KeyError...
+FAILED tests/integration/test_vehicles_api.py::test_delete_vehicle_evaluation
+FAILED tests/integration/test_vehicles_api.py::test_get_vehicle_evaluation - ...
+FAILED tests/integration/test_vehicles_api.py::test_get_vehicle_not_found - a...
+FAILED tests/integration/test_vehicles_api.py::test_list_vehicles - assert 40...
+FAILED tests/integration/test_vehicles_api.py::test_update_vehicle - KeyError...
+FAILED tests/integration/test_vision_api.py::TestAnalyzePhotosEndpoint::test_analyze_photos_empty_photo_ids
+FAILED tests/integration/test_vision_api.py::TestAnalyzePhotosEndpoint::test_analyze_photos_missing_session_returns_400
+FAILED tests/integration/test_vision_api.py::TestAnalyzePhotosEndpoint::test_analyze_photos_no_suggestions
+FAILED tests/integration/test_vision_api.py::TestAnalyzePhotosEndpoint::test_analyze_photos_no_vision_provider_returns_400
+FAILED tests/integration/test_vision_api.py::TestAnalyzePhotosEndpoint::test_analyze_photos_response_structure
+FAILED tests/integration/test_vision_api.py::TestAnalyzePhotosEndpoint::test_analyze_photos_returns_200
+FAILED tests/integration/test_vision_api.py::TestAnalyzePhotosEndpoint::test_analyze_photos_returns_json
+FAILED tests/integration/test_vision_api.py::TestAnalyzePhotosEndpoint::test_analyze_photos_suggestion_fields
+FAILED tests/integration/test_vision_api.py::TestAnalyzePhotosEndpoint::test_analyze_photos_with_photo_ids_filter
+FAILED tests/unit/test_config_env.py::test_settings_jwt_secret_key_default - ...

@@ -22,6 +22,7 @@ from app.services.auth_service import AuthService
 from app.services.api_key_service import ApiKeyService
 from app.services.audit_service import AuditService
 from app.services.permission_service import PermissionService
+from app.services.refresh_token_service import RefreshTokenService
 from app.repositories.api_key_repository import ApiKeyRepository
 from app.repositories.audit_log_repository import AuditLogRepository
 
@@ -93,15 +94,39 @@ class FakeAuditLogRepository:
         return [log for log in self._logs if log.action == action][:limit]
 
 
+class FakeRefreshTokenRepository:
+    def __init__(self) -> None:
+        self._tokens: dict[str, str] = {}
+
+    async def create(self, refresh_token: Any) -> Any:
+        self._tokens[refresh_token.token] = refresh_token.user_id
+        return refresh_token
+
+    async def get_by_token(self, token: str) -> Any | None:
+        from app.models.refresh_token import RefreshToken
+        if token not in self._tokens:
+            return None
+        return RefreshToken(token=token, user_id=self._tokens[token])
+
+    async def revoke_by_token(self, token: str) -> None:
+        if token in self._tokens:
+            del self._tokens[token]
+
+    async def revoke_all_by_user_id(self, user_id: str) -> None:
+        self._tokens = {token: uid for token, uid in self._tokens.items() if uid != user_id}
+
+
 # ── Shared Service Instances ───────────────────────────────────────────────
 
 
 user_repository = FakeUserRepository()
 api_key_repository = FakeApiKeyRepository()
 audit_log_repository = FakeAuditLogRepository()
+refresh_token_repository = FakeRefreshTokenRepository()
 auth_service = AuthService(user_repository)
 api_key_service = ApiKeyService(api_key_repository)
 audit_service = AuditService(audit_log_repository)
+refresh_service = RefreshTokenService(refresh_token_repository)
 permission_service = PermissionService()
 
 
@@ -111,6 +136,7 @@ def client() -> TestClient:
     user_repository._users.clear()
     api_key_repository._keys.clear()
     audit_log_repository._logs.clear()
+    refresh_token_repository._tokens.clear()
 
     # Override dependencies to use fake repositories
     async def override_get_auth_service() -> AuthService:
@@ -136,8 +162,16 @@ def client() -> TestClient:
             raise HTTPException(status_code=404, detail="User not found")
         return user
 
+    async def override_get_audit_service() -> AuditService:
+        return audit_service
+
+    async def override_get_refresh_token_service() -> RefreshTokenService:
+        return refresh_service
+
     app.dependency_overrides[auth_module.get_auth_service] = override_get_auth_service
     app.dependency_overrides[auth_module.get_current_user] = override_get_current_user
+    app.dependency_overrides[auth_module.get_audit_service] = override_get_audit_service
+    app.dependency_overrides[auth_module.get_refresh_token_service] = override_get_refresh_token_service
     
     try:
         yield TestClient(app)
@@ -153,7 +187,7 @@ def _register_user(
     email: str = "test@example.com",
     password: str = "secret123",
 ) -> dict[str, Any]:
-    response = client.post("/auth/register", json={"email": email, "password": password})
+    response = client.post("/api/v1/auth/register", json={"email": email, "password": password})
     assert response.status_code == 201, f"Registration failed: {response.text}"
     return response.json()
 
@@ -163,7 +197,7 @@ def _login_user(
     email: str = "test@example.com",
     password: str = "secret123",
 ) -> dict[str, Any]:
-    response = client.post("/auth/login", json={"email": email, "password": password})
+    response = client.post("/api/v1/auth/login", json={"email": email, "password": password})
     assert response.status_code == 200, f"Login failed: {response.text}"
     return response.json()
 
@@ -174,7 +208,7 @@ def _login_user(
 class TestJWTAuthentication:
     def test_register(self, client: TestClient) -> None:
         """Test that registration works (unchanged)."""
-        response = client.post("/auth/register", json={
+        response = client.post("/api/v1/auth/register", json={
             "email": "jwt@example.com",
             "password": "secret123",
         })
@@ -186,7 +220,7 @@ class TestJWTAuthentication:
     def test_login(self, client: TestClient) -> None:
         """Test that login returns access and refresh tokens (unchanged)."""
         _register_user(client, email="login@example.com")
-        response = client.post("/auth/login", json={
+        response = client.post("/api/v1/auth/login", json={
             "email": "login@example.com",
             "password": "secret123",
         })
@@ -199,7 +233,7 @@ class TestJWTAuthentication:
     def test_login_with_wrong_password(self, client: TestClient) -> None:
         """Test that wrong password returns 401 (unchanged)."""
         _register_user(client, email="wrongpw@example.com")
-        response = client.post("/auth/login", json={
+        response = client.post("/api/v1/auth/login", json={
             "email": "wrongpw@example.com",
             "password": "wrongpassword",
         })
@@ -207,13 +241,13 @@ class TestJWTAuthentication:
 
     def test_access_without_token(self, client: TestClient) -> None:
         """Test that protected endpoints require auth (unchanged)."""
-        response = client.get("/auth/me")
+        response = client.get("/api/v1/auth/me")
         assert response.status_code == 401
 
     def test_access_with_invalid_token(self, client: TestClient) -> None:
         """Test that invalid token is rejected (unchanged)."""
         response = client.get(
-            "/auth/me",
+            "/api/v1/auth/me",
             headers={"Authorization": "Bearer invalid-token"},
         )
         assert response.status_code == 401
@@ -225,7 +259,7 @@ class TestJWTAuthentication:
         access_token = tokens["access_token"]
 
         response = client.get(
-            "/auth/me",
+            "/api/v1/auth/me",
             headers={"Authorization": f"Bearer {access_token}"},
         )
         assert response.status_code == 200
@@ -245,7 +279,7 @@ class TestRefreshToken:
 
         # Test refresh endpoint
         response = client.post(
-            "/auth/refresh",
+            "/api/v1/auth/refresh",
             json={"refresh_token": refresh_token},
         )
         assert response.status_code == 200
@@ -467,7 +501,7 @@ class TestJWTIntegration:
 
         # Use refresh token
         response = client.post(
-            "/auth/refresh",
+            "/api/v1/auth/refresh",
             json={"refresh_token": refresh_token1},
         )
         assert response.status_code == 200
@@ -479,7 +513,7 @@ class TestJWTIntegration:
 
         # Old refresh token should not work anymore
         response = client.post(
-            "/auth/refresh",
+            "/api/v1/auth/refresh",
             json={"refresh_token": refresh_token1},
         )
         assert response.status_code == 401
@@ -492,14 +526,14 @@ class TestJWTIntegration:
 
         # Logout
         response = client.post(
-            "/auth/logout",
+            "/api/v1/auth/logout",
             json={"refresh_token": refresh_token},
         )
         assert response.status_code == 200
 
         # Try to use the refresh token after logout
         response = client.post(
-            "/auth/refresh",
+            "/api/v1/auth/refresh",
             json={"refresh_token": refresh_token},
         )
         assert response.status_code == 401
@@ -517,7 +551,7 @@ class TestApiKeyAuthentication:
 
         # Try to access API keys endpoint
         response = client.get(
-            "/auth/api-keys",
+            "/api/v1/auth/api-keys",
             headers={"Authorization": f"Bearer {access_token}"},
         )
         # Should return 200 or 404 (if endpoint not implemented yet)
@@ -578,12 +612,12 @@ class TestHTTPResponseCodes:
 
     def test_405_for_wrong_method(self, client: TestClient) -> None:
         """Test that wrong HTTP method returns 405."""
-        response = client.patch("/auth/register")
+        response = client.patch("/api/v1/auth/register")
         assert response.status_code == 405
 
     def test_422_for_invalid_request_body(self, client: TestClient) -> None:
         """Test that invalid request body returns 422."""
-        response = client.post("/auth/register", json={})
+        response = client.post("/api/v1/auth/register", json={})
         assert response.status_code == 422
 
     def test_health_endpoint_returns_200(self, client: TestClient) -> None:

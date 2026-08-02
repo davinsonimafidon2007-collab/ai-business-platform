@@ -486,7 +486,8 @@ class TestComparableMarketEstimator:
             cache_ttl_seconds=86400,
         )
 
-    def test_estimate_no_comparables(self, estimator: ComparableMarketEstimator, vehicle_service: AsyncMock) -> None:
+    @pytest.mark.asyncio
+    async def test_estimate_no_comparables(self, estimator: ComparableMarketEstimator, vehicle_service: AsyncMock) -> None:
         """Sin comparables debe devolver estimación con confianza 0."""
         vehicle_service.search_from_provider = AsyncMock(return_value=[])
 
@@ -494,14 +495,15 @@ class TestComparableMarketEstimator:
 
         with patch.object(estimator._provider_registry, "list_providers", return_value=["mobile_de"]):
             with patch.object(estimator._provider_registry, "get", return_value=MagicMock()):
-                result = estimator.estimate(vehicle)
+                result = await estimator.estimate(vehicle)
 
         assert isinstance(result, MarketEstimation)
         assert result.confidence == 0.0
         assert result.comparable_count == 0
         assert result.market_price == vehicle.price
 
-    def test_estimate_one_comparable(self, estimator: ComparableMarketEstimator, vehicle_service: AsyncMock) -> None:
+    @pytest.mark.asyncio
+    async def test_estimate_one_comparable(self, estimator: ComparableMarketEstimator, vehicle_service: AsyncMock) -> None:
         """Un comparable debe producir stats básicas."""
         comparable = make_vehicle(price=18000.0, external_id="comp-1")
         vehicle_service.search_from_provider = AsyncMock(return_value=[comparable])
@@ -510,14 +512,15 @@ class TestComparableMarketEstimator:
 
         with patch.object(estimator._provider_registry, "list_providers", return_value=["mobile_de"]):
             with patch.object(estimator._provider_registry, "get", return_value=MagicMock()):
-                result = estimator.estimate(vehicle)
+                result = await estimator.estimate(vehicle)
 
         assert isinstance(result, MarketEstimation)
         assert result.comparable_count == 1
         assert result.confidence > 0.0
         assert result.market_price > 0
 
-    def test_estimate_many_comparables(self, estimator: ComparableMarketEstimator, vehicle_service: AsyncMock) -> None:
+    @pytest.mark.asyncio
+    async def test_estimate_many_comparables(self, estimator: ComparableMarketEstimator, vehicle_service: AsyncMock) -> None:
         """Muchos comparables deben producir stats robustas."""
         comparables = [
             make_vehicle(price=float(18000 + i * 500), external_id=f"comp-{i}")
@@ -529,7 +532,7 @@ class TestComparableMarketEstimator:
 
         with patch.object(estimator._provider_registry, "list_providers", return_value=["mobile_de"]):
             with patch.object(estimator._provider_registry, "get", return_value=MagicMock()):
-                result = estimator.estimate(vehicle)
+                result = await estimator.estimate(vehicle)
 
         assert result.comparable_count == 8
         assert result.confidence > 0.0
@@ -545,7 +548,8 @@ class TestComparableMarketEstimator:
         assert "providers=" in result.notes[9]
         assert "pricing=" in result.notes[10]
 
-    def test_estimate_high_variance(self, estimator: ComparableMarketEstimator, vehicle_service: AsyncMock) -> None:
+    @pytest.mark.asyncio
+    async def test_estimate_high_variance(self, estimator: ComparableMarketEstimator, vehicle_service: AsyncMock) -> None:
         """Alta varianza → menor confianza."""
         estimator._local_cache.clear()
 
@@ -559,7 +563,7 @@ class TestComparableMarketEstimator:
 
         with patch.object(estimator._provider_registry, "list_providers", return_value=["mobile_de"]):
             with patch.object(estimator._provider_registry, "get", return_value=MagicMock()):
-                high_result = estimator.estimate(vehicle)
+                high_result = await estimator.estimate(vehicle)
 
         # Baja varianza — usar un vehículo con distinto hash para evitar caché
         estimator._local_cache.clear()
@@ -572,12 +576,13 @@ class TestComparableMarketEstimator:
 
         with patch.object(estimator._provider_registry, "list_providers", return_value=["mobile_de"]):
             with patch.object(estimator._provider_registry, "get", return_value=MagicMock()):
-                low_result = estimator.estimate(vehicle)
+                low_result = await estimator.estimate(vehicle)
 
         assert high_result.comparable_count == low_result.comparable_count
         assert low_result.confidence > high_result.confidence
 
-    def test_estimate_overpriced(self, estimator: ComparableMarketEstimator, vehicle_service: AsyncMock) -> None:
+    @pytest.mark.asyncio
+    async def test_estimate_overpriced(self, estimator: ComparableMarketEstimator, vehicle_service: AsyncMock) -> None:
         """Vehículo muy por encima del mercado debe detectarse como sobreprecio."""
         # Comparables baratos
         comparables = [
@@ -591,13 +596,14 @@ class TestComparableMarketEstimator:
 
         with patch.object(estimator._provider_registry, "list_providers", return_value=["mobile_de"]):
             with patch.object(estimator._provider_registry, "get", return_value=MagicMock()):
-                result = estimator.estimate(vehicle)
+                result = await estimator.estimate(vehicle)
 
         assert result.market_price > 0
         # Verificar pricing en notas
         assert any("pricing=overpriced" in n for n in result.notes)
 
-    def test_estimate_underpriced(self, estimator: ComparableMarketEstimator, vehicle_service: AsyncMock) -> None:
+    @pytest.mark.asyncio
+    async def test_estimate_underpriced(self, estimator: ComparableMarketEstimator, vehicle_service: AsyncMock) -> None:
         """Vehículo muy por debajo del mercado debe detectarse como infravalorado."""
         comparables = [
             make_vehicle(price=float(25000 + i * 500), external_id=f"comp-{i}")
@@ -609,11 +615,12 @@ class TestComparableMarketEstimator:
 
         with patch.object(estimator._provider_registry, "list_providers", return_value=["mobile_de"]):
             with patch.object(estimator._provider_registry, "get", return_value=MagicMock()):
-                result = estimator.estimate(vehicle)
+                result = await estimator.estimate(vehicle)
 
         assert any("pricing=underpriced" in n for n in result.notes)
 
-    def test_estimate_fair_priced(self, estimator: ComparableMarketEstimator, vehicle_service: AsyncMock) -> None:
+    @pytest.mark.asyncio
+    async def test_estimate_fair_priced(self, estimator: ComparableMarketEstimator, vehicle_service: AsyncMock) -> None:
         """Vehículo en el rango del mercado debe detectarse como precio justo."""
         comparables = [
             make_vehicle(price=float(17000 + i * 1000), external_id=f"comp-{i}")
@@ -626,11 +633,12 @@ class TestComparableMarketEstimator:
 
         with patch.object(estimator._provider_registry, "list_providers", return_value=["mobile_de"]):
             with patch.object(estimator._provider_registry, "get", return_value=MagicMock()):
-                result = estimator.estimate(vehicle)
+                result = await estimator.estimate(vehicle)
 
         assert any("pricing=fair" in n for n in result.notes)
 
-    def test_estimate_provider_diversity(self, estimator: ComparableMarketEstimator, vehicle_service: AsyncMock) -> None:
+    @pytest.mark.asyncio
+    async def test_estimate_provider_diversity(self, estimator: ComparableMarketEstimator, vehicle_service: AsyncMock) -> None:
         """Múltiples providers debe aumentar confianza."""
         vehicle = make_vehicle()
 
@@ -640,12 +648,12 @@ class TestComparableMarketEstimator:
         # Un provider
         with patch.object(estimator._provider_registry, "list_providers", return_value=["mobile_de"]):
             with patch.object(estimator._provider_registry, "get", return_value=MagicMock()):
-                result_one = estimator.estimate(vehicle)
+                result_one = await estimator.estimate(vehicle)
 
         # Dos providers
         with patch.object(estimator._provider_registry, "list_providers", return_value=["mobile_de", "autoscout24"]):
             with patch.object(estimator._provider_registry, "get", return_value=MagicMock()):
-                result_two = estimator.estimate(vehicle)
+                result_two = await estimator.estimate(vehicle)
 
         # La confianza no necesariamente sube porque los providers adicionales
         # se registran como fuentes, pero el cache local puede interferir.
@@ -653,7 +661,8 @@ class TestComparableMarketEstimator:
         assert isinstance(result_one, MarketEstimation)
         assert isinstance(result_two, MarketEstimation)
 
-    def test_estimate_deterministic(self, estimator: ComparableMarketEstimator, vehicle_service: AsyncMock) -> None:
+    @pytest.mark.asyncio
+    async def test_estimate_deterministic(self, estimator: ComparableMarketEstimator, vehicle_service: AsyncMock) -> None:
         """Misma entrada debe producir misma salida."""
         comparables = [
             make_vehicle(price=float(18000 + i * 500), external_id=f"comp-{i}")
@@ -665,14 +674,15 @@ class TestComparableMarketEstimator:
 
         with patch.object(estimator._provider_registry, "list_providers", return_value=["mobile_de"]):
             with patch.object(estimator._provider_registry, "get", return_value=MagicMock()):
-                result1 = estimator.estimate(vehicle)
-                result2 = estimator.estimate(vehicle)
+                result1 = await estimator.estimate(vehicle)
+                result2 = await estimator.estimate(vehicle)
 
         assert result1.market_price == result2.market_price
         assert result1.confidence == result2.confidence
         assert result1.comparable_count == result2.comparable_count
 
-    def test_estimate_cache_hit(self, estimator: ComparableMarketEstimator, cached_market_repo: AsyncMock) -> None:
+    @pytest.mark.asyncio
+    async def test_estimate_cache_hit(self, estimator: ComparableMarketEstimator, cached_market_repo: AsyncMock) -> None:
         """Si hay caché válida, debe usarla sin llamar a providers."""
         from app.models.cached_market import CachedMarketData
 
@@ -698,7 +708,7 @@ class TestComparableMarketEstimator:
 
         with patch.object(estimator._provider_registry, "list_providers", return_value=["mobile_de"]):
             with patch.object(estimator._provider_registry, "get") as mock_get:
-                result = estimator.estimate(vehicle)
+                result = await estimator.estimate(vehicle)
 
         assert result.market_price == 19500.0
         assert result.confidence == 85.0
@@ -706,7 +716,8 @@ class TestComparableMarketEstimator:
         # No debería haber llamado a los providers
         mock_get.assert_not_called()
 
-    def test_estimate_with_vehicle_dict(self, estimator: ComparableMarketEstimator, vehicle_service: AsyncMock) -> None:
+    @pytest.mark.asyncio
+    async def test_estimate_with_vehicle_dict(self, estimator: ComparableMarketEstimator, vehicle_service: AsyncMock) -> None:
         """Debe funcionar con dicts también (flexibilidad del protocolo)."""
         vehicle_service.search_from_provider = AsyncMock(return_value=[])
 
@@ -724,7 +735,7 @@ class TestComparableMarketEstimator:
 
         with patch.object(estimator._provider_registry, "list_providers", return_value=["mobile_de"]):
             with patch.object(estimator._provider_registry, "get", return_value=MagicMock()):
-                result = estimator.estimate(vehicle_dict)
+                result = await estimator.estimate(vehicle_dict)
 
         assert isinstance(result, MarketEstimation)
         assert result.comparable_count == 0
@@ -764,7 +775,8 @@ class TestComparableMarketEstimator:
         assert "vehicle" in params
         assert "self" in params
 
-    def test_estimate_confidence_range(self, estimator: ComparableMarketEstimator, vehicle_service: AsyncMock) -> None:
+    @pytest.mark.asyncio
+    async def test_estimate_confidence_range(self, estimator: ComparableMarketEstimator, vehicle_service: AsyncMock) -> None:
         """Confianza debe estar siempre entre 0 y 100."""
         test_cases = [
             [],  # sin comparables
@@ -780,11 +792,12 @@ class TestComparableMarketEstimator:
 
             with patch.object(estimator._provider_registry, "list_providers", return_value=["mobile_de"]):
                 with patch.object(estimator._provider_registry, "get", return_value=MagicMock()):
-                    result = estimator.estimate(vehicle)
+                    result = await estimator.estimate(vehicle)
 
             assert 0.0 <= result.confidence <= 100.0, f"Confidence {result.confidence} fuera de rango"
 
-    def test_estimate_market_price_reasonable(self, estimator: ComparableMarketEstimator, vehicle_service: AsyncMock) -> None:
+    @pytest.mark.asyncio
+    async def test_estimate_market_price_reasonable(self, estimator: ComparableMarketEstimator, vehicle_service: AsyncMock) -> None:
         """El market_price debe estar dentro del rango de los comparables."""
         comparables = [
             make_vehicle(price=float(15000 + i * 1000), external_id=f"comp-{i}")
@@ -796,7 +809,7 @@ class TestComparableMarketEstimator:
 
         with patch.object(estimator._provider_registry, "list_providers", return_value=["mobile_de"]):
             with patch.object(estimator._provider_registry, "get", return_value=MagicMock()):
-                result = estimator.estimate(vehicle)
+                result = await estimator.estimate(vehicle)
 
         # El weighted_mean debe estar entre min y max de los comparables
         assert 15000.0 <= result.market_price <= 19000.0

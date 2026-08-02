@@ -13,6 +13,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database.manager import DatabaseManager
 from app.models.base import Base
 
+# Importar modelos para poblar Base.metadata antes de create_all
+from app.models.cached_market import CachedMarketData  # noqa: F401
+from app.models.opportunity import Opportunity  # noqa: F401
+from app.models.search import Search  # noqa: F401
+from app.models.search_history import SearchHistory  # noqa: F401
+from app.models.user import User  # noqa: F401
+from app.models.vehicle import Vehicle  # noqa: F401
+
 
 class TestDatabaseManager:
     """Test suite for DatabaseManager."""
@@ -31,6 +39,9 @@ class TestDatabaseManager:
         """Calling init() creates all tables defined in Base.metadata."""
         manager = DatabaseManager("sqlite+aiosqlite://")
         await manager.init()
+        # Las tablas se crean explícitamente (Alembic gestiona prod; aquí no hay migraciones)
+        async with manager.engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
 
         # Verify tables exist by executing a raw query
         async with manager.engine.connect() as conn:
@@ -120,6 +131,8 @@ class TestDatabaseManager:
         """Verify that new tables have expected columns."""
         manager = DatabaseManager("sqlite+aiosqlite://")
         await manager.init()
+        async with manager.engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
 
         async with manager.engine.connect() as conn:
             # Check search_history columns

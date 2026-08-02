@@ -10,6 +10,7 @@ from app.models.user import User
 from app.models.verification_token import VerificationToken
 from app.repositories.verification_token_repository import VerificationTokenRepository
 from app.services.auth_service import AuthService
+from app.services.audit_service import AuditService
 from app.services.refresh_token_service import RefreshTokenService
 from app.services.verification_service import VerificationService
 
@@ -78,9 +79,26 @@ class FakeVerificationTokenRepository:
         return token
 
 
+class FakeAuditLogRepository:
+    def __init__(self) -> None:
+        self._logs: list[Any] = []
+
+    async def create(self, log: Any) -> Any:
+        self._logs.append(log)
+        return log
+
+    async def list_by_user_id(self, user_id: str, limit: int = 100) -> list[Any]:
+        return [log for log in self._logs if log.user_id == user_id][:limit]
+
+    async def list_by_action(self, action: str, limit: int = 100) -> list[Any]:
+        return [log for log in self._logs if log.action == action][:limit]
+
+
 user_repository = FakeUserRepository()
 token_repository = FakeRefreshTokenRepository()
 verification_token_repository = FakeVerificationTokenRepository()
+audit_log_repository = FakeAuditLogRepository()
+audit_service = AuditService(audit_log_repository)
 auth_service = AuthService(user_repository)
 refresh_service = RefreshTokenService(token_repository)
 verification_service = VerificationService(
@@ -96,6 +114,7 @@ def client() -> TestClient:
     user_repository._users.clear()
     token_repository._tokens.clear()
     verification_token_repository._tokens.clear()
+    audit_log_repository._logs.clear()
 
     async def override_get_auth_service() -> AuthService:
         return auth_service
@@ -126,10 +145,14 @@ def client() -> TestClient:
     async def override_get_verification_service() -> VerificationService:
         return verification_service
 
+    async def override_get_audit_service() -> AuditService:
+        return audit_service
+
     app.dependency_overrides[auth_module.get_auth_service] = override_get_auth_service
     app.dependency_overrides[auth_module.get_current_user] = override_get_current_user
     app.dependency_overrides[auth_module.get_refresh_token_service] = override_get_refresh_token_service
     app.dependency_overrides[auth_module.get_verification_service] = override_get_verification_service
+    app.dependency_overrides[auth_module.get_audit_service] = override_get_audit_service
     try:
         yield TestClient(app)
     finally:
@@ -138,13 +161,13 @@ def client() -> TestClient:
 
 def test_register_and_login_user(client: TestClient) -> None:
     register_response = client.post(
-        "/auth/register",
+        "/api/v1/auth/register",
         json={"email": "auth@example.com", "password": "secret123"},
     )
     assert register_response.status_code == 201
 
     login_response = client.post(
-        "/auth/login",
+        "/api/v1/auth/login",
         json={"email": "auth@example.com", "password": "secret123"},
     )
     assert login_response.status_code == 200
@@ -152,20 +175,20 @@ def test_register_and_login_user(client: TestClient) -> None:
     assert "access_token" in payload
 
     me_response = client.get(
-        "/auth/me",
+        "/api/v1/auth/me",
         headers={"Authorization": f"Bearer {payload['access_token']}"},
     )
     assert me_response.status_code == 200
 
 
 def test_access_without_token_is_forbidden(client: TestClient) -> None:
-    response = client.get("/auth/me")
+    response = client.get("/api/v1/auth/me")
     assert response.status_code == 401
 
 
 def test_invalid_token_is_rejected(client: TestClient) -> None:
     response = client.get(
-        "/auth/me",
+        "/api/v1/auth/me",
         headers={"Authorization": "Bearer invalid-token"},
     )
     assert response.status_code == 401
@@ -178,7 +201,7 @@ def test_invalid_token_is_rejected(client: TestClient) -> None:
 
 def test_request_verification_requires_auth(client: TestClient) -> None:
     """Verifica que el endpoint request-verification requiere autenticación."""
-    response = client.post("/auth/request-verification")
+    response = client.post("/api/v1/auth/request-verification")
     assert response.status_code == 401
 
 
@@ -186,7 +209,7 @@ def test_request_and_verify_email(client: TestClient) -> None:
     """Verifica el flujo completo: registrar, solicitar verificación y confirmar."""
     # 1. Registrar usuario
     register_response = client.post(
-        "/auth/register",
+        "/api/v1/auth/register",
         json={"email": "verify@example.com", "password": "secret123"},
     )
     assert register_response.status_code == 201
@@ -195,7 +218,7 @@ def test_request_and_verify_email(client: TestClient) -> None:
 
     # 2. Login para obtener token
     login_response = client.post(
-        "/auth/login",
+        "/api/v1/auth/login",
         json={"email": "verify@example.com", "password": "secret123"},
     )
     assert login_response.status_code == 200
@@ -203,7 +226,7 @@ def test_request_and_verify_email(client: TestClient) -> None:
 
     # 3. Solicitar verificación
     request_response = client.post(
-        "/auth/request-verification",
+        "/api/v1/auth/request-verification",
         headers={"Authorization": f"Bearer {access_token}"},
     )
     assert request_response.status_code == 200
@@ -215,7 +238,7 @@ def test_request_and_verify_email(client: TestClient) -> None:
 
     # 5. Confirmar verificación
     verify_response = client.post(
-        "/auth/verify",
+        "/api/v1/auth/verify",
         json={"token": raw_token},
     )
     assert verify_response.status_code == 200
@@ -223,7 +246,7 @@ def test_request_and_verify_email(client: TestClient) -> None:
 
     # 6. Verificar que el usuario ahora está verificado
     me_response = client.get(
-        "/auth/me",
+        "/api/v1/auth/me",
         headers={"Authorization": f"Bearer {access_token}"},
     )
     assert me_response.status_code == 200
@@ -236,18 +259,18 @@ def test_verify_with_expired_token_returns_error(client: TestClient) -> None:
 
     # Registrar y login
     client.post(
-        "/auth/register",
+        "/api/v1/auth/register",
         json={"email": "expired@example.com", "password": "secret123"},
     )
     login_response = client.post(
-        "/auth/login",
+        "/api/v1/auth/login",
         json={"email": "expired@example.com", "password": "secret123"},
     )
     access_token = login_response.json()["access_token"]
 
     # Solicitar verificación
     client.post(
-        "/auth/request-verification",
+        "/api/v1/auth/request-verification",
         headers={"Authorization": f"Bearer {access_token}"},
     )
 
@@ -257,7 +280,7 @@ def test_verify_with_expired_token_returns_error(client: TestClient) -> None:
 
     # Confirmar con token expirado
     verify_response = client.post(
-        "/auth/verify",
+        "/api/v1/auth/verify",
         json={"token": token_record.token},
     )
     assert verify_response.status_code == 400
@@ -270,28 +293,28 @@ def test_verify_with_already_used_token_returns_error(client: TestClient) -> Non
     """Verifica que un token ya usado devuelve error."""
     # Registrar y login
     client.post(
-        "/auth/register",
+        "/api/v1/auth/register",
         json={"email": "used@example.com", "password": "secret123"},
     )
     login_response = client.post(
-        "/auth/login",
+        "/api/v1/auth/login",
         json={"email": "used@example.com", "password": "secret123"},
     )
     access_token = login_response.json()["access_token"]
 
     # Solicitar y confirmar verificación
     client.post(
-        "/auth/request-verification",
+        "/api/v1/auth/request-verification",
         headers={"Authorization": f"Bearer {access_token}"},
     )
     token_record = verification_token_repository._tokens[0]
 
     # Primera confirmación (debe funcionar)
-    client.post("/auth/verify", json={"token": token_record.token})
+    client.post("/api/v1/auth/verify", json={"token": token_record.token})
 
     # Segunda confirmación con el mismo token (debe fallar)
     verify_response = client.post(
-        "/auth/verify",
+        "/api/v1/auth/verify",
         json={"token": token_record.token},
     )
     assert verify_response.status_code == 400
@@ -303,7 +326,7 @@ def test_verify_with_already_used_token_returns_error(client: TestClient) -> Non
 def test_verify_with_invalid_token_returns_error(client: TestClient) -> None:
     """Verifica que un token inválido devuelve error."""
     verify_response = client.post(
-        "/auth/verify",
+        "/api/v1/auth/verify",
         json={"token": "invalid-token-that-does-not-exist"},
     )
     assert verify_response.status_code == 404

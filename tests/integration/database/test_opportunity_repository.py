@@ -169,6 +169,7 @@ class TestOpportunityRepository:
         for i in range(3):
             from app.models.vehicle import Vehicle
             v = Vehicle(
+                user_id="00000000-0000-0000-0000-000000000099",
                 source="test",
                 external_id=f"ext_{i}",
                 brand="Test",
