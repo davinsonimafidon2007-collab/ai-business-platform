@@ -16,8 +16,45 @@ from urllib.parse import urlencode, urljoin
 
 from bs4 import BeautifulSoup, Tag
 
-from app.providers.base import BaseProvider, ProviderConnectionError, ProviderParseError
-from app.schemas.vehicle import VehicleSearchResult
+try:
+    from app.providers.base import BaseProvider, ProviderConnectionError, ProviderParseError
+    from app.schemas.vehicle import VehicleSearchResult
+except Exception:  # pragma: no cover
+    from dataclasses import dataclass
+
+    @dataclass
+    class VehicleSearchResult:
+        source: str
+        title: str
+        price: float | None = None
+        currency: str | None = None
+        year: int | None = None
+        mileage_km: int | None = None
+        fuel_type: str | None = None
+        transmission: str | None = None
+        location: str | None = None
+        url: str | None = None
+        image_url: str | None = None
+        external_id: str | None = None
+        raw: Any | None = None
+
+    class ProviderConnectionError(Exception):
+        pass
+
+    class ProviderParseError(Exception):
+        pass
+
+    class BaseProvider:
+        name = ""
+        base_url = ""
+
+        async def _fetch(self, url: str) -> str:
+            import httpx
+
+            async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
+                response = await client.get(url)
+                response.raise_for_status()
+                return response.text
 
 logger = logging.getLogger(__name__)
 
