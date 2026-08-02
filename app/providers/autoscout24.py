@@ -1,9 +1,16 @@
-﻿"""Provider for AutoScout24 vehicle search.
+﻿"""Provider para AutoScout24.
 
-Primary strategy (2024–2026 AS24 list pages):
-  1. Extract listings from the Next.js hydration payload ``__NEXT_DATA__``
-     → ``props.pageProps.listings`` (most reliable).
-  2. Fallback: parse current list-item DOM selectors used by AS24.
+Implementa la lógica específica de AutoScout24:
+  - ``source_name``
+  - Parsing prioritario vía ``__NEXT_DATA__`` (JSON embebido, estable)
+  - Fallback HTML con selectores actualizados (2026-08)
+  - Configuraciones de clase para selectores y patrones de combustible
+
+Verificado en vivo (2026-08-02): la página de listados devuelve
+``article[data-testid="list-item"]`` con data-attrs y
+``props.pageProps.listings`` en ``__NEXT_DATA__``.
+Los selectores antiguos (``article.cld-list-item``,
+``div[class*='ListItem']``) estaban rotos o devolvían ruido de UI.
 """
 
 from __future__ import annotations
@@ -12,145 +19,86 @@ import json
 import logging
 import re
 from typing import Any
-from urllib.parse import urlencode, urljoin
+from urllib.parse import urljoin
 
-from bs4 import BeautifulSoup, Tag
+from bs4 import BeautifulSoup
 
-try:
-    from app.providers.base import BaseProvider, ProviderConnectionError, ProviderParseError
-    from app.schemas.vehicle import VehicleSearchResult
-except Exception:  # pragma: no cover
-    from dataclasses import dataclass
-
-    @dataclass
-    class VehicleSearchResult:
-        source: str
-        title: str
-        price: float | None = None
-        currency: str | None = None
-        year: int | None = None
-        mileage_km: int | None = None
-        fuel_type: str | None = None
-        transmission: str | None = None
-        location: str | None = None
-        url: str | None = None
-        image_url: str | None = None
-        external_id: str | None = None
-        raw: Any | None = None
-
-    class ProviderConnectionError(Exception):
-        pass
-
-    class ProviderParseError(Exception):
-        pass
-
-    class BaseProvider:
-        name = ""
-        base_url = ""
-
-        async def _fetch(self, url: str) -> str:
-            import httpx
-
-            async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
-                response = await client.get(url)
-                response.raise_for_status()
-                return response.text
+from app.providers.base import VehicleProvider
+from app.providers.dto import VehicleSearchResult
 
 logger = logging.getLogger(__name__)
 
-_BASE = "https://www.autoscout24.com"
-_SEARCH_PATH = "/lst"
-
-# Current AS24 list-item selectors (ordered by specificity).
-_CARD_SELECTORS = (
-    'article[data-testid="list-item"]',
-    'article[data-testid="list-page-item"]',
-    "article.cldt-summary-full-item",
-    "article[data-guid]",
-)
+BASE_URL = "https://www.autoscout24.de"
 
 
-class AutoScout24Provider(BaseProvider):
-    """Scrapes AutoScout24 public search results."""
+class AutoScout24Provider(VehicleProvider):
+    """Provider para AutoScout24."""
 
-    name = "autoscout24"
-    base_url = _BASE
+    _vehicle_detail_path = "/angebote/"
 
-    def _build_search_url(self, query: str, max_price: int | None, country: str) -> str:
-        params: dict[str, str] = {
-            "atype": "C",
-            "cy": country.upper() if country else "D",
-            "desc": "0",
-            "sort": "standard",
-            "ustate": "N,U",
-        }
-        if query:
-            params["q"] = query
-        if max_price is not None and max_price > 0:
-            params["pricefrom"] = "0"
-            params["priceto"] = str(int(max_price))
-        return f"{_BASE}{_SEARCH_PATH}?{urlencode(params)}"
+    _title_selector_groups = [
+        (".ListItemTitle_title__sLi_x", "h2.ListItemTitle_title__sLi_x"),
+        (".list-title", "h1.list-title", "h2.list-title", "h3.list-title"),
+        ("h1.title", "h2.title", "h3.title", ".title h1", ".title h2"),
+        ("h1", "h2", "h3"),
+    ]
 
-    async def search(
+    _location_label_keywords = (
+        "ubicación",
+        "location",
+        "localidad",
+        "standort",
+    )
+
+    _fuel_patterns = [
+        (re.compile(r"benzin|petrol|gasolina", re.IGNORECASE), "Gasolina"),
+        (re.compile(r"diesel", re.IGNORECASE), "Diesel"),
+        (re.compile(r"elektro|electric", re.IGNORECASE), "Eléctrico"),
+        (re.compile(r"hybrid", re.IGNORECASE), "Híbrido"),
+        (re.compile(r"wasserstoff|hydrogen", re.IGNORECASE), "Hidrógeno"),
+        (re.compile(r"lpg|cng|autogas", re.IGNORECASE), "Gas"),
+    ]
+
+    def __init__(
         self,
-        query: str,
-        max_price: int | None = None,
-        country: str = "DE",
-        limit: int = 20,
-    ) -> list[VehicleSearchResult]:
-        url = self._build_search_url(query, max_price, country)
-        try:
-            html = await self._fetch(url)
-        except Exception as exc:
-            raise ProviderConnectionError(f"AutoScout24 fetch failed: {exc}") from exc
+        http_client: Any = None,
+        base_url: str = BASE_URL,
+    ) -> None:
+        super().__init__(http_client=http_client, base_url=base_url)
 
-        try:
-            results = self._parse_html(html, limit=limit)
-        except Exception as exc:
-            raise ProviderParseError(f"AutoScout24 parse failed: {exc}") from exc
+    @property
+    def source_name(self) -> str:
+        return "autoscout24"
 
-        return results
+    def _parse_search_results(self, html: str, search_url: str) -> list[VehicleSearchResult]:
+        """Parsea resultados priorizando ``__NEXT_DATA__`` (más estable)."""
+        from_json = self._parse_listings_from_next_data(html)
+        if from_json:
+            logger.debug(
+                "autoscout24: %d anuncios extraídos de __NEXT_DATA__",
+                len(from_json),
+            )
+            return from_json
 
-    def _parse_html(self, html: str, limit: int = 20) -> list[VehicleSearchResult]:
-        soup = BeautifulSoup(html, "lxml")
+        logger.info(
+            "autoscout24: __NEXT_DATA__ ausente o vacío; fallback a selectores HTML"
+        )
+        return super()._parse_search_results(html, search_url)
 
-        # --- Strategy 1: Next.js JSON payload (most reliable) ---
-        results = self._parse_next_data(soup, limit=limit)
-        if results:
-            return results
-
-        # --- Strategy 2: Current list-item DOM ---
-        cards: list[Tag] = []
-        for sel in _CARD_SELECTORS:
-            found = soup.select(sel)
-            if found:
-                cards = found
-                break
-
-        if not cards:
-            logger.warning("AutoScout24: no listing cards found with current selectors")
-            return []
-
-        results = []
-        for card in cards[:limit]:
-            try:
-                item = self._parse_card(card)
-                if item is not None:
-                    results.append(item)
-            except Exception as exc:
-                logger.debug("AS24 card parse skip: %s", exc)
-                continue
-        return results
-
-    def _parse_next_data(self, soup: BeautifulSoup, limit: int) -> list[VehicleSearchResult]:
-        """Extract listings from ``<script id="__NEXT_DATA__">`` if present."""
-        script = soup.find("script", id="__NEXT_DATA__")
-        if script is None or not script.string:
+    def _parse_listings_from_next_data(self, html: str) -> list[VehicleSearchResult]:
+        """Extrae listings desde el JSON embebido de Next.js."""
+        match = re.search(
+            r'<script[^>]+id="__NEXT_DATA__"[^>]*>(.*?)</script>',
+            html,
+            re.DOTALL,
+        )
+        if not match:
             return []
 
         try:
-            payload = json.loads(script.string)
-        except (json.JSONDecodeError, TypeError):
+            payload = json.loads(match.group(1))
+        except json.JSONDecodeError as exc:
+            logger.warning("autoscout24: __NEXT_DATA__ no es JSON válido: %s", exc)
             return []
 
         listings = (
@@ -162,276 +110,234 @@ class AutoScout24Provider(BaseProvider):
             return []
 
         results: list[VehicleSearchResult] = []
-        for raw in listings[:limit]:
-            try:
-                item = self._listing_from_json(raw)
-                if item is not None:
-                    results.append(item)
-            except Exception as exc:
-                logger.debug("AS24 JSON listing skip: %s", exc)
+        for item in listings:
+            if not isinstance(item, dict):
                 continue
+            parsed = self._listing_dict_to_result(item)
+            if parsed is not None:
+                results.append(parsed)
         return results
 
-    def _listing_from_json(self, raw: dict[str, Any]) -> VehicleSearchResult | None:
-        """Map a single AS24 Next.js listing object to VehicleSearchResult."""
-        vehicle = raw.get("vehicle") or {}
-        price_info = raw.get("price") or {}
-        location = raw.get("location") or {}
-        seller = raw.get("seller") or {}
-
-        # ID
-        listing_id = str(raw.get("id") or raw.get("listingId") or "").strip()
-        if not listing_id:
-            return None
-
-        # Title
-        make = (vehicle.get("make") or "").strip()
-        model = (vehicle.get("model") or "").strip()
-        title = f"{make} {model}".strip() or (raw.get("title") or "").strip()
-        if not title:
-            return None
-
-        # Price (EUR)
-        price_val = price_info.get("price") or price_info.get("public") or raw.get("price")
-        try:
-            price = float(price_val) if price_val is not None else None
-        except (TypeError, ValueError):
-            price = None
-        if price is not None and price <= 0:
-            price = None
-
-        # Year
-        year = None
-        first_reg = vehicle.get("firstRegistration") or vehicle.get("firstRegistrationDate")
-        if isinstance(first_reg, str) and len(first_reg) >= 4:
-            try:
-                year = int(first_reg[:4])
-            except ValueError:
-                pass
-        if year is None and vehicle.get("year"):
-            try:
-                year = int(vehicle["year"])
-            except (TypeError, ValueError):
-                pass
-
-        # Mileage
-        mileage = None
-        km_raw = vehicle.get("mileage") or vehicle.get("mileageInKm")
-        if isinstance(km_raw, dict):
-            km_raw = km_raw.get("value") or km_raw.get("raw")
-        try:
-            if km_raw is not None:
-                mileage = int(str(km_raw).replace(".", "").replace(",", "").replace(" ", ""))
-        except (TypeError, ValueError):
-            pass
-
-        # Fuel / transmission
-        fuel = (vehicle.get("fuel") or vehicle.get("fuelType") or "").strip() or None
-        transmission = (vehicle.get("transmission") or vehicle.get("gearbox") or "").strip() or None
-
-        # Location
-        city = (location.get("city") or "").strip()
-        zip_code = (location.get("zip") or location.get("zipCode") or "").strip()
-        loc_str = ", ".join(p for p in (city, zip_code) if p) or None
-
-        # URL
-        relative = raw.get("url") or raw.get("detailsUrl") or f"/angebote/{listing_id}"
-        if isinstance(relative, str) and relative.startswith("http"):
-            detail_url = relative
-        else:
-            detail_url = urljoin(_BASE, str(relative))
-
-        # Image
-        images = raw.get("images") or raw.get("imageUrls") or []
-        image_url = None
-        if images and isinstance(images, list):
-            first = images[0]
-            if isinstance(first, str):
-                image_url = first
-            elif isinstance(first, dict):
-                image_url = first.get("url") or first.get("src")
-
-        return VehicleSearchResult(
-            external_id=listing_id,
-            source=self.name,
-            title=title,
-            price=price,
-            currency="EUR",
-            year=year,
-            mileage_km=mileage,
-            fuel_type=fuel,
-            transmission=transmission,
-            location=loc_str,
-            url=detail_url,
-            image_url=image_url,
-            raw={"seller": seller.get("type") if isinstance(seller, dict) else None},
-        )
-
-    def _parse_card(self, card: Tag) -> VehicleSearchResult | None:
-        """Parse a single list-item article from the DOM."""
-        # ID
-        listing_id = (
-            card.get("data-guid")
-            or card.get("data-id")
-            or card.get("data-listing-id")
+    def _listing_dict_to_result(self, item: dict[str, Any]) -> VehicleSearchResult | None:
+        """Mapea un objeto listing de pageProps a VehicleSearchResult."""
+        external_id = str(
+            item.get("id")
+            or (item.get("identifier") or {}).get("crossReferenceId")
+            or item.get("crossReferenceId")
             or ""
-        )
-        listing_id = str(listing_id).strip()
-
-        # Title
-        title_el = (
-            card.select_one('[data-testid="list-item-title"]')
-            or card.select_one("h2")
-            or card.select_one(".ListItemTitle")
-            or card.select_one("a[href*='/angebote/']")
-        )
-        title = title_el.get_text(strip=True) if title_el else ""
-        if not title:
+        ).strip()
+        if not external_id:
             return None
 
-        # URL — prefer the offer link, not dealer profile
-        href = None
-        for a in card.select("a[href]"):
-            h = a.get("href") or ""
-            if "/angebote/" in h or "/offers/" in h:
-                href = h
-                break
-        if not href and title_el and title_el.name == "a":
-            href = title_el.get("href")
-        if not href:
-            # last resort: first link that is not a dealer profile
-            for a in card.select("a[href]"):
-                h = a.get("href") or ""
-                if h and "haendler" not in h and "dealer" not in h:
-                    href = h
-                    break
-        if not href:
-            return None
-        detail_url = urljoin(_BASE, href)
+        relative_url = item.get("url") or ""
+        url = urljoin(f"{self._base_url}/", relative_url.lstrip("/")) if relative_url else None
 
-        if not listing_id:
-            # try to extract from URL
-            m = re.search(r"/angebote/[^/]*?-([a-f0-9]+)", detail_url, re.I)
-            if m:
-                listing_id = m.group(1)
-            else:
-                listing_id = detail_url.rstrip("/").split("/")[-1][:64]
+        vehicle = item.get("vehicle") if isinstance(item.get("vehicle"), dict) else {}
+        price_obj = item.get("price") if isinstance(item.get("price"), dict) else {}
+        location_obj = item.get("location") if isinstance(item.get("location"), dict) else {}
+        tracking = item.get("tracking") if isinstance(item.get("tracking"), dict) else {}
+        seller = item.get("seller") if isinstance(item.get("seller"), dict) else {}
 
-        # Price
-        price = None
-        price_el = (
-            card.select_one('[data-testid="list-item-price"]')
-            or card.select_one(".Price_price__")
-            or card.select_one("[class*='price']")
+        brand = vehicle.get("make")
+        model = vehicle.get("model")
+        version = vehicle.get("modelVersionInput") or vehicle.get("variant")
+
+        price_raw = price_obj.get("priceRaw")
+        price: float | None
+        try:
+            price = float(price_raw) if price_raw is not None else None
+        except (TypeError, ValueError):
+            price = self._parse_price_text(str(price_obj.get("priceFormatted") or ""))
+
+        mileage = self._parse_intish(
+            tracking.get("mileage") or vehicle.get("mileageInKm")
         )
-        if price_el:
-            price = self._parse_price(price_el.get_text(" ", strip=True))
-
-        # Year / mileage from subtitle or detail lines
-        year = None
-        mileage = None
-        detail_text = ""
-        for sel in (
-            '[data-testid="list-item-subtitle"]',
-            ".ListItem_subtitle__",
-            "[class*='VehicleDetail']",
-            "span[class*='detail']",
-        ):
-            el = card.select_one(sel)
-            if el:
-                detail_text += " " + el.get_text(" ", strip=True)
-
-        # Also collect all short text nodes that look like "2020" or "45.000 km"
-        for el in card.select("span, li, p"):
-            t = el.get_text(strip=True)
-            if t and len(t) < 40:
-                detail_text += " " + t
-
-        year = self._parse_year(detail_text) or year
-        mileage = self._parse_mileage(detail_text) or mileage
-
-        # Fuel / transmission (best-effort from text)
-        fuel = None
-        transmission = None
-        lower = detail_text.lower()
-        for kw in ("diesel", "benzin", "elektro", "hybrid", "gas", "lpg", "cng"):
-            if kw in lower:
-                fuel = kw.capitalize() if kw != "benzin" else "Petrol"
-                break
-        for kw in ("automatik", "automatic", "schaltgetriebe", "manual"):
-            if kw in lower:
-                transmission = "Automatic" if "auto" in kw else "Manual"
-                break
-
-        # Location
-        loc_el = (
-            card.select_one('[data-testid="list-item-location"]')
-            or card.select_one("[class*='location']")
-            or card.select_one("[class*='Location']")
+        year = self._year_from_registration(
+            tracking.get("firstRegistration") or item.get("firstRegistration")
         )
-        location = loc_el.get_text(strip=True) if loc_el else None
+        first_registration = tracking.get("firstRegistration")
 
-        # Image
-        img = card.select_one("img[src], img[data-src]")
-        image_url = None
-        if img:
-            image_url = img.get("src") or img.get("data-src")
+        fuel_raw = vehicle.get("fuel") or tracking.get("fuelType")
+        fuel_type = self._normalize_fuel(str(fuel_raw)) if fuel_raw else None
+
+        transmission = vehicle.get("transmission")
+        power_hp = self._parse_intish(vehicle.get("powerInHp") or vehicle.get("power"))
+        displacement_cc = self._parse_intish(vehicle.get("engineDisplacementInCCM"))
+
+        city = location_obj.get("city")
+        zip_code = location_obj.get("zip")
+        country = location_obj.get("countryCode")
+        location_parts = [p for p in (zip_code, city, country) if p]
+        location = " ".join(location_parts) if location_parts else None
+
+        seller_type = seller.get("type")
+        images = item.get("images") if isinstance(item.get("images"), list) else []
+        images = [str(u) for u in images if u]
 
         return VehicleSearchResult(
-            external_id=listing_id,
-            source=self.name,
-            title=title,
+            source=self.source_name,
+            external_id=external_id,
+            url=url,
+            brand=brand,
+            model=model,
+            version=version,
+            year=year,
+            mileage=mileage,
+            fuel_type=fuel_type,
+            transmission=transmission,
+            power_hp=power_hp,
+            displacement_cc=displacement_cc,
+            location=location,
+            seller_type=seller_type,
+            first_registration=first_registration,
             price=price,
             currency="EUR",
-            year=year,
-            mileage_km=mileage,
-            fuel_type=fuel,
-            transmission=transmission,
-            location=location,
-            url=detail_url,
-            image_url=image_url,
-            raw=None,
+            images=images,
+            description=vehicle.get("subtitle"),
+            raw_data=item,
         )
 
-    @staticmethod
-    def _parse_price(text: str) -> float | None:
+    def _find_listing_nodes(self, soup: BeautifulSoup) -> list[Any]:
+        """Selectores HTML de fallback (compatibles con fixtures y HTML actual)."""
+        strategies = [
+            'article[data-testid="list-item"]',
+            "article.list-page-item",
+            "article.cldt-summary-full-item",
+            "article[data-guid]",
+            "article[data-price]",
+            "article.cld-list-item",
+            "article.listing",
+            "div.ListItem",
+            "div[class*='ListItem']",
+            "[data-listing-id]",
+        ]
+        for selector in strategies:
+            nodes = soup.select(selector)
+            if nodes:
+                logger.debug(
+                    "autoscout24: selector HTML %r -> %d nodos",
+                    selector,
+                    len(nodes),
+                )
+                return nodes
+
+        logger.warning(
+            "autoscout24: ninguna estrategia de selector encontró anuncios. "
+            "Es probable que AutoScout24 haya cambiado su HTML — revisar selectores."
+        )
+        return []
+
+    def _parse_listing_node(self, node: Any, search_url: str) -> VehicleSearchResult | None:
+        """Fallback HTML: prioriza data-attrs del article actual de AS24."""
+        href_candidates = [a.get("href") for a in node.select("a[href]") if a.get("href")]
+        has_valid_offer_url = any("/angebote/" in href or "/offers/" in href for href in href_candidates)
+        if not has_valid_offer_url and not node.get("data-guid") and not node.get("data-listing-id"):
+            return None
+
+        external_id = (
+            node.get("data-guid")
+            or node.get("id")
+            or node.get("data-listing-id")
+        )
+        data_price = node.get("data-price")
+        data_make = node.get("data-make")
+        data_model = node.get("data-model")
+        data_mileage = node.get("data-mileage")
+        data_first_reg = node.get("data-first-registration")
+        data_fuel = node.get("data-fuel-type")
+
+        url = None
+        if external_id:
+            url = urljoin(f"{self._base_url}/", f"angebote/{external_id}")
+        else:
+            for anchor in node.select("a[href]"):
+                href = anchor.get("href") or ""
+                if "/angebote/" in href or "/offers/" in href:
+                    url = self._extract_url(anchor)
+                    external_id = self._extract_external_id(url)
+                    break
+
+        if not external_id and not has_valid_offer_url:
+            return None
+        if not external_id:
+            return super()._parse_listing_node(node, search_url)
+        if not url and not has_valid_offer_url:
+            return None
+
+        title = self._extract_title(node)
+        brand, model = self._split_brand_model(title)
+        brand = (data_make.title() if data_make else brand)
+        model = (data_model.title() if data_model else model)
+
+        try:
+            price = float(data_price) if data_price is not None else self._extract_price(node)
+        except (TypeError, ValueError):
+            price = self._extract_price(node)
+
+        mileage = self._parse_intish(data_mileage) or self._extract_mileage(node)
+        year = self._year_from_registration(data_first_reg) or self._extract_year(node)
+        fuel_type = self._normalize_fuel(str(data_fuel)) if data_fuel else self._extract_fuel(node)
+
+        return VehicleSearchResult(
+            source=self.source_name,
+            external_id=str(external_id),
+            url=url,
+            brand=brand,
+            model=model,
+            year=year,
+            mileage=mileage,
+            fuel_type=fuel_type,
+            transmission=self._extract_transmission(node),
+            power_hp=self._extract_power(node),
+            location=self._extract_location(node),
+            first_registration=data_first_reg,
+            images=self._extract_images(node),
+            price=price,
+            currency="EUR",
+        )
+
+    def _normalize_fuel(self, raw: str) -> str | None:
+        text = (raw or "").strip()
         if not text:
             return None
-        # "€ 12.450" or "12450 €" or "12.450,-"
-        cleaned = (
-            text.replace("€", "")
-            .replace("EUR", "")
-            .replace(".-", "")
-            .replace(",-", "")
-            .replace(".", "")
-            .replace(" ", "")
-            .replace("\xa0", "")
-            .strip()
-        )
-        # keep only digits and optional decimal comma
-        cleaned = re.sub(r"[^\d,]", "", cleaned)
-        if "," in cleaned:
-            cleaned = cleaned.replace(",", ".")
+        code_map = {
+            "b": "Gasolina",
+            "d": "Diesel",
+            "e": "Eléctrico",
+            "h": "Híbrido",
+            "l": "Gas",
+            "c": "Gas",
+        }
+        if len(text) == 1 and text.lower() in code_map:
+            return code_map[text.lower()]
+        for pattern, label in self._fuel_patterns:
+            if pattern.search(text):
+                return label
+        return text
+
+    @staticmethod
+    def _parse_intish(value: Any) -> int | None:
+        if value is None:
+            return None
+        if isinstance(value, int):
+            return value
+        if isinstance(value, float):
+            return int(value)
+        text = str(value)
+        digits = re.sub(r"[^\d]", "", text)
+        if not digits:
+            return None
         try:
-            val = float(cleaned)
-            return val if val > 0 else None
+            return int(digits)
         except ValueError:
             return None
 
     @staticmethod
-    def _parse_year(text: str) -> int | None:
-        m = re.search(r"\b(19[8-9]\d|20[0-2]\d)\b", text)
-        if m:
-            return int(m.group(1))
-        return None
-
-    @staticmethod
-    def _parse_mileage(text: str) -> int | None:
-        m = re.search(r"([\d.\s]+)\s*(?:km|KM)", text)
-        if m:
-            raw = m.group(1).replace(".", "").replace(" ", "").replace("\xa0", "")
-            try:
-                return int(raw)
-            except ValueError:
-                return None
+    def _year_from_registration(value: Any) -> int | None:
+        if value is None:
+            return None
+        text = str(value)
+        match = re.search(r"(20\d{2}|19\d{2})", text)
+        if match:
+            return int(match.group(1))
         return None
