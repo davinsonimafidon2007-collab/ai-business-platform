@@ -29,6 +29,7 @@ from app.services.comparable_market_estimator import ComparableMarketEstimator
 from app.services.evaluation_engine import EvaluationEngine
 from app.services.market_estimator import MarketEstimator
 from app.services.negotiation_engine import NegotiationEngine
+from app.services.opportunity_alert_service import OpportunityAlertService
 from app.services.opportunity_finder import OpportunityFinder
 from app.services.profit_analyzer import ProfitAnalyzer
 from app.services.search_engine import SearchEngineService
@@ -96,6 +97,11 @@ def get_evaluation_engine() -> EvaluationEngine:
 def get_opportunity_finder() -> OpportunityFinder:
     """Obtiene el detector de oportunidades."""
     return OpportunityFinder()
+
+
+def get_opportunity_alert_service() -> OpportunityAlertService:
+    """Obtiene el servicio de alertas de oportunidades (Task C.2)."""
+    return OpportunityAlertService()
 
 
 def get_market_estimator(

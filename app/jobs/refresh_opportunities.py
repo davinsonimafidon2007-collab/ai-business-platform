@@ -34,11 +34,15 @@ class RefreshOpportunityJob(Job):
             async with context.db_manager.get_session() as session:
                 from app.models.opportunity import Opportunity
                 from app.repositories.opportunity_repository import OpportunityRepository
+                from app.repositories.user_repository import UserRepository
                 from app.repositories.vehicle_repository import VehicleRepository
                 from app.services.evaluation_engine import EvaluationEngine
+                from app.services.opportunity_alert_service import OpportunityAlertService
 
                 opp_repo = OpportunityRepository(session)
                 vehicle_repo = VehicleRepository(session)
+                user_repo = UserRepository(session)
+                alert_service = OpportunityAlertService()
                 engine = EvaluationEngine(
                     import_cost_profile=getattr(
                         settings, "default_import_cost_profile", None
@@ -92,6 +96,23 @@ class RefreshOpportunityJob(Job):
                                 )
 
                             await opp_repo.save(opp)
+
+                            # Alertas email (Task C.2): notify al dueño del vehículo
+                            try:
+                                owner = await user_repo.get_by_id(vehicle.user_id)
+                                if owner is not None:
+                                    await alert_service.maybe_notify(
+                                        user_email=owner.email,
+                                        opportunity=opp,
+                                        vehicle=vehicle,
+                                    )
+                            except Exception:
+                                logger.warning(
+                                    "opportunity_alert failed for vehicle %s",
+                                    vehicle.id,
+                                    exc_info=True,
+                                )
+
                             updated_count += 1
                         except Exception:
                             logger.exception(

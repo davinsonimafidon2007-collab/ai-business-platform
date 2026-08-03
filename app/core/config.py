@@ -161,6 +161,21 @@ class Settings(BaseSettings):
     """Use TLS for SMTP connection."""
 
     # =========================================================================
+    # Opportunity alerts (Task C.2)
+    # =========================================================================
+    opportunity_alert_enabled: bool = True
+    """Master toggle for opportunity email alerts."""
+
+    opportunity_alert_min_recommendation: str = "BUY"
+    """Minimum recommendation to trigger an alert (BUY | CONSIDER)."""
+
+    opportunity_alert_min_score: float = 0.0
+    """Minimum opportunity_score to trigger an alert (0 = only by recommendation)."""
+
+    opportunity_alert_cooldown_hours: int = 24
+    """Do not re-send an alert for the same vehicle_id within N hours."""
+
+    # =========================================================================
     # Redis configuration
     # =========================================================================
     redis_url: str = "redis://localhost:6379/0"
