@@ -83,6 +83,9 @@ class Settings(BaseSettings):
     enable_scheduler: bool = True
     """Master toggle to enable/disable the background scheduler."""
 
+    provider_canary_interval: int = 21600
+    """Seconds between provider canary runs (default 6h). 0 = disabled."""
+
     # =========================================================================
     # OpenAI Vision provider
     # =========================================================================
