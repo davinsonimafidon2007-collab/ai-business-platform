@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from uuid import UUID
 
+from app.core.config import settings
 from app.models.vehicle import Vehicle
 from app.models.vehicle_evaluation import VehicleEvaluation
 from app.repositories.vehicle_evaluation_repository import VehicleEvaluationRepository
@@ -12,7 +13,9 @@ from app.services.evaluation_engine import EvaluationEngine, EvaluationResult
 class VehicleEvaluationService:
     def __init__(self, repository: VehicleEvaluationRepository, evaluation_engine: EvaluationEngine | None = None) -> None:
         self.repository = repository
-        self.evaluation_engine = evaluation_engine or EvaluationEngine()
+        self.evaluation_engine = evaluation_engine or EvaluationEngine(
+            import_cost_profile=getattr(settings, "default_import_cost_profile", None)
+        )
 
     async def create_evaluation(self, data: dict) -> VehicleEvaluation:
         evaluation = VehicleEvaluation(**data)

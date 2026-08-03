@@ -26,6 +26,7 @@ from app.repositories.inspection_repository import (
 )
 from app.repositories.vehicle_repository import VehicleRepository
 from app.services.comparable_market_estimator import ComparableMarketEstimator
+from app.services.evaluation_engine import EvaluationEngine
 from app.services.market_estimator import MarketEstimator
 from app.services.negotiation_engine import NegotiationEngine
 from app.services.opportunity_finder import OpportunityFinder
@@ -78,6 +79,18 @@ def get_vehicle_scorer() -> VehicleScorer:
 def get_profit_analyzer() -> ProfitAnalyzer:
     """Obtiene el analizador de rentabilidad."""
     return ProfitAnalyzer()
+
+
+def get_evaluation_engine() -> EvaluationEngine:
+    """Obtiene el motor de evaluación de vehículos.
+
+    El bloque económico se delega en ProfitAnalyzer con el perfil de
+    costes por defecto (settings.default_import_cost_profile).
+    """
+    return EvaluationEngine(
+        profit_analyzer=get_profit_analyzer(),
+        import_cost_profile=settings.default_import_cost_profile,
+    )
 
 
 def get_opportunity_finder() -> OpportunityFinder:

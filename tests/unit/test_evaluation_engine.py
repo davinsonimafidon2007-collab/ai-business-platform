@@ -1,4 +1,9 @@
-"""Tests para el motor de evaluación de vehículos."""
+"""Tests para el motor de evaluación de vehículos.
+
+Tras Task B.3, el bloque económico se delega en ProfitAnalyzer (perfil SPAIN).
+Estos tests verifican el scoring propio y que los valores económicos
+coinciden con ProfitAnalyzer para el mismo vehículo/perfil.
+"""
 
 from __future__ import annotations
 
@@ -6,12 +11,13 @@ import pytest
 
 from app.models.vehicle import Vehicle
 from app.services.evaluation_engine import EvaluationEngine, EvaluationResult
+from app.services.profit_analyzer import ProfitAnalyzer
 
 
 @pytest.fixture
 def evaluation_engine():
     """Fixture que crea un EvaluationEngine para tests."""
-    return EvaluationEngine()
+    return EvaluationEngine(import_cost_profile="SPAIN")
 
 
 @pytest.fixture
@@ -78,230 +84,168 @@ def test_evaluate_vehicle_returns_result(evaluation_engine, sample_vehicle):
     assert len(result.recommendation) > 0
 
 
-def test_vehicle_cost_calculation(evaluation_engine, sample_vehicle):
-    """Test que verifica el cálculo del coste del vehículo."""
+def test_vehicle_cost_matches_profit_analyzer(evaluation_engine, sample_vehicle):
+    """El coste del vehículo coincide con ProfitAnalyzer."""
     result = evaluation_engine.evaluate(sample_vehicle)
-    assert result.vehicle_cost == 35000.0
+    analysis = ProfitAnalyzer().analyze(
+        sample_vehicle, profile_name="SPAIN"
+    )
+    assert result.vehicle_cost == analysis.purchase_price
+
+
+def test_total_cost_matches_profit_analyzer(evaluation_engine, sample_vehicle):
+    """El coste total coincide con ProfitAnalyzer (misma fuente de verdad)."""
+    result = evaluation_engine.evaluate(sample_vehicle)
+    analysis = ProfitAnalyzer().analyze(
+        sample_vehicle, profile_name="SPAIN"
+    )
+    assert result.total_cost == analysis.total_cost
 
 
 def test_vehicle_cost_zero_when_no_price(evaluation_engine):
     """Test que verifica el comportamiento cuando no hay precio."""
     vehicle = Vehicle(brand="BMW", model="X5", year=2020)
     result = evaluation_engine.evaluate(vehicle)
-    
+
     assert result.vehicle_cost == 0.0
     assert "no tiene precio de compra definido" in result.warnings
 
 
-def test_transport_cost_suv(evaluation_engine):
-    """Test que verifica el coste de transporte para SUV."""
+def test_transport_cost_uses_spain_profile(evaluation_engine):
+    """El transporte usa el perfil SPAIN (1200 €), no categoría del vehículo."""
+    from app.config.import_costs import get_profile
+
+    profile = get_profile("SPAIN")
     vehicle = Vehicle(brand="BMW", model="X5", year=2020, price=35000.0, category="SUV")
     result = evaluation_engine.evaluate(vehicle)
-    
-    # SUV debería tener coste de transporte mayor (750€ base)
-    assert result.transport_cost == 750.0
+    assert result.transport_cost == profile.transport_cost
 
 
-def test_transport_cost_compact(evaluation_engine):
-    """Test que verifica el coste de transporte para coche compacto."""
-    vehicle = Vehicle(brand="BMW", model="X5", year=2020, price=35000.0, category="Compacto")
-    result = evaluation_engine.evaluate(vehicle)
-    
-    # Coche compacto debería tener coste menor (400€ base)
-    assert result.transport_cost == 400.0
+def test_import_tax_matches_spain_tax_rate(evaluation_engine):
+    """El impuesto usa taza fiscal del perfil SPAIN (10%)."""
+    from app.config.import_costs import get_profile
 
-
-def test_transport_cost_standard(evaluation_engine):
-    """Test que verifica el coste de transporte estándar."""
-    vehicle = Vehicle(brand="BMW", model="X5", year=2020, price=35000.0, category="Sedan")
-    result = evaluation_engine.evaluate(vehicle)
-    
-    # Sedan estándar (500€ base)
-    assert result.transport_cost == 500.0
-
-
-def test_transport_cost_old_vehicle(evaluation_engine):
-    """Test que verifica el coste de transporte para vehículos antiguos."""
-    vehicle = Vehicle(brand="BMW", model="X5", year=2005, price=15000.0, category="SUV")
-    result = evaluation_engine.evaluate(vehicle)
-    
-    # SUV base (750€) + 20% por ser mayor de 15 años
-    expected = 750.0 * 1.2
-    assert result.transport_cost == expected
-
-
-def test_import_tax_calculation(evaluation_engine):
-    """Test que verifica el cálculo del impuesto de importación."""
+    profile = get_profile("SPAIN")
     vehicle = Vehicle(brand="BMW", model="X5", year=2020, price=35000.0)
     result = evaluation_engine.evaluate(vehicle)
-    
-    # Import tax is 0 for EU vehicles (Germany is in the EU)
-    expected_import_tax = 0.0
-    # El impuesto está incluido en taxes_cost
-    assert result.taxes_cost >= expected_import_tax
+    assert result.taxes_cost == 35000.0 * profile.tax_rate
 
 
-def test_iva_calculation(evaluation_engine):
-    """Test que verifica el cálculo del IVA."""
+def test_registration_cost_uses_spain_profile(evaluation_engine):
+    """La matriculación usa el perfil SPAIN, no porcentaje del viejo engine."""
+    from app.config.import_costs import get_profile
+
+    profile = get_profile("SPAIN")
     vehicle = Vehicle(brand="BMW", model="X5", year=2020, price=35000.0)
     result = evaluation_engine.evaluate(vehicle)
-    
-    # IVA = 21% sobre (precio + import_tax)
-    vehicle_cost = 35000.0
-    import_tax = 0.0  # Import tax is 0 for EU vehicles
-    expected_iva = (vehicle_cost + import_tax) * 0.21
-    # El IVA está incluido en taxes_cost
-    assert result.taxes_cost >= expected_iva
+    assert result.registration_cost == profile.registration_cost
 
 
-def test_registration_tax_calculation(evaluation_engine):
-    """Test que verifica el cálculo del impuesto de matriculación."""
-    vehicle = Vehicle(brand="BMW", model="X5", year=2020, price=35000.0)
-    result = evaluation_engine.evaluate(vehicle)
-    
-    # 4% de 35000€
-    expected_registration_tax = 35000.0 * 0.04
-    # registration_cost incluye impuesto de matriculación + tasas
-    assert result.registration_cost >= expected_registration_tax
-
-
-def test_total_cost_calculation(evaluation_engine, sample_vehicle):
-    """Test que verifica el cálculo del coste total."""
+def test_total_cost_includes_all_components(evaluation_engine, sample_vehicle):
+    """El coste total descompone de forma coherente (con commission + repair)."""
     result = evaluation_engine.evaluate(sample_vehicle)
-    
-    # El coste total debe ser mayor que el precio del vehículo
-    assert result.total_cost > result.vehicle_cost
-    
-    # Verificar que incluye todos los componentes
-    assert result.total_cost == (
+    analysis = ProfitAnalyzer().analyze(
+        sample_vehicle, profile_name="SPAIN"
+    )
+
+    total_from_components = (
         result.vehicle_cost
         + result.transport_cost
         + result.registration_cost
         + result.itv_cost
         + result.gestoria_cost
         + result.taxes_cost
+        + analysis.cost_breakdown.commission_cost
+        + analysis.cost_breakdown.repair_estimate
     )
+    assert abs(result.total_cost - total_from_components) < 0.01
 
 
-def test_itv_cost_is_fixed(evaluation_engine, sample_vehicle):
-    """Test que verifica que el coste de ITV es fijo."""
+def test_itv_cost_matches_spain_inspection(evaluation_engine, sample_vehicle):
+    """La ITV usa el perfil SPAIN (inspection_cost=90)."""
+    from app.config.import_costs import get_profile
+
+    profile = get_profile("SPAIN")
     result = evaluation_engine.evaluate(sample_vehicle)
-    assert result.itv_cost == 150.0
+    assert result.itv_cost == profile.inspection_cost
 
 
-def test_gestoria_cost_is_fixed(evaluation_engine, sample_vehicle):
-    """Test que verifica que el coste de gestoría es fijo."""
+def test_gestoria_cost_uses_profile_miscellaneous(evaluation_engine, sample_vehicle):
+    """La gestoría usa miscellaneous + paperwork del perfil."""
+    from app.config.import_costs import get_profile
+
+    profile = get_profile("SPAIN")
     result = evaluation_engine.evaluate(sample_vehicle)
-    assert result.gestoria_cost == 350.0
+    # cost_breakdown.miscellaneous_cost = misc + paperwork (480)
+    assert result.gestoria_cost == profile.miscellaneous_cost + profile.paperwork_cost
 
 
-def test_estimated_sale_price_with_depreciation(evaluation_engine):
-    """Test que verifica la depreciación por antigüedad."""
-    # Vehículo de 1 año
-    vehicle_1y = Vehicle(brand="BMW", model="X5", year=2023, price=35000.0)
-    result_1y = evaluation_engine.evaluate(vehicle_1y)
-    
-    # Vehículo de 3 años
-    vehicle_3y = Vehicle(brand="BMW", model="X5", year=2021, price=35000.0)
-    result_3y = evaluation_engine.evaluate(vehicle_3y)
-    
-    # El vehículo más antiguo debería tener menor precio estimado
-    assert result_1y.estimated_sale_price_es > result_3y.estimated_sale_price_es
-
-
-def test_estimated_sale_price_with_mileage_penalty(evaluation_engine):
-    """Test que verifica la penalización por kilometraje alto."""
-    # Vehículo con kilometraje bajo
-    vehicle_low_km = Vehicle(brand="BMW", model="X5", year=2020, price=35000.0, mileage=30000)
-    result_low = evaluation_engine.evaluate(vehicle_low_km)
-    
-    # Vehículo con kilometraje alto
-    vehicle_high_km = Vehicle(brand="BMW", model="X5", year=2020, price=35000.0, mileage=150000)
-    result_high = evaluation_engine.evaluate(vehicle_high_km)
-    
-    # El vehículo con más kilometraje debería tener menor precio estimado
-    assert result_low.estimated_sale_price_es > result_high.estimated_sale_price_es
-
-
-def test_brand_premium_maintained(evaluation_engine):
-    """Test que verifica que las marcas premium mantienen mejor el valor."""
-    # Toyota (premium 1.08)
-    vehicle_toyota = Vehicle(brand="Toyota", model="Corolla", year=2020, price=25000.0)
-    result_toyota = evaluation_engine.evaluate(vehicle_toyota)
-    
-    # Volkswagen (premium 1.00)
-    vehicle_vw = Vehicle(brand="Volkswagen", model="Golf", year=2020, price=25000.0)
-    result_vw = evaluation_engine.evaluate(vehicle_vw)
-    
-    # Toyota debería tener mayor precio estimado
-    assert result_toyota.estimated_sale_price_es > result_vw.estimated_sale_price_es
-
-
-def test_gross_profit_calculation(evaluation_engine, sample_vehicle):
-    """Test que verifica el cálculo del beneficio bruto."""
+def test_estimated_sale_price_matches_profit_analyzer(evaluation_engine, sample_vehicle):
+    """El precio estimado de venta coincide con ProfitAnalyzer (multiplicador default)."""
     result = evaluation_engine.evaluate(sample_vehicle)
-    
-    expected_profit = result.estimated_sale_price_es - result.total_cost
-    assert result.gross_profit == expected_profit
+    analysis = ProfitAnalyzer().analyze(
+        sample_vehicle, profile_name="SPAIN"
+    )
+    assert result.estimated_sale_price_es == analysis.estimated_sale_price
 
 
-def test_profit_margin_calculation(evaluation_engine, sample_vehicle):
-    """Test que verifica el cálculo del margen de beneficio."""
+def test_profit_matches_profit_analyzer_net(evaluation_engine, sample_vehicle):
+    """El beneficio coincide con net_profit de ProfitAnalyzer."""
     result = evaluation_engine.evaluate(sample_vehicle)
-    
-    if result.total_cost > 0:
-        expected_margin = (result.gross_profit / result.total_cost) * 100
-        assert abs(result.profit_margin_percent - expected_margin) < 0.01
-    else:
-        assert result.profit_margin_percent == 0.0
+    analysis = ProfitAnalyzer().analyze(
+        sample_vehicle, profile_name="SPAIN"
+    )
+    assert result.gross_profit == analysis.net_profit
+
+
+def test_profit_margin_matches_profit_analyzer_roi(evaluation_engine, sample_vehicle):
+    """El margen coincide con roi_percentage de ProfitAnalyzer."""
+    result = evaluation_engine.evaluate(sample_vehicle)
+    analysis = ProfitAnalyzer().analyze(
+        sample_vehicle, profile_name="SPAIN"
+    )
+    assert result.profit_margin_percent == analysis.roi_percentage
 
 
 def test_score_calculation_high_margin(evaluation_engine):
     """Test que verifica el score con margen alto."""
-    # Vehículo con buen margen
     vehicle = Vehicle(brand="Toyota", model="Corolla", year=2022, price=20000.0, mileage=20000)
     result = evaluation_engine.evaluate(vehicle)
-    
-    # Score debería ser alto (>= 70)
+
     assert result.score >= 40
 
 
 def test_score_calculation_low_margin(evaluation_engine):
     """Test que verifica el score con margen bajo."""
-    # Vehículo con precio muy alto (margen bajo)
     vehicle = Vehicle(brand="BMW", model="X5", year=2020, price=80000.0, mileage=50000)
     result = evaluation_engine.evaluate(vehicle)
-    
-    # Score debería ser menor
+
     assert result.score < 90
 
 
 def test_classification_verde(evaluation_engine):
     """Test que verifica clasificación verde."""
-    # Vehículo con buen margen y score alto
     vehicle = Vehicle(brand="Toyota", model="Corolla", year=2022, price=20000.0, mileage=20000)
     result = evaluation_engine.evaluate(vehicle)
-    
+
     if result.score >= 70 and result.profit_margin_percent >= 15:
         assert result.classification == "verde"
 
 
 def test_classification_amarillo(evaluation_engine):
     """Test que verifica clasificación amarillo."""
-    # Vehículo con margen ajustado
     vehicle = Vehicle(brand="BMW", model="X5", year=2020, price=50000.0, mileage=60000)
     result = evaluation_engine.evaluate(vehicle)
-    
+
     if 40 <= result.score < 70 and 8 <= result.profit_margin_percent < 15:
         assert result.classification == "amarillo"
 
 
 def test_classification_rojo(evaluation_engine):
     """Test que verifica clasificación rojo."""
-    # Vehículo con margen muy bajo o negativo
     vehicle = Vehicle(brand="BMW", model="X5", year=2010, price=60000.0, mileage=200000)
     result = evaluation_engine.evaluate(vehicle)
-    
+
     if result.score < 40 or result.profit_margin_percent < 8:
         assert result.classification == "rojo"
 
@@ -310,7 +254,7 @@ def test_warnings_generated_for_no_price(evaluation_engine):
     """Test que verifica que se generan advertencias cuando no hay precio."""
     vehicle = Vehicle(brand="BMW", model="X5", year=2020)
     result = evaluation_engine.evaluate(vehicle)
-    
+
     assert len(result.warnings) > 0
     assert any("precio de compra" in warning for warning in result.warnings)
 
@@ -319,7 +263,7 @@ def test_recommendation_verde(evaluation_engine):
     """Test que verifica la recomendación para clasificación verde."""
     vehicle = Vehicle(brand="Toyota", model="Corolla", year=2022, price=20000.0, mileage=20000)
     result = evaluation_engine.evaluate(vehicle)
-    
+
     if result.classification == "verde":
         assert "recomendado" in result.recommendation.lower()
 
@@ -328,19 +272,17 @@ def test_recommendation_rojo(evaluation_engine):
     """Test que verifica la recomendación para clasificación rojo."""
     vehicle = Vehicle(brand="BMW", model="X5", year=2010, price=60000.0, mileage=200000)
     result = evaluation_engine.evaluate(vehicle)
-    
+
     if result.classification == "rojo":
         assert "no recomendado" in result.recommendation.lower()
 
 
 def test_score_range_0_to_100(evaluation_engine):
     """Test que verifica que el score está siempre entre 0 y 100."""
-    # Vehículo muy malo
     vehicle_bad = Vehicle(brand="BMW", model="X5", year=1990, price=100000.0, mileage=300000)
     result_bad = evaluation_engine.evaluate(vehicle_bad)
     assert 0 <= result_bad.score <= 100
-    
-    # Vehículo muy bueno
+
     vehicle_good = Vehicle(brand="Toyota", model="Corolla", year=2023, price=20000.0, mileage=5000)
     result_good = evaluation_engine.evaluate(vehicle_good)
     assert 0 <= result_good.score <= 100
@@ -349,22 +291,14 @@ def test_score_range_0_to_100(evaluation_engine):
 def test_evaluation_result_dataclass(evaluation_engine, sample_vehicle):
     """Test que verifica que EvaluationResult es un dataclass."""
     result = evaluation_engine.evaluate(sample_vehicle)
-    
-    # Verificar que tiene todos los campos esperados
-    assert hasattr(result, "vehicle_cost")
-    assert hasattr(result, "transport_cost")
-    assert hasattr(result, "registration_cost")
-    assert hasattr(result, "itv_cost")
-    assert hasattr(result, "gestoria_cost")
-    assert hasattr(result, "taxes_cost")
-    assert hasattr(result, "total_cost")
-    assert hasattr(result, "estimated_sale_price_es")
-    assert hasattr(result, "gross_profit")
-    assert hasattr(result, "profit_margin_percent")
-    assert hasattr(result, "score")
-    assert hasattr(result, "classification")
-    assert hasattr(result, "warnings")
-    assert hasattr(result, "recommendation")
+
+    for attr in [
+        "vehicle_cost", "transport_cost", "registration_cost", "itv_cost",
+        "gestoria_cost", "taxes_cost", "total_cost", "estimated_sale_price_es",
+        "gross_profit", "profit_margin_percent", "score", "classification",
+        "warnings", "recommendation",
+    ]:
+        assert hasattr(result, attr)
 
 
 def test_evaluation_with_all_vehicle_fields(evaluation_engine):
@@ -382,9 +316,9 @@ def test_evaluation_with_all_vehicle_fields(evaluation_engine):
         location="Munich, Germany",
     )
     result = evaluation_engine.evaluate(vehicle)
-    
+
     assert result.vehicle_cost == 35000.0
-    assert result.transport_cost == 750.0  # SUV
+    assert result.total_cost > 35000.0
     assert result.classification in ["verde", "amarillo", "rojo"]
 
 
@@ -392,10 +326,24 @@ def test_evaluation_consistency(evaluation_engine, sample_vehicle):
     """Test que verifica que la evaluación es consistente (mismo input = mismo output)."""
     result1 = evaluation_engine.evaluate(sample_vehicle)
     result2 = evaluation_engine.evaluate(sample_vehicle)
-    
+
     assert result1.vehicle_cost == result2.vehicle_cost
     assert result1.transport_cost == result2.transport_cost
     assert result1.total_cost == result2.total_cost
     assert result1.estimated_sale_price_es == result2.estimated_sale_price_es
     assert result1.score == result2.score
     assert result1.classification == result2.classification
+
+
+def test_recommendation_aligned_with_profit_analyzer(evaluation_engine, sample_vehicle):
+    """La recomendación se alinea con ProfitAnalyzer (BUY/CONSIDER/REJECT)."""
+    result = evaluation_engine.evaluate(sample_vehicle)
+    analysis = ProfitAnalyzer().analyze(
+        sample_vehicle, profile_name="SPAIN"
+    )
+    from app.services.profit_analyzer import Recommendation
+
+    if analysis.recommendation == Recommendation.BUY:
+        assert "recomendado" in result.recommendation.lower()
+    elif analysis.recommendation == Recommendation.REJECT:
+        assert "no recomendado" in result.recommendation.lower()

@@ -1,13 +1,18 @@
-"""Motor de evaluación de vehículos para calcular costes y rentabilidad."""
+"""Motor de evaluación de vehículos para calcular costes y rentabilidad.
+
+El bloque económico se delega en ProfitAnalyzer (misma fuente de verdad
+que search / simulate-profit). El engine conserva únicamente el scoring
+propio (score, clasificación, advertencias y recomendación alineada).
+"""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
 
 from app.core.config import settings
 from app.models.vehicle import Vehicle
+from app.services.profit_analyzer import ProfitAnalyzer, Recommendation
 
 
 @dataclass
@@ -38,31 +43,10 @@ class EvaluationResult:
 class EvaluationEngine:
     """Motor de evaluación de vehículos.
 
-    Calcula automáticamente todos los costes de importación,
-    estima el precio de venta en España y determina la rentabilidad.
+    Delega el bloque económico en ProfitAnalyzer con el perfil de costes
+    por defecto (settings.default_import_cost_profile, SPAIN por defecto)
+    y conserva el scoring propio (score, clasificación, advertencias).
     """
-
-    # Constantes configurables (valores por defecto)
-    # Se pueden sobreescribir mediante Settings o variables de entorno
-
-    # Costes fijos
-    DEFAULT_ITV_COST: float = 150.0
-    DEFAULT_GESTORIA_COST: float = 350.0
-    DEFAULT_TRANSPORT_COST_PER_CUBIC_METER: float = 250.0
-
-    # Impuestos — supuestos documentados para importación DE (UE) → ES
-    # Vehículos usados intra-UE: NO se aplica IVA pleno sobre el precio de compra alemán.
-    # El coste fiscal relevante en España es el impuesto de matriculación (IEDMT)
-    # y tasas. Se usa un proxy simplificado hasta tener tabla CO2 real.
-    IVA_RATE: float = 0.21  # Solo para proveedores fuera de UE (no DE)
-    IMPORT_TAX_RATE: float = 0.10  # Solo fuera de UE
-
-    # Matriculación España (proxy; idealmente basado en g/km CO2)
-    REGISTRATION_TAX_RATE: float = 0.045  # ~4.5% proxy IEDMT
-    REGISTRATION_FEE: float = 200.0
-
-    # Markup de reventa DE→ES (tesis del negocio: precio ES > precio DE)
-    DE_TO_ES_MARKET_MARKUP: float = 1.18  # 18% sobre precio de compra DE
 
     # Margen mínimo aceptable
     MIN_PROFIT_MARGIN_PERCENT: float = 15.0
@@ -72,20 +56,24 @@ class EvaluationEngine:
     GREEN_SCORE_THRESHOLD: int = 70
     YELLOW_SCORE_THRESHOLD: int = 40
 
-    # Factores de depreciación por antigüedad
-    AGE_DEPRECIATION_RATES: dict[int, float] = None  # Se inicializa en __init__
+    def __init__(
+        self,
+        profit_analyzer: ProfitAnalyzer | None = None,
+        import_cost_profile: str | None = None,
+    ) -> None:
+        """Inicializa el motor de evaluación.
 
-    def __init__(self) -> None:
-        """Inicializa el motor de evaluación."""
-        # Configurar tasas de depreciación por antigüedad
-        self.AGE_DEPRECIATION_RATES = {
-            1: 0.15,  # 1 año: 15% depreciación
-            2: 0.25,  # 2 años: 25% depreciación
-            3: 0.35,  # 3 años: 35% depreciación
-            4: 0.45,  # 4 años: 45% depreciación
-            5: 0.55,  # 5 años: 55% depreciación
-        }
-        # Para más de 5 años, usar 55% + 5% por año adicional
+        Args:
+            profit_analyzer: Analizador económico (ProfitAnalyzer por defecto).
+            import_cost_profile: Perfil de costes de importación
+                (settings.default_import_cost_profile o "SPAIN" por defecto).
+        """
+        self._profit = profit_analyzer or ProfitAnalyzer()
+        self._profile = (
+            import_cost_profile
+            or getattr(settings, "default_import_cost_profile", None)
+            or "SPAIN"
+        )
 
     @staticmethod
     def _current_year() -> int:
@@ -102,75 +90,50 @@ class EvaluationEngine:
         """
         warnings: list[str] = []
 
-        # 1. Coste del vehículo (precio de compra en Alemania)
-        vehicle_cost = vehicle.price if vehicle.price and vehicle.price > 0 else 0.0
+        # --- Bloque económico delegado en ProfitAnalyzer ---
+        try:
+            analysis = self._profit.analyze(
+                vehicle,
+                profile_name=self._profile,
+                estimated_sale_price=getattr(vehicle, "estimated_sale_price", None),
+            )
+        except ValueError:
+            # Vehículo sin precio: ProfitAnalyzer no puede analizar.
+            return self._empty_result(vehicle, warnings)
+
+        # Mapear ProfitAnalysis → EvaluationResult
+        vehicle_cost = analysis.purchase_price
+        transport_cost = analysis.transport_cost
+        registration_cost = analysis.registration_cost
+        itv_cost = analysis.inspection_cost
+        gestoria_cost = analysis.cost_breakdown.miscellaneous_cost
+        taxes_cost = analysis.taxes
+        total_cost = analysis.total_cost
+        estimated_sale_price_es = analysis.estimated_sale_price
+        gross_profit = analysis.net_profit
+        profit_margin_percent = analysis.roi_percentage
+
         if vehicle_cost == 0:
             warnings.append("no tiene precio de compra definido")
-
-        # 2. Coste de transporte
-        transport_cost = self._calculate_transport_cost(vehicle)
-
-        # 3. Impuestos de importación (solo fuera de UE; DE = 0)
-        import_tax = self._calculate_import_tax(vehicle_cost, vehicle)
-
-        # 4. IVA (solo fuera de UE; DE usados = 0 en este modelo)
-        iva = self._calculate_iva(vehicle_cost + import_tax, vehicle)
-
-        # 5. Impuesto de matriculación (España)
-        registration_tax = self._calculate_registration_tax(vehicle_cost)
-
-        # 6. Tasas de matriculación
-        registration_fee = self.REGISTRATION_FEE
-
-        # 7. ITV
-        itv_cost = self.DEFAULT_ITV_COST
-
-        # 8. Gestoría
-        gestoria_cost = self.DEFAULT_GESTORIA_COST
-
-        # Coste total
-        total_cost = (
-            vehicle_cost
-            + transport_cost
-            + import_tax
-            + iva
-            + registration_tax
-            + registration_fee
-            + itv_cost
-            + gestoria_cost
-        )
-
-        # 9. Precio estimado de venta en España
-        estimated_sale_price_es = self._estimate_sale_price_in_spain(vehicle)
         if estimated_sale_price_es == 0:
             warnings.append("No se pudo estimar el precio de venta en España")
 
-        # 10. Beneficio bruto
-        gross_profit = estimated_sale_price_es - total_cost
-
-        # 11. Margen porcentual
-        if total_cost > 0:
-            profit_margin_percent = (gross_profit / total_cost) * 100
-        else:
-            profit_margin_percent = 0.0
-            warnings.append("El coste total es cero, no se puede calcular el margen")
-
-        # 12. Score (0-100)
+        # --- Score y clasificación (scoring propio del engine) ---
         score = self._calculate_score(vehicle, profit_margin_percent, warnings)
-
-        # 13. Clasificación
         classification = self._classify(profit_margin_percent, score)
 
-        # 14. Recomendación
-        recommendation = self._generate_recommendation(classification, profit_margin_percent, warnings)
+        # --- Recomendación alineada con ProfitAnalysis ---
+        recommendation = self._generate_recommendation(
+            classification, profit_margin_percent, warnings, analysis.recommendation
+        )
 
         return EvaluationResult(
             vehicle_cost=vehicle_cost,
             transport_cost=transport_cost,
-            registration_cost=registration_tax + registration_fee,
+            registration_cost=registration_cost,
             itv_cost=itv_cost,
             gestoria_cost=gestoria_cost,
-            taxes_cost=import_tax + iva,
+            taxes_cost=taxes_cost,
             total_cost=total_cost,
             estimated_sale_price_es=estimated_sale_price_es,
             gross_profit=gross_profit,
@@ -181,109 +144,30 @@ class EvaluationEngine:
             recommendation=recommendation,
         )
 
-    def _calculate_transport_cost(self, vehicle: Vehicle) -> float:
-        """Calcula el coste de transporte desde Alemania.
-
-        Args:
-            vehicle: Vehículo a evaluar.
-
-        Returns:
-            Coste de transporte en euros.
-        """
-        # Coste base por tipo de vehículo
-        base_cost = 500.0  # Coste base para coches estándar
-
-        # Ajustar por tamaño (estimación basada en categoría)
-        if vehicle.category:
-            category_lower = vehicle.category.lower()
-            if any(word in category_lower for word in ["suv", "pickup", "furgoneta", "van"]):
-                base_cost = 750.0
-            elif any(word in category_lower for word in ["compacto", "pequeño", "city"]):
-                base_cost = 400.0
-
-        # Ajustar por antigüedad (vehículos más antiguos pueden necesitar transporte especial)
-        if vehicle.year:
-            current_year = self._current_year()
-            age = current_year - vehicle.year
-            if age > 15:
-                base_cost *= 1.2  # 20% más para vehículos muy antiguos
-
-        return base_cost
-
-    def _calculate_import_tax(self, vehicle_cost: float, vehicle: Vehicle | None = None) -> float:
-        """Impuesto de importación. Cero para proveedores UE (mobile_de, autoscout24)."""
-        source = (getattr(vehicle, "source", None) or "").lower() if vehicle else ""
-        # Proveedores actuales son UE
-        if source in ("mobile_de", "autoscout24", "mobile.de", ""):
-            return 0.0
-        return vehicle_cost * self.IMPORT_TAX_RATE
-
-    def _calculate_iva(self, base: float, vehicle: Vehicle | None = None) -> float:
-        """IVA. Cero para usados intra-UE en este modelo simplificado.
-
-        Nota: el tratamiento real depende de si el vendedor es particular o
-        profesional y del régimen de IVA del país de origen. Hasta tener
-        esa información en el listing, no aplicamos IVA pleno a DE.
-        """
-        source = (getattr(vehicle, "source", None) or "").lower() if vehicle else ""
-        if source in ("mobile_de", "autoscout24", "mobile.de", ""):
-            return 0.0
-        return base * self.IVA_RATE
-
-    def _calculate_registration_tax(self, vehicle_cost: float) -> float:
-        """Calcula el impuesto de matriculación.
-
-        Args:
-            vehicle_cost: Coste del vehículo.
-
-        Returns:
-            Impuesto de matriculación en euros.
-        """
-        return vehicle_cost * self.REGISTRATION_TAX_RATE
-
-    def _estimate_sale_price_in_spain(self, vehicle: Vehicle) -> float:
-        """Estima el precio de reventa en España a partir del precio de compra en DE.
-
-        Tesis del negocio: el mercado español paga más que el alemán para el
-        mismo vehículo premium. Se parte del precio DE y se aplica un markup
-        DE→ES, con ajustes por kilometraje excesivo y marca.
-        NO se deprecia el precio DE por antigüedad (ya está reflejada en el
-        precio de compra del anuncio).
-        """
-        if not vehicle.price or vehicle.price <= 0:
-            return 0.0
-
-        base_price = vehicle.price
-
-        # Penalización solo por kilometraje excesivo respecto a la media
-        if vehicle.mileage and vehicle.mileage > 0 and vehicle.year:
-            age = max(0, self._current_year() - vehicle.year)
-            expected_mileage = age * 15000
-            if vehicle.mileage > expected_mileage:
-                excess_km = vehicle.mileage - expected_mileage
-                mileage_penalty = (excess_km / 10000) * 0.02  # 2% por cada 10k km extra
-                base_price = base_price * (1 - min(mileage_penalty, 0.15))
-
-        # Prima de marca (mantiene valor)
-        brand_premium: dict[str, float] = {
-            "porsche": 1.10,
-            "mercedes-benz": 1.05,
-            "mercedes": 1.05,
-            "bmw": 1.05,
-            "audi": 1.03,
-            "volkswagen": 1.00,
-            "toyota": 1.08,
-            "lexus": 1.10,
-            "honda": 1.05,
-        }
-        if vehicle.brand:
-            brand_lower = vehicle.brand.lower().strip()
-            if brand_lower in brand_premium:
-                base_price = base_price * brand_premium[brand_lower]
-
-        # Markup de mercado DE→ES
-        estimated_price = base_price * self.DE_TO_ES_MARKET_MARKUP
-        return estimated_price
+    def _empty_result(self, vehicle: Vehicle, warnings: list[str]) -> EvaluationResult:
+        """Construye un EvaluationResult vacío cuando no hay precio."""
+        warnings.append("no tiene precio de compra definido")
+        score = self._calculate_score(vehicle, 0.0, warnings)
+        classification = self._classify(0.0, score)
+        recommendation = self._generate_recommendation(
+            classification, 0.0, warnings, Recommendation.REJECT
+        )
+        return EvaluationResult(
+            vehicle_cost=0.0,
+            transport_cost=0.0,
+            registration_cost=0.0,
+            itv_cost=0.0,
+            gestoria_cost=0.0,
+            taxes_cost=0.0,
+            total_cost=0.0,
+            estimated_sale_price_es=0.0,
+            gross_profit=0.0,
+            profit_margin_percent=0.0,
+            score=score,
+            classification=classification,
+            warnings=warnings,
+            recommendation=recommendation,
+        )
 
     def _calculate_score(
         self, vehicle: Vehicle, profit_margin_percent: float, warnings: list[str]
@@ -360,23 +244,38 @@ class EvaluationEngine:
         else:
             return "rojo"
 
-    def _generate_recommendation(self, classification: str, profit_margin_percent: float, warnings: list[str]) -> str:
-        """Genera una recomendación basada en la clasificación.
+    def _generate_recommendation(
+        self,
+        classification: str,
+        profit_margin_percent: float,
+        warnings: list[str],
+        profit_recommendation: Recommendation | None = None,
+    ) -> str:
+        """Genera una recomendación alineada con ProfitAnalysis.
 
         Args:
             classification: Clasificación de la evaluación.
             profit_margin_percent: Margen de beneficio porcentual.
             warnings: Lista de advertencias.
+            profit_recommendation: Recomendación económica de ProfitAnalyzer.
 
         Returns:
             Recomendación en texto.
         """
-        if classification == "verde":
+        if profit_recommendation == Recommendation.BUY:
             recommendation = "Vehículo recomendado para importación. El margen de beneficio es adecuado."
-        elif classification == "amarillo":
+        elif profit_recommendation == Recommendation.CONSIDER:
             recommendation = "Vehículo con margen ajustado. Considerar negociar el precio de compra."
-        else:
+        elif profit_recommendation == Recommendation.REJECT:
             recommendation = "Vehículo no recomendado. El margen de beneficio es insuficiente o negativo."
+        else:
+            # Fallback al comportamiento basado en clasificación
+            if classification == "verde":
+                recommendation = "Vehículo recomendado para importación. El margen de beneficio es adecuado."
+            elif classification == "amarillo":
+                recommendation = "Vehículo con margen ajustado. Considerar negociar el precio de compra."
+            else:
+                recommendation = "Vehículo no recomendado. El margen de beneficio es insuficiente o negativo."
 
         if warnings:
             recommendation += f" Advertencias: {', '.join(warnings)}"

@@ -5,7 +5,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.v1.dependencies import get_profit_analyzer
+from app.api.v1.dependencies import get_evaluation_engine, get_profit_analyzer
 from app.api.v1.schemas.vehicle import SimulateProfitRequest, SimulateProfitResponse
 from app.db.session import get_db_session
 from app.dependencies.auth import get_current_user
@@ -15,6 +15,7 @@ from app.repositories.vehicle_evaluation_repository import VehicleEvaluationRepo
 from app.repositories.vehicle_repository import VehicleRepository
 from app.schemas.vehicle import VehicleCreate, VehicleRead, VehicleUpdate
 from app.schemas.vehicle_evaluation import VehicleEvaluationRead, VehicleEvaluationUpdate
+from app.services.evaluation_engine import EvaluationEngine
 from app.services.profit_analyzer import ProfitAnalyzer
 from app.services.vehicle_evaluation_service import VehicleEvaluationService
 from app.services.vehicle_service import VehicleService
@@ -27,9 +28,12 @@ async def get_vehicle_service(session: AsyncSession = Depends(get_db_session)) -
     return VehicleService(repository)
 
 
-async def get_vehicle_evaluation_service(session: AsyncSession = Depends(get_db_session)) -> VehicleEvaluationService:
+async def get_vehicle_evaluation_service(
+    session: AsyncSession = Depends(get_db_session),
+    evaluation_engine: EvaluationEngine = Depends(get_evaluation_engine),
+) -> VehicleEvaluationService:
     repository = VehicleEvaluationRepository(session)
-    return VehicleEvaluationService(repository)
+    return VehicleEvaluationService(repository, evaluation_engine)
 
 
 async def _get_owned_vehicle(vehicle_id: str, current_user: User, service: VehicleService) -> Vehicle:

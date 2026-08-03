@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
 
+from app.core.config import settings
 from app.config.inspection import (
     CRITICAL_SEVERITY_THRESHOLD,
     DEFAULT_REPAIR_COST_HIGH,
@@ -74,7 +75,9 @@ class InspectionService:
         self._observation_repo = observation_repo
         self._photo_repo = photo_repo
         self._negotiation_engine = negotiation_engine or NegotiationEngine()
-        self._evaluation_engine = evaluation_engine or EvaluationEngine()
+        self._evaluation_engine = evaluation_engine or EvaluationEngine(
+            import_cost_profile=getattr(settings, "default_import_cost_profile", None)
+        )
         self._vision_service = vision_service
         self._evaluation_repo = evaluation_repo
 

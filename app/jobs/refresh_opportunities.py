@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+from app.core.config import settings
 from app.jobs.base import Job, JobContext, JobResult
 
 _CLASSIFICATION_TO_RISK = {
@@ -38,7 +39,11 @@ class RefreshOpportunityJob(Job):
 
                 opp_repo = OpportunityRepository(session)
                 vehicle_repo = VehicleRepository(session)
-                engine = EvaluationEngine()
+                engine = EvaluationEngine(
+                    import_cost_profile=getattr(
+                        settings, "default_import_cost_profile", None
+                    )
+                )
 
                 page_size = 200
                 skip = 0
