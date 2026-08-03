@@ -33,6 +33,7 @@ from __future__ import annotations
 import inspect
 from typing import Any
 
+from app.core.config import settings
 from app.core.logging import get_logger
 from app.models.negotiation import (
     DefectItem,
@@ -79,6 +80,7 @@ class SearchOrchestrator:
         opportunity_finder: OpportunityFinder,
         negotiation_engine: NegotiationEngine | None = None,
         provider_registry: type[ProviderRegistry] = ProviderRegistry,
+        import_cost_profile: str | None = None,
     ) -> None:
         """Inicializa el orquestador con todas las dependencias.
 
@@ -98,6 +100,11 @@ class SearchOrchestrator:
         self._opportunity_finder = opportunity_finder
         self._negotiation_engine = negotiation_engine or NegotiationEngine()
         self._provider_registry = provider_registry
+        self._import_cost_profile = (
+            import_cost_profile
+            or getattr(settings, "default_import_cost_profile", None)
+            or "SPAIN"
+        )
 
     # ------------------------------------------------------------------
     # API pública
@@ -380,7 +387,9 @@ class SearchOrchestrator:
             else None
         )
         profit_analysis = self._profit_analyzer.analyze(
-            vehicle, estimated_sale_price=estimated_sale_price
+            vehicle,
+            profile_name=self._import_cost_profile,
+            estimated_sale_price=estimated_sale_price,
         )
 
         # 4. Oportunidad

@@ -42,3 +42,39 @@ class ProviderListResponse(BaseModel):
         ..., description="Nombres de los proveedores registrados"
     )
 
+
+class SimulateProfitRequest(BaseModel):
+    """Petición de simulación de beneficio what-if sobre un vehículo."""
+
+    profile_name: str = Field(
+        default="SPAIN", description="Perfil de costes (ES, SPAIN, PT, ...)"
+    )
+    purchase_price: float | None = Field(
+        default=None,
+        description="Override del precio de compra; si null usa vehicle.price",
+    )
+    estimated_sale_price: float | None = Field(
+        default=None,
+        description="Precio de venta estimado en destino; si null el analyzer usa su default",
+    )
+
+
+class SimulateProfitResponse(BaseModel):
+    """Resultado de la simulación de beneficio what-if."""
+
+    profile_name: str
+    purchase_price: float
+    estimated_sale_price: float | None
+    total_cost: float
+    net_profit: float
+    roi_percentage: float
+    recommendation: str
+    risk_level: str
+    transport_cost: float
+    registration_cost: float
+    taxes: float
+    inspection_cost: float
+    commission_cost: float
+    repair_estimate: float
+    miscellaneous_cost: float
+

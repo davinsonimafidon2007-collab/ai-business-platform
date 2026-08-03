@@ -87,6 +87,13 @@ class Settings(BaseSettings):
     """Seconds between provider canary runs (default 6h). 0 = disabled."""
 
     # =========================================================================
+    # Economics / Import cost profile
+    # =========================================================================
+    default_import_cost_profile: str = "SPAIN"
+    """Perfil de costes de importación por defecto (destino). Ver app/config/import_costs.py
+    Valores: DEFAULT, SPAIN, PORTUGAL, GERMANY, FRANCE (o alias ES, PT, DE, FR)."""
+
+    # =========================================================================
     # OpenAI Vision provider
     # =========================================================================
     openai_api_key: str = ""

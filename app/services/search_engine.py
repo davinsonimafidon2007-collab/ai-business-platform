@@ -32,6 +32,7 @@ from app.models.search import (
 from app.providers.autoscout24 import AutoScout24Provider
 from app.providers.mobile_de import MobileDeProvider
 from app.providers.registry import ProviderRegistry
+from app.core.config import settings
 from app.services.market_estimator import MarketEstimator
 from app.services.negotiation_engine import NegotiationEngine
 from app.services.opportunity_finder import OpportunityFinder
@@ -73,6 +74,7 @@ class SearchEngineService:
         negotiation_engine: NegotiationEngine | None = None,
         orchestrator: SearchOrchestrator | None = None,
         provider_registry: type[ProviderRegistry] = ProviderRegistry,
+        import_cost_profile: str | None = None,
     ) -> None:
         """Inicializa el SearchEngineService con todas las dependencias.
 
@@ -97,6 +99,11 @@ class SearchEngineService:
         self._opportunity_finder = opportunity_finder
         self._negotiation_engine = negotiation_engine
         self._provider_registry = provider_registry
+        self._import_cost_profile = (
+            import_cost_profile
+            or getattr(settings, "default_import_cost_profile", None)
+            or "SPAIN"
+        )
 
         # Registrar providers una sola vez durante la inicialización
         self._register_providers()
@@ -113,6 +120,7 @@ class SearchEngineService:
                 opportunity_finder=self._opportunity_finder,
                 negotiation_engine=self._negotiation_engine,
                 provider_registry=self._provider_registry,
+                import_cost_profile=self._import_cost_profile,
             )
 
     # ------------------------------------------------------------------

@@ -5,6 +5,8 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.v1.dependencies import get_profit_analyzer
+from app.api.v1.schemas.vehicle import SimulateProfitRequest, SimulateProfitResponse
 from app.db.session import get_db_session
 from app.dependencies.auth import get_current_user
 from app.models.user import User
@@ -13,6 +15,7 @@ from app.repositories.vehicle_evaluation_repository import VehicleEvaluationRepo
 from app.repositories.vehicle_repository import VehicleRepository
 from app.schemas.vehicle import VehicleCreate, VehicleRead, VehicleUpdate
 from app.schemas.vehicle_evaluation import VehicleEvaluationRead, VehicleEvaluationUpdate
+from app.services.profit_analyzer import ProfitAnalyzer
 from app.services.vehicle_evaluation_service import VehicleEvaluationService
 from app.services.vehicle_service import VehicleService
 
@@ -155,3 +158,77 @@ async def delete_vehicle_evaluation(
     if evaluation is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Evaluation not found")
     await evaluation_service.delete_evaluation(evaluation)
+
+
+# ---------------------------------------------------------------------------
+# Simulate profit (what-if)
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/{vehicle_id}/simulate-profit",
+    response_model=SimulateProfitResponse,
+)
+async def simulate_vehicle_profit(
+    vehicle_id: str,
+    body: SimulateProfitRequest,
+    current_user: User = Depends(get_current_user),
+    service: VehicleService = Depends(get_vehicle_service),
+    profit_analyzer: ProfitAnalyzer = Depends(get_profit_analyzer),
+) -> SimulateProfitResponse:
+    """Simula el beneficio de importar un vehículo con un perfil de costes.
+
+    Permite hacer un what-if sobre el precio de compra y el precio de venta
+    estimado sin modificar el vehículo.
+    """
+    vehicle = await _get_owned_vehicle(vehicle_id, current_user, service)
+
+    # Adapter mínimo con price override
+    purchase = (
+        body.purchase_price
+        if body.purchase_price is not None
+        else getattr(vehicle, "price", None)
+    )
+    if purchase is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="vehicle has no price and purchase_price not provided",
+        )
+
+    class _V:
+        def __init__(self, src: Vehicle, price: float) -> None:
+            self.price = price
+            self.brand = getattr(src, "brand", None)
+            self.model = getattr(src, "model", None)
+            self.year = getattr(src, "year", None)
+            self.mileage = getattr(src, "mileage", None)
+
+    analysis = profit_analyzer.analyze(
+        _V(vehicle, float(purchase)),
+        profile_name=body.profile_name,
+        estimated_sale_price=body.estimated_sale_price,
+    )
+    costs = analysis.cost_breakdown
+    return SimulateProfitResponse(
+        profile_name=(
+            body.profile_name.upper()
+            if len(body.profile_name) > 2
+            else body.profile_name
+        ),
+        purchase_price=float(purchase),
+        estimated_sale_price=analysis.estimated_sale_price,
+        total_cost=analysis.total_cost,
+        net_profit=analysis.net_profit,
+        roi_percentage=analysis.roi_percentage,
+        recommendation=str(
+            getattr(analysis.recommendation, "value", analysis.recommendation)
+        ),
+        risk_level=str(getattr(analysis.risk_level, "value", analysis.risk_level)),
+        transport_cost=costs.transport_cost,
+        registration_cost=costs.registration_cost,
+        taxes=costs.taxes,
+        inspection_cost=costs.inspection_cost,
+        commission_cost=costs.commission_cost,
+        repair_estimate=costs.repair_estimate,
+        miscellaneous_cost=costs.miscellaneous_cost,
+    )

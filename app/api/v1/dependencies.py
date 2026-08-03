@@ -109,9 +109,10 @@ def get_market_estimator(
 def get_http_client() -> ProviderHttpClient:
     """Crea un cliente HTTP compartido para providers.
 
-    Nota: Actualmente ProviderHttpClient requiere provider_name y base_url
-    en el constructor. Esta función existe como placeholder para cuando
-    se refactorice a un cliente compartido.
+    Nota: cada provider construye su propio ``ProviderHttpClient`` con la
+    misma configuración anti-bot (proxy/cookies/delay vía ``settings``) en
+    ``get_mobile_de_provider()`` / ``get_autoscout24_provider()``. Esta
+    función existe como placeholder para un futuro cliente compartido.
     """
     raise NotImplementedError(
         "Use get_mobile_de_provider() or get_autoscout24_provider() directly"
@@ -119,16 +120,37 @@ def get_http_client() -> ProviderHttpClient:
 
 
 def get_mobile_de_provider() -> MobileDeProvider:
-    """Obtiene el provider de mobile.de.
+    """Provider mobile.de con cliente HTTP anti-bot unificado (settings-driven).
 
-    base_url debe coincidir con MobileDeProvider.BASE_URL (suchen.mobile.de).
+    El ``ProviderHttpClient`` aplica proxy/cookies/delay desde ``settings``
+    (``PROVIDER_HTTP_PROXY`` / ``PROVIDER_HTTP_COOKIES`` /
+    ``PROVIDER_HTTP_MIN_DELAY_MS``) de forma centralizada — un solo camino
+    de red para todos los providers.
     """
-    return MobileDeProvider(base_url="https://suchen.mobile.de")
+    client = ProviderHttpClient(
+        provider_name="mobile_de",
+        base_url="https://suchen.mobile.de",
+        timeout=settings.provider_http_timeout,
+        max_retries=settings.provider_http_max_retries,
+    )
+    return MobileDeProvider(http_client=client, base_url="https://suchen.mobile.de")
 
 
 def get_autoscout24_provider() -> AutoScout24Provider:
-    """Obtiene el provider de AutoScout24."""
-    return AutoScout24Provider(base_url="https://www.autoscout24.de")
+    """Provider AutoScout24 con cliente HTTP anti-bot unificado (settings-driven).
+
+    El ``ProviderHttpClient`` aplica proxy/cookies/delay desde ``settings``
+    (``PROVIDER_HTTP_PROXY`` / ``PROVIDER_HTTP_COOKIES`` /
+    ``PROVIDER_HTTP_MIN_DELAY_MS``) de forma centralizada — un solo camino
+    de red para todos los providers.
+    """
+    client = ProviderHttpClient(
+        provider_name="autoscout24",
+        base_url="https://www.autoscout24.de",
+        timeout=settings.provider_http_timeout,
+        max_retries=settings.provider_http_max_retries,
+    )
+    return AutoScout24Provider(http_client=client, base_url="https://www.autoscout24.de")
 
 
 # =============================================================================
@@ -258,6 +280,7 @@ def get_search_engine_service(
         profit_analyzer=profit_analyzer,
         opportunity_finder=opportunity_finder,
         negotiation_engine=negotiation_engine,
+        import_cost_profile=settings.default_import_cost_profile,
     )
 
 
