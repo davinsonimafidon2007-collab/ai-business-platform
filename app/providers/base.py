@@ -461,23 +461,35 @@ class VehicleProvider(ABC):
         return None
 
     def _parse_price_text(self, text: str) -> float | None:
-        """Parsea un texto de precio y devuelve el valor numérico."""
+        """Parsea precio DE/EU. Rechaza valores absurdos para coches."""
         if not text:
             return None
-        # Buscar patrones como "12.345 €", "12.345,- €", "12345 EUR", "12345 €"
+        # Evitar cuotas
+        if re.search(r"mth|/mo\b|monat|rate|finanz", text, re.I):
+            return None
+
         match = re.search(
-            r"(?<!\d)(\d{1,3}(?:\.\d{3})*(?:,\d+)?|\d+)(?:,-)?\s*(?:€|EUR|eur)",
+            r"(?<!\d)(\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?|\d{4,}(?:,\d{1,2})?|\d{1,3},\d{2})\s*(?:€|EUR|eur|,-)?",
             text,
         )
-        if match:
-            raw = match.group(1)
-            # Normalizar: eliminar puntos de miles, reemplazar coma decimal
+        if not match:
+            return None
+        raw = match.group(1)
+        if "," in raw and "." in raw:
             raw = raw.replace(".", "").replace(",", ".")
-            try:
-                return float(raw)
-            except ValueError:
-                return None
-        return None
+        elif "," in raw:
+            parts = raw.split(",")
+            raw = raw.replace(".", "").replace(",", ".") if len(parts[-1]) == 2 else raw.replace(",", "")
+        elif re.fullmatch(r"\d{1,3}(\.\d{3})+", raw):
+            raw = raw.replace(".", "")
+        try:
+            value = float(raw)
+        except ValueError:
+            return None
+        # Coches: descartar < 100 € (evita 0.0011 y similares)
+        if value < 100 or value > 500_000:
+            return None
+        return value
 
     def _extract_mileage(self, soup: Any) -> int | None:
         """Extrae el kilometraje del vehículo."""

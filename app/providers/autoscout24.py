@@ -24,11 +24,15 @@ from urllib.parse import urljoin
 from bs4 import BeautifulSoup
 
 from app.providers.base import VehicleProvider
-from app.providers.dto import VehicleSearchResult
+from app.providers.dto import VehicleDetail, VehicleSearchResult
 
 logger = logging.getLogger(__name__)
 
 BASE_URL = "https://www.autoscout24.de"
+
+# Precio de coche razonable en el dominio de importación (EUR)
+_MIN_PLAUSIBLE_PRICE = 500.0
+_MAX_PLAUSIBLE_PRICE = 500_000.0
 
 
 class AutoScout24Provider(VehicleProvider):
@@ -231,7 +235,9 @@ class AutoScout24Provider(VehicleProvider):
         """Fallback HTML: prioriza data-attrs del article actual de AS24."""
         href_candidates = [a.get("href") for a in node.select("a[href]") if a.get("href")]
         has_valid_offer_url = any("/angebote/" in href or "/offers/" in href for href in href_candidates)
-        if not has_valid_offer_url and not node.get("data-guid") and not node.get("data-listing-id"):
+        # Un anuncio sin enlace a /angebote/ ni data-guid no es navegable:
+        # data-listing-id solo no basta (no hay URL de detalle real).
+        if not has_valid_offer_url and not node.get("data-guid"):
             return None
 
         external_id = (
@@ -341,3 +347,211 @@ class AutoScout24Provider(VehicleProvider):
         if match:
             return int(match.group(1))
         return None
+
+    # ------------------------------------------------------------------
+    # Detail overrides — extractores específicos del HTML de ficha AS24
+    # ------------------------------------------------------------------
+
+    def _extract_title(self, soup: Any) -> str | None:
+        """Título limpio de la ficha AS24 (evita concatenar spans sin espacio)."""
+        selectors = [
+            "h1[data-testid='vip-title']",
+            "h1.StageTitle_title__",
+            "h1.listing-title",
+            "h1",
+            "title",
+        ]
+        for sel in selectors:
+            tag = soup.select_one(sel)
+            if not tag:
+                continue
+            # get_text con separator para no pegar "X1"+"2.0"
+            text = tag.get_text(" ", strip=True)
+            text = re.sub(r"\s+", " ", text).strip()
+            if text and len(text) > 2 and text.lower() not in {"autoscout24", "detail"}:
+                # Quitar sufijo de site si viene en <title>
+                text = re.sub(r"\s*[-–|]\s*AutoScout24.*$", "", text, flags=re.I).strip()
+                return text
+        return super()._extract_title(soup)
+
+    def _split_brand_model(self, title: str | None) -> tuple[str | None, str | None]:
+        brand, model = super()._split_brand_model(title)
+        if model:
+            # "X12.0 d" → "X1 2.0 d" ; "320d" se deja
+            model = re.sub(r"\b([A-Z]?\d)(\d\.\d)\b", r"\1 \2", model)
+            model = re.sub(r"\s+", " ", model).strip()
+        return brand, model
+
+    def _extract_price(self, soup: Any) -> float | None:
+        """Precio de compra en ficha AS24; ignora cuotas y valores no plausibles."""
+
+        # 1) JSON-LD Product / Offer
+        for script in soup.select('script[type="application/ld+json"]'):
+            raw = script.string or script.get_text() or ""
+            try:
+                data = json.loads(raw)
+            except Exception:
+                continue
+            price = self._price_from_json_ld(data)
+            if price is not None:
+                return price
+
+        # 2) Selectores conocidos de precio principal
+        css_candidates = [
+            "[data-testid='price-label']",
+            "[data-testid='prim-price']",
+            ".PriceInfo_price__c5x7g",
+            ".Price_mainPrice__",
+            "span.PriceInfo_primaryPrice__",
+            "div.PriceInfo_wrapper__ span",
+            "[class*='PriceInfo'] [class*='price']",
+            "span[class*='Price']",
+        ]
+        for sel in css_candidates:
+            try:
+                nodes = soup.select(sel)
+            except Exception:
+                continue
+            for node in nodes:
+                text = node.get_text(" ", strip=True)
+                if not text or not re.search(r"\d", text):
+                    continue
+                # Saltar cuotas ("mth", "Monat", "/Monat", "Rate")
+                if re.search(r"mth|monat|/mo\b|rate|finanz", text, re.I):
+                    continue
+                parsed = self._parse_price_text(text)
+                if parsed is not None and self._is_plausible_price(parsed):
+                    return parsed
+
+        # 3) itemprop / meta
+        for sel in ('[itemprop="price"]', 'meta[itemprop="price"]'):
+            tag = soup.select_one(sel)
+            if not tag:
+                continue
+            content = tag.get("content") or tag.get_text(" ", strip=True)
+            parsed = self._coerce_price_number(content)
+            if parsed is not None and self._is_plausible_price(parsed):
+                return parsed
+
+        # 4) Fallback genérico del base, filtrado
+        parsed = super()._extract_price(soup)
+        if parsed is not None and self._is_plausible_price(parsed):
+            return parsed
+        return None
+
+    def _price_from_json_ld(self, data: Any) -> float | None:
+        if isinstance(data, list):
+            for item in data:
+                found = self._price_from_json_ld(item)
+                if found is not None:
+                    return found
+            return None
+        if not isinstance(data, dict):
+            return None
+        offers = data.get("offers")
+        if isinstance(offers, dict):
+            p = self._coerce_price_number(offers.get("price"))
+            if p is not None and self._is_plausible_price(p):
+                return p
+        if isinstance(offers, list):
+            for off in offers:
+                if isinstance(off, dict):
+                    p = self._coerce_price_number(off.get("price"))
+                    if p is not None and self._is_plausible_price(p):
+                        return p
+        p = self._coerce_price_number(data.get("price"))
+        if p is not None and self._is_plausible_price(p):
+            return p
+        return None
+
+    @staticmethod
+    def _coerce_price_number(value: Any) -> float | None:
+        if value is None:
+            return None
+        if isinstance(value, (int, float)):
+            return float(value)
+        text = str(value).strip()
+        if not text:
+            return None
+        # "9000.00" or "9000"
+        if re.fullmatch(r"\d+(?:\.\d+)?", text):
+            try:
+                return float(text)
+            except ValueError:
+                return None
+        return AutoScout24Provider._parse_price_text_static(text)
+
+    @staticmethod
+    def _is_plausible_price(value: float) -> bool:
+        return _MIN_PLAUSIBLE_PRICE <= value <= _MAX_PLAUSIBLE_PRICE
+
+    @staticmethod
+    def _parse_price_text_static(text: str) -> float | None:
+        if not text:
+            return None
+        match = re.search(
+            r"(?<!\d)(\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?|\d{4,}(?:,\d{1,2})?|\d{1,3},\d{2})\s*(?:€|EUR|eur)?",
+            text,
+        )
+        if not match:
+            # "9.000,-"
+            match = re.search(r"(?<!\d)(\d{1,3}(?:\.\d{3})+)\s*,-", text)
+        if not match:
+            return None
+        raw = match.group(1)
+        if "," in raw and "." in raw:
+            # 9.000,50 → european
+            raw = raw.replace(".", "").replace(",", ".")
+        elif "," in raw:
+            parts = raw.split(",")
+            if len(parts[-1]) == 2:
+                raw = raw.replace(".", "").replace(",", ".")
+            else:
+                raw = raw.replace(",", "")
+        else:
+            # 9.000 miles or 9000.50 US — si hay más de un punto o patrón miles DE
+            if re.fullmatch(r"\d{1,3}(\.\d{3})+", raw):
+                raw = raw.replace(".", "")
+        try:
+            return float(raw)
+        except ValueError:
+            return None
+
+    def _parse_price_text(self, text: str) -> float | None:
+        return self._parse_price_text_static(text)
+
+    def _extract_external_id(self, url: str | None) -> str | None:
+        if not url:
+            return None
+        # AS24 a veces usa UUID en path o query
+        m = re.search(
+            r"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})",
+            url,
+            re.I,
+        )
+        if m:
+            return m.group(1)
+        m = re.search(r"/angebote/[^/]*?-([a-f0-9]{8,})", url, re.I)
+        if m:
+            return m.group(1)
+        return super()._extract_external_id(url)
+
+    async def get_vehicle(self, external_id: str) -> VehicleDetail:
+        """Detail AS24: URL completa o id/slug."""
+        if external_id.startswith("http"):
+            url = external_id
+        elif re.fullmatch(
+            r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
+            external_id,
+            re.I,
+        ):
+            # UUID de listing — la URL de detail real suele venir del search result.url
+            # Fallback: buscar por id en path genérico
+            base = (self._base_url or BASE_URL).rstrip("/")
+            url = f"{base}/angebote/{external_id}"
+        else:
+            base = (self._base_url or BASE_URL).rstrip("/")
+            url = f"{base}{self._vehicle_detail_path}{external_id}"
+
+        html = await self._download_url(url)
+        return self._parse_vehicle_detail(html, url)

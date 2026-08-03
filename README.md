@@ -133,9 +133,36 @@ ENABLE_SCHEDULER=false
 | 429 en login | Rate limit login=5/min | Esperar o reiniciar proceso API (límites en memoria) |
 | Scrapers vacíos | HTML de mobile.de/AS24 cambió | Revisar logs del provider; no es fallo de bootstrap |
 
+### 9. Verificación en vivo de providers (mobile.de / AutoScout24)
+
+> **Runbook mobile.de con proxy:** ver [`docs/PROXY_MOBILE_DE.md`](docs/PROXY_MOBILE_DE.md)
+> para configurar proxy residencial / cookies y pasar el canary de mobile.de a PASS.
+
+Smoke script que instancia el cliente HTTP anti-bot de producción y lanza
+una búsqueda + detalle contra cada provider:
+
+```bash
+uv run python scripts/verify_providers_live.py
+uv run python scripts/verify_providers_live.py --save-html $env:TEMP\provider_html   # Windows
+```
+
+Proxy/cookies/delay se leen de `.env` (`PROVIDER_HTTP_PROXY`,
+`PROVIDER_HTTP_COOKIES`, `PROVIDER_HTTP_MIN_DELAY_MS`); no hay secretos en
+el código. Salida esperada por provider: `search: OK count=N` y
+`detail: OK brand=... model=... price=...`. Significado de fallos:
+
+- **403 / `ProviderConnectionError`** → IP bloqueada por anti-bot. Hace
+  falta proxy residencial o cookies de navegador real.
+- **429 / `ProviderRateLimitError`** → rate limit del provider. Subir
+  `PROVIDER_HTTP_MIN_DELAY_MS` (800–1500) o usar proxy rotativo.
+- **`count=0`** → la página llegó pero los selectores no encontraron
+  anuncios (selector drift o página anti-bot vacía). Guardar con
+  `--save-html` para revisar selectores en A.4.
+
+Exit 0 = ambos providers OK; 1 = alguno falló; 2 = error de setup.
+
 ### Fuera de este bootstrap
 
 - Tests (`TODO.md`, sesión paralela)
 - Redis como backend de rate limit
 - CRUD HTTP de API keys
-- Verificación en vivo de parsers HTML
