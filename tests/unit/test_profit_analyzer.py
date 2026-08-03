@@ -892,3 +892,55 @@ class TestNoExternalDependencies:
         assert "app.providers" not in source
         assert "app.schemas" not in source
 
+
+# =============================================================================
+# Task B.1: perfiles destino ES/PT + alias
+# =============================================================================
+
+
+def test_spain_profile_registered() -> None:
+    p = get_profile("SPAIN")
+    assert p.transport_cost == 1200.0
+    assert p.registration_cost == 450.0
+    assert 0 < p.tax_rate < 1
+
+
+def test_portugal_profile_registered() -> None:
+    p = get_profile("PORTUGAL")
+    assert p.transport_cost == 1400.0
+    assert p.tax_rate >= get_profile("SPAIN").tax_rate
+
+
+def test_profile_alias_es_equals_spain() -> None:
+    assert get_profile("ES") is get_profile("SPAIN")
+    assert get_profile("es") is get_profile("SPAIN")
+
+
+def test_profile_alias_pt_equals_portugal() -> None:
+    assert get_profile("PT") is get_profile("PORTUGAL")
+
+
+def test_profile_alias_de_equals_germany() -> None:
+    assert get_profile("DE") is get_profile("GERMANY")
+
+
+def test_get_profile_unknown_raises_with_hint() -> None:
+    with pytest.raises(KeyError, match="desconocido"):
+        get_profile("MARS")
+
+
+def test_analyze_with_spain_profile_determinism() -> None:
+    @dataclass
+    class V:
+        price: float | None = 20000.0
+        brand: str | None = "BMW"
+        model: str | None = "320d"
+        year: int | None = 2019
+        mileage: int | None = 80000
+
+    analyzer = ProfitAnalyzer()
+    a = analyzer.analyze(V(), profile_name="ES", estimated_sale_price=26000.0)
+    b = analyzer.analyze(V(), profile_name="SPAIN", estimated_sale_price=26000.0)
+    assert a.total_cost == b.total_cost
+    assert a.net_profit == b.net_profit
+

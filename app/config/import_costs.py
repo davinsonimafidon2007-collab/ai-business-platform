@@ -4,13 +4,17 @@ Toda la configuración económica de importación de vehículos vive aquí.
 Modificar estos valores cambia el comportamiento del analizador
 sin necesidad de tocar el código del mismo.
 
-Perfiles disponibles:
-    - DEFAULT: Perfil genérico (valor por defecto).
-    - GERMANY: Perfil específico para importación desde Alemania.
-    - FRANCE: Perfil específico para importación desde Francia.
+Perfiles disponibles (nombre canónico → uso):
+    - DEFAULT: genérico.
+    - GERMANY (alias DE): costes orientados a origen Alemania (legado).
+    - FRANCE (alias FR): origen Francia (legado).
+    - SPAIN (alias ES): importación Alemania → España (destino).
+    - PORTUGAL (alias PT): importación Alemania → Portugal (destino).
 
-Para añadir un nuevo país, basta con crear un nuevo perfil en este archivo.
-ProfitAnalyzer lo cargará automáticamente por nombre.
+Uso típico en el negocio DE→ES:
+    analyzer.analyze(vehicle, profile_name="SPAIN")  # o "ES"
+
+Para añadir un país, crea un ImportCostProfile y regístralo en PROFILES.
 """
 
 from __future__ import annotations
@@ -141,6 +145,44 @@ FRANCE_PROFILE: Final[ImportCostProfile] = ImportCostProfile(
     risk_low_cost_ratio_threshold=0.13,
 )
 
+SPAIN_PROFILE: Final[ImportCostProfile] = ImportCostProfile(
+    # Destino España, origen habitual Alemania (carretera ~1500–2500 km)
+    transport_cost=1200.0,       # transporte puerta a puerta DE→ES
+    registration_cost=450.0,     # matriculación + tasas DGT (aprox.)
+    inspection_cost=90.0,        # ITV / inspección
+    paperwork_cost=280.0,        # gestoría + transferencia
+    miscellaneous_cost=200.0,    # seguro tránsito, imprevistos
+    # IVA/impuestos simplificados (particular/VO): ~10 % efectivo sobre compra
+    # (empresa + IVA 21 % pleno requerirá perfil distinto en B.2)
+    tax_rate=0.10,
+    commission_rate=0.04,        # intermediación / comprador profesional
+    repair_estimate_rate=0.03,   # buffer cosmético/mecánico
+    risk_high_roi_threshold=0.14,
+    risk_low_roi_threshold=0.05,
+    risk_high_profit_threshold=3500.0,
+    risk_low_profit_threshold=700.0,
+    risk_high_cost_ratio_threshold=0.30,
+    risk_low_cost_ratio_threshold=0.12,
+)
+
+PORTUGAL_PROFILE: Final[ImportCostProfile] = ImportCostProfile(
+    # Destino Portugal, origen habitual Alemania
+    transport_cost=1400.0,       # algo más lejos / menos volumen de rutas
+    registration_cost=550.0,     # ISV + tasas locales (orden magnitud)
+    inspection_cost=100.0,
+    paperwork_cost=300.0,
+    miscellaneous_cost=220.0,
+    tax_rate=0.12,               # carga fiscal efectiva algo mayor que ES en VO
+    commission_rate=0.04,
+    repair_estimate_rate=0.03,
+    risk_high_roi_threshold=0.15,
+    risk_low_roi_threshold=0.05,
+    risk_high_profit_threshold=3800.0,
+    risk_low_profit_threshold=800.0,
+    risk_high_cost_ratio_threshold=0.32,
+    risk_low_cost_ratio_threshold=0.13,
+)
+
 # =============================================================================
 # Registro de perfiles
 # =============================================================================
@@ -149,6 +191,19 @@ PROFILES: Final[dict[str, ImportCostProfile]] = {
     "DEFAULT": DEFAULT_PROFILE,
     "GERMANY": GERMANY_PROFILE,
     "FRANCE": FRANCE_PROFILE,
+    "SPAIN": SPAIN_PROFILE,
+    "PORTUGAL": PORTUGAL_PROFILE,
+}
+
+# Alias ISO / cortos → nombre canónico
+PROFILE_ALIASES: Final[dict[str, str]] = {
+    "DE": "GERMANY",
+    "FR": "FRANCE",
+    "ES": "SPAIN",
+    "PT": "PORTUGAL",
+    "ESP": "SPAIN",
+    "SPA": "SPAIN",
+    "POR": "PORTUGAL",
 }
 
 # =============================================================================
@@ -165,16 +220,27 @@ ADDITIONAL_COSTS_CATEGORIES: Final[list[str]] = [
 
 
 def get_profile(profile_name: str = "DEFAULT") -> ImportCostProfile:
-    """Obtiene un perfil de costes por nombre.
+    """Obtiene un perfil de costes por nombre o alias.
 
     Args:
-        profile_name: Nombre del perfil (case-insensitive).
+        profile_name: Nombre canónico (SPAIN, GERMANY, ...) o alias (ES, DE, ...).
+            Case-insensitive.
 
     Returns:
         ImportCostProfile correspondiente.
 
     Raises:
-        KeyError: Si el perfil no existe.
+        KeyError: Si el perfil no existe (mensaje con perfiles válidos).
     """
-    return PROFILES[profile_name.upper()]
+    key = (profile_name or "DEFAULT").strip().upper()
+    key = PROFILE_ALIASES.get(key, key)
+    try:
+        return PROFILES[key]
+    except KeyError as exc:
+        valid = ", ".join(sorted(PROFILES.keys()))
+        aliases = ", ".join(f"{a}→{c}" for a, c in sorted(PROFILE_ALIASES.items()))
+        raise KeyError(
+            f"Perfil de costes desconocido: {profile_name!r}. "
+            f"Válidos: {valid}. Alias: {aliases}."
+        ) from exc
 
