@@ -311,11 +311,10 @@ async def test_http_client_custom_default_headers():
     assert http_client.default_headers["X-Custom"] == "value"
 
 
-# --- Task 2 anti-bot tests ---
+# --- Task A.5 anti-bot tests ---
 
 @pytest.mark.asyncio
 async def test_http_client_403_raises_provider_connection_error():
-    """HTTP 403 anti-bot → ProviderConnectionError (sin reintentos infinitos)."""
     client = ProviderHttpClient(
         provider_name="mobile_de",
         base_url="https://suchen.mobile.de",
@@ -327,12 +326,9 @@ async def test_http_client_403_raises_provider_connection_error():
     mock_response.text = "Zugriff verweigert / Access denied"
     mock_response.raise_for_status = MagicMock(
         side_effect=httpx.HTTPStatusError(
-            "403",
-            request=MagicMock(),
-            response=mock_response,
+            "403", request=MagicMock(), response=mock_response
         )
     )
-
     with patch.object(
         httpx.AsyncClient, "request", new_callable=AsyncMock, return_value=mock_response
     ):
@@ -342,10 +338,7 @@ async def test_http_client_403_raises_provider_connection_error():
 
 @pytest.mark.asyncio
 async def test_http_client_builds_cookie_header():
-    client = ProviderHttpClient(
-        provider_name="test",
-        cookies="sid=abc; consent=1",
-    )
+    client = ProviderHttpClient(provider_name="test", cookies="sid=abc; consent=1")
     headers = client._build_headers()
     assert headers.get("Cookie") == "sid=abc; consent=1"
     assert "User-Agent" in headers
@@ -364,18 +357,14 @@ async def test_http_client_proxy_passed_to_async_client():
     mock_response.status_code = 200
     mock_response.text = "ok"
     mock_response.raise_for_status = MagicMock()
-
     with patch("httpx.AsyncClient") as mock_cls:
         instance = MagicMock()
         instance.is_closed = False
         instance.request = AsyncMock(return_value=mock_response)
         instance.aclose = AsyncMock()
         mock_cls.return_value = instance
-
         await client.get("https://example.com/")
-        kwargs = mock_cls.call_args.kwargs
-        assert kwargs.get("proxy") == "http://user:pass@proxy.example:8080"
-
+        assert mock_cls.call_args.kwargs.get("proxy") == "http://user:pass@proxy.example:8080"
     await client.close()
 
 

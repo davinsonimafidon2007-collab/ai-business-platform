@@ -1,14 +1,14 @@
 """Cliente HTTP profesional para proveedores con reintentos, timeouts y anti-bot.
 
-Características (Task 2 Fase A):
+Características (Task A.5):
   - httpx.AsyncClient reutilizable
   - Timeouts y retries con backoff exponencial + jitter
-  - Rotación de User-Agent (Chrome/Firefox/Safari actualizados 2026)
-  - Headers de navegador realistas (Sec-Fetch-*, Sec-CH-UA, etc.)
-  - Proxy opcional (PROVIDER_HTTP_PROXY / proxy= en constructor)
+  - Rotación de User-Agent (Chrome/Firefox/Safari 2026)
+  - Headers realistas (Sec-Fetch-*, sec-ch-ua)
+  - Proxy opcional (PROVIDER_HTTP_PROXY)
   - Cookie string opcional (PROVIDER_HTTP_COOKIES)
   - Delay mínimo entre peticiones (PROVIDER_HTTP_MIN_DELAY_MS)
-  - HTTP 403 tratado como ProviderConnectionError (anti-bot), sin reintentos
+  - HTTP 403 → ProviderConnectionError (anti-bot), sin reintentos
   - HTTP 429 → ProviderRateLimitError (sí reintenta)
 """
 
@@ -81,11 +81,8 @@ class ProviderHttpClient:
             self.cookies = None
 
         cfg_delay = int(getattr(settings, "provider_http_min_delay_ms", 0) or 0)
-        self.min_delay_ms = (
-            min_delay_ms if min_delay_ms is not None else cfg_delay
-        )
+        self.min_delay_ms = min_delay_ms if min_delay_ms is not None else cfg_delay
         self._last_request_at: float = 0.0
-
         self._client: httpx.AsyncClient | None = None
 
     def _default_user_agents(self) -> list[str]:
@@ -180,9 +177,7 @@ class ProviderHttpClient:
             return True
         if isinstance(exception, httpx.HTTPStatusError):
             code = exception.response.status_code
-            if code == 429:
-                return True
-            if 500 <= code < 600:
+            if code == 429 or 500 <= code < 600:
                 return True
             return False
         return False
@@ -225,10 +220,7 @@ class ProviderHttpClient:
         try:
             async for attempt in AsyncRetrying(
                 stop=stop_after_attempt(self.max_retries),
-                wait=wait_exponential_jitter(
-                    initial=backoff_min,
-                    max=backoff_max,
-                ),
+                wait=wait_exponential_jitter(initial=backoff_min, max=backoff_max),
                 retry=retry_if_exception(self._should_retry),
                 reraise=True,
                 before_sleep=self._log_retry,
@@ -263,21 +255,18 @@ class ProviderHttpClient:
 
         except ProviderConnectionError:
             raise
-
         except httpx.TimeoutException as e:
             raise ProviderTimeoutError(
                 f"Timeout al conectar con {self.provider_name}",
                 provider=self.provider_name,
                 timeout=self.timeout,
             ) from e
-
         except httpx.NetworkError as e:
             raise ProviderConnectionError(
                 f"Error de conexión con {self.provider_name}",
                 provider=self.provider_name,
                 original_error=e,
             ) from e
-
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 429:
                 retry_after = e.response.headers.get("Retry-After")
@@ -286,7 +275,6 @@ class ProviderHttpClient:
                     provider=self.provider_name,
                     retry_after=int(retry_after) if retry_after else None,
                 ) from e
-
             if 500 <= e.response.status_code < 600:
                 raise ProviderMaxRetriesExceededError(
                     f"Error del servidor {e.response.status_code} en {self.provider_name} "
@@ -294,7 +282,6 @@ class ProviderHttpClient:
                     provider=self.provider_name,
                     attempts=self.max_retries,
                 ) from e
-
             raise
 
         raise ProviderMaxRetriesExceededError(
