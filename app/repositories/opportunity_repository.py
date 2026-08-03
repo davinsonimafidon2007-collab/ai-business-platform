@@ -6,6 +6,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.opportunity import Opportunity
+from app.models.vehicle import Vehicle
 
 
 class OpportunityRepository:
@@ -115,6 +116,66 @@ class OpportunityRepository:
             .limit(limit)
         )
         return list(result.scalars().all())
+
+    async def list_filtered(
+        self,
+        *,
+        user_id: str | None = None,
+        recommendation: str | None = None,
+        min_score: float | None = None,
+        min_roi: float | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> tuple[list[Opportunity], int]:
+        """Lists opportunity records with optional filters and pagination.
+
+        Opportunities are scoped to the user via the vehicle's ``user_id``.
+        Returns ``(items, total)`` where items are ordered by
+        ``opportunity_score`` DESC.
+
+        Args:
+            user_id: If provided, only opportunities for vehicles owned by
+                this user are returned.
+            recommendation: Optional filter on recommendation value
+                (e.g. BUY_NOW, WATCH, NEGOTIATE, REJECT).
+            min_score: Optional minimum opportunity_score (inclusive).
+            min_roi: Optional minimum roi percentage (inclusive).
+            limit: Maximum number of records to return.
+            offset: Number of records to skip.
+
+        Returns:
+            A tuple of (list of Opportunity, total count).
+        """
+        base_query = select(Opportunity).join(
+            Vehicle, Vehicle.id == Opportunity.vehicle_id
+        )
+
+        if user_id is not None:
+            base_query = base_query.where(Vehicle.user_id == user_id)
+        if recommendation is not None:
+            base_query = base_query.where(Opportunity.recommendation == recommendation)
+        if min_score is not None:
+            base_query = base_query.where(Opportunity.opportunity_score >= min_score)
+        if min_roi is not None:
+            base_query = base_query.where(Opportunity.roi >= min_roi)
+
+        # Count query
+        count_query = select(func.count(Opportunity.id)).select_from(
+            base_query.subquery()
+        )
+        total_result = await self.session.execute(count_query)
+        total = total_result.scalar() or 0
+
+        # Items query
+        items_query = (
+            base_query.order_by(Opportunity.opportunity_score.desc())
+            .offset(offset)
+            .limit(limit)
+        )
+        items_result = await self.session.execute(items_query)
+        items = list(items_result.scalars().all())
+
+        return items, total
 
     async def delete(self, opportunity: Opportunity) -> None:
         """Deletes an opportunity record.
