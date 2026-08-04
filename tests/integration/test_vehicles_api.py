@@ -35,8 +35,8 @@ def db_session():
 
 
 @pytest.fixture
-def client(db_session):
-    """Create a test client with the in-memory database."""
+def client(db_session, override_auth):
+    """Create a test client with the in-memory database and auth override."""
     app.dependency_overrides[get_db_session] = db_session
     transport = ASGITransport(app=app)
     return AsyncClient(transport=transport, base_url="http://test")

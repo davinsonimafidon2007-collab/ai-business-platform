@@ -153,7 +153,7 @@ def _make_mock_engine_empty() -> MagicMock:
 
 class TestSearchEndpoint:
 
-    def test_search_returns_200(self) -> None:
+    def test_search_returns_200(self, override_auth) -> None:
         """POST /api/v1/search should return 200 OK."""
         mock_engine = _make_mock_engine_full()
         app.dependency_overrides[get_search_engine_service] = lambda: mock_engine
@@ -172,7 +172,7 @@ class TestSearchEndpoint:
         finally:
             app.dependency_overrides.clear()
 
-    def test_search_returns_json(self) -> None:
+    def test_search_returns_json(self, override_auth) -> None:
         """Response must be JSON."""
         mock_engine = _make_mock_engine_full()
         app.dependency_overrides[get_search_engine_service] = lambda: mock_engine
@@ -188,7 +188,7 @@ class TestSearchEndpoint:
         finally:
             app.dependency_overrides.clear()
 
-    def test_search_has_summary(self) -> None:
+    def test_search_has_summary(self, override_auth) -> None:
         """Response must contain a summary."""
         mock_engine = _make_mock_engine_full()
         app.dependency_overrides[get_search_engine_service] = lambda: mock_engine
@@ -204,7 +204,7 @@ class TestSearchEndpoint:
         finally:
             app.dependency_overrides.clear()
 
-    def test_search_has_results(self) -> None:
+    def test_search_has_results(self, override_auth) -> None:
         """Response must contain results list."""
         mock_engine = _make_mock_engine_full()
         app.dependency_overrides[get_search_engine_service] = lambda: mock_engine
@@ -220,7 +220,7 @@ class TestSearchEndpoint:
         finally:
             app.dependency_overrides.clear()
 
-    def test_search_result_has_vehicle_info(self) -> None:
+    def test_search_result_has_vehicle_info(self, override_auth) -> None:
         """Each result must have basic vehicle info."""
         mock_engine = _make_mock_engine_full()
         app.dependency_overrides[get_search_engine_service] = lambda: mock_engine
@@ -239,7 +239,7 @@ class TestSearchEndpoint:
         finally:
             app.dependency_overrides.clear()
 
-    def test_search_result_has_analysis(self) -> None:
+    def test_search_result_has_analysis(self, override_auth) -> None:
         """Each result must have complete analysis."""
         mock_engine = _make_mock_engine_full()
         app.dependency_overrides[get_search_engine_service] = lambda: mock_engine
@@ -257,7 +257,7 @@ class TestSearchEndpoint:
         finally:
             app.dependency_overrides.clear()
 
-    def test_empty_search(self) -> None:
+    def test_empty_search(self, override_auth) -> None:
         """Search with no results should return empty list."""
         mock_engine = _make_mock_engine_empty()
         app.dependency_overrides[get_search_engine_service] = lambda: mock_engine
@@ -272,7 +272,7 @@ class TestSearchEndpoint:
         finally:
             app.dependency_overrides.clear()
 
-    def test_min_price_max_price_mapping(self) -> None:
+    def test_min_price_max_price_mapping(self, override_auth) -> None:
         """min_price and max_price must map to budget_min/budget_max."""
         mock_engine = MagicMock(spec=SearchEngineService)
         mock_engine.search = AsyncMock()
@@ -292,7 +292,7 @@ class TestSearchEndpoint:
         finally:
             app.dependency_overrides.clear()
 
-    def test_min_price_greater_than_max_returns_422(self) -> None:
+    def test_min_price_greater_than_max_returns_422(self, override_auth) -> None:
         """If min_price > max_price, must return 422."""
         mock_engine = _make_mock_engine_full()
         app.dependency_overrides[get_search_engine_service] = lambda: mock_engine
@@ -309,7 +309,7 @@ class TestSearchEndpoint:
         finally:
             app.dependency_overrides.clear()
 
-    def test_missing_query_returns_422(self) -> None:
+    def test_missing_query_returns_422(self, override_auth) -> None:
         """If query is missing, must return 422."""
         mock_engine = _make_mock_engine_full()
         app.dependency_overrides[get_search_engine_service] = lambda: mock_engine
@@ -322,7 +322,7 @@ class TestSearchEndpoint:
         finally:
             app.dependency_overrides.clear()
 
-    def test_search_serializes_to_json(self) -> None:
+    def test_search_serializes_to_json(self, override_auth) -> None:
         """Response must be JSON serializable."""
         mock_engine = _make_mock_engine_full()
         app.dependency_overrides[get_search_engine_service] = lambda: mock_engine
