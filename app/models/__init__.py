@@ -1,5 +1,6 @@
 from app.models.base import Base
 from app.models.cached_market import CachedMarketData
+from app.models.deal import Deal, DealStatus
 from app.models.negotiation import (
     DefectItem,
     InspectionResult,
@@ -31,6 +32,8 @@ from app.models.vision import (
 __all__ = [
     "Base",
     "CachedMarketData",
+    "Deal",
+    "DealStatus",
     "DefectItem",
     "InspectionResult",
     "NegotiationArgument",

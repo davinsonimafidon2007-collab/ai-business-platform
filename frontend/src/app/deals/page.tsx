@@ -70,12 +70,22 @@ function StatusBadge({ status }: { status: DealStatus }) {
 function DealRow({ deal }: { deal: Deal }) {
   const queryClient = useQueryClient();
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [offerPriceInput, setOfferPriceInput] = useState<string>("");
+  const [pendingTarget, setPendingTarget] = useState<DealStatus | null>(null);
 
   const transition = useMutation({
     mutationFn: (target: DealStatus) =>
-      updateDealStatus(deal.id, { status: target }),
+      updateDealStatus(deal.id, {
+        status: target,
+        offer_price:
+          target === "OFFER" && offerPriceInput
+            ? Number(offerPriceInput)
+            : undefined,
+      }),
     onSuccess: () => {
       setErrorMsg(null);
+      setPendingTarget(null);
+      setOfferPriceInput("");
       queryClient.invalidateQueries({ queryKey: ["deals"] });
     },
     onError: (err: Error) => {
@@ -84,6 +94,16 @@ function DealRow({ deal }: { deal: Deal }) {
   });
 
   const nextActions = TRANSITIONS[deal.status] ?? [];
+
+  const handleAction = (target: DealStatus) => {
+    if (target === "OFFER") {
+      // Pedir offer_price antes de transicionar a OFFER.
+      setPendingTarget(target);
+      setErrorMsg(null);
+      return;
+    }
+    transition.mutate(target);
+  };
 
   return (
     <div className="rounded-lg border border-secondary-200 bg-white p-4 dark:border-secondary-700 dark:bg-secondary-800">
@@ -118,7 +138,7 @@ function DealRow({ deal }: { deal: Deal }) {
       )}
 
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-        <p className="text-xs text-secondary-500 dark:text-secondary-400">
+<p className="text-xs text-secondary-500 dark:text-secondary-400">
           Creado: {formatDate(deal.created_at)} · Actualizado:{" "}
           {formatDate(deal.updated_at)}
         </p>
@@ -137,7 +157,7 @@ function DealRow({ deal }: { deal: Deal }) {
                 }
                 size="sm"
                 disabled={transition.isPending}
-                onClick={() => transition.mutate(target)}
+                onClick={() => handleAction(target)}
               >
                 {transition.isPending
                   ? "Actualizando..."
@@ -151,6 +171,48 @@ function DealRow({ deal }: { deal: Deal }) {
           </span>
         )}
       </div>
+
+      {pendingTarget === "OFFER" && (
+        <div className="mt-3 flex flex-wrap items-end gap-3 rounded-md bg-secondary-50 p-3 dark:bg-secondary-900/40">
+          <div className="flex flex-col gap-1">
+            <label
+              htmlFor={`offer-price-${deal.id}`}
+              className="text-xs font-medium text-secondary-600 dark:text-secondary-300"
+            >
+              Precio de oferta (EUR)
+            </label>
+            <input
+              id={`offer-price-${deal.id}`}
+              type="number"
+              min={0}
+              step="0.01"
+              value={offerPriceInput}
+              onChange={(e) => setOfferPriceInput(e.target.value)}
+              placeholder="ej. 15000"
+              className="block w-40 rounded-md border border-secondary-300 bg-white px-3 py-1.5 text-sm text-secondary-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-secondary-600 dark:bg-secondary-900 dark:text-secondary-100"
+            />
+          </div>
+          <Button
+            variant="primary"
+            size="sm"
+            disabled={transition.isPending || offerPriceInput === ""}
+            onClick={() => transition.mutate("OFFER")}
+          >
+            {transition.isPending ? "Guardando..." : "Confirmar oferta"}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={transition.isPending}
+            onClick={() => {
+              setPendingTarget(null);
+              setOfferPriceInput("");
+            }}
+          >
+            Cancelar
+          </Button>
+        </div>
+      )}
 
       {errorMsg && (
         <p className="mt-3 text-sm text-red-600 dark:text-red-400">{errorMsg}</p>

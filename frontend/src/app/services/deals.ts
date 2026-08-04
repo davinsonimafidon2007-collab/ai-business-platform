@@ -30,6 +30,7 @@ export type DealListResponse = {
 
 export type DealFilters = {
   status?: DealStatus;
+  opportunity_id?: string;
   limit?: number;
   offset?: number;
 };
@@ -40,6 +41,7 @@ export async function fetchDeals(
   const { data } = await api.get<DealListResponse>("/deals", {
     params: {
       status: params.status || undefined,
+      opportunity_id: params.opportunity_id || undefined,
       limit: params.limit ?? 50,
       offset: params.offset ?? 0,
     },

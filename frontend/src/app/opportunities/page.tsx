@@ -7,6 +7,7 @@ import { createDeal } from "@/app/services/deals";
 import type { Opportunity } from "@/app/services/opportunities";
 import { RecommendationBadge } from "@/app/components/ui/ScoreBadge";
 import { Button } from "@/app/components/ui/button";
+import type { AxiosError } from "axios";
 
 const eur = (n?: number | null) =>
   n == null
@@ -35,7 +36,7 @@ const riskColor = (risk?: string | null) => {
 
 function OpportunityRow({ opportunity }: { opportunity: Opportunity }) {
   const vehicle = opportunity.vehicle;
-  const title = vehicle
+const title = vehicle
     ? [vehicle.brand, vehicle.model, vehicle.year]
         .filter(Boolean)
         .join(" ") || "Vehículo sin nombre"
@@ -44,6 +45,7 @@ function OpportunityRow({ opportunity }: { opportunity: Opportunity }) {
   const queryClient = useQueryClient();
   const [dealMsg, setDealMsg] = useState<string | null>(null);
   const [dealError, setDealError] = useState<string | null>(null);
+  const [existingDealId, setExistingDealId] = useState<string | null>(null);
 
   const openDeal = useMutation({
     mutationFn: () =>
@@ -54,9 +56,25 @@ function OpportunityRow({ opportunity }: { opportunity: Opportunity }) {
     onSuccess: () => {
       setDealMsg("Deal creado");
       setDealError(null);
+      setExistingDealId(null);
       queryClient.invalidateQueries({ queryKey: ["deals"] });
     },
     onError: (err: Error) => {
+      const axiosErr = err as AxiosError;
+      const status = axiosErr.response?.status;
+      if (status === 409 || status === 422) {
+        // Ya existe un deal activo para esta oportunidad.
+        const detail = axiosErr.response?.data as
+          | { message?: string; deal_id?: string }
+          | string
+          | undefined;
+        const dealId =
+          typeof detail === "object" && detail ? detail.deal_id : undefined;
+        setExistingDealId(dealId ?? null);
+        setDealError("Ya tienes un deal abierto para esta oportunidad");
+        setDealMsg(null);
+        return;
+      }
       setDealError(err.message || "Error al crear el deal");
       setDealMsg(null);
     },
@@ -129,19 +147,28 @@ function OpportunityRow({ opportunity }: { opportunity: Opportunity }) {
               {dealMsg}
             </span>
           )}
-          {dealError && (
+{dealError && (
             <span className="text-sm font-medium text-red-600 dark:text-red-400">
               {dealError}
             </span>
           )}
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={openDeal.isPending}
-            onClick={() => openDeal.mutate()}
-          >
-            {openDeal.isPending ? "Creando..." : "Abrir deal"}
-          </Button>
+          {existingDealId ? (
+            <a
+              href="/deals"
+              className="inline-flex h-8 items-center rounded-lg bg-primary-600 px-3 text-sm font-medium text-white hover:bg-primary-700"
+            >
+              Ver deal
+            </a>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={openDeal.isPending}
+              onClick={() => openDeal.mutate()}
+            >
+              {openDeal.isPending ? "Creando..." : "Abrir deal"}
+            </Button>
+          )}
           {vehicle?.url && (
             <a
               href={vehicle.url}
