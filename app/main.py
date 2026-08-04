@@ -7,6 +7,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import HTMLResponse
 
+from app.api.v1.admin_api_keys import router as admin_api_keys_router
+from app.api.v1.admin_status import router as admin_status_router
+from app.api.v1.api_keys import router as api_keys_router
 from app.api.v1.auth import router as auth_router
 from app.api.v1.searches import router as searches_router
 from app.api.v1.users import router as users_router
@@ -104,6 +107,9 @@ app.add_middleware(
 )
 
 app.include_router(auth_router, prefix="/api/v1")
+app.include_router(api_keys_router, prefix="/api/v1")
+app.include_router(admin_api_keys_router, prefix="/api/v1")
+app.include_router(admin_status_router, prefix="/api/v1")
 app.include_router(searches_router, prefix="/api/v1")
 app.include_router(users_router, prefix="/api/v1")
 app.include_router(vehicles_router, prefix="/api/v1")

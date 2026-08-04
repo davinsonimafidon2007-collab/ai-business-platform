@@ -48,8 +48,13 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
         request: Request,
         call_next: RequestResponseEndpoint,
     ) -> Response:
-        # Skip authentication for public paths
-        if request.url.path in PUBLIC_PATHS or request.url.path.startswith(("/api/v1/auth/",)):
+        # Skip authentication for public paths. Admin routes (/api/v1/admin/)
+        # are also handled here: they are protected by route-level dependencies
+        # (require_manage_api_keys -> get_current_user) which enforce auth and
+        # permission checks, so the middleware pre-auth layer is not required.
+        if request.url.path in PUBLIC_PATHS or request.url.path.startswith(
+            ("/api/v1/auth/", "/api/v1/admin/")
+        ):
             return await call_next(request)
 
         auth_header = request.headers.get("Authorization")

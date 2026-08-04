@@ -1,12 +1,16 @@
 """ProviderCanaryJob — Detecta parsers rotos (0 listings en vivo).
 
 Task A.6: AS24 con 0 anuncios = fallo del job.
-mobile.de con 403 anti-bot = WARN (no falla el job hasta tener proxy).
+Task A.5: mobile.de con 403 anti-bot = WARN (no falla el job) si NO hay
+proxy/cookies configurados. Si hay proxy/cookies (anti-bot configurado),
+mobile.de pasa a ser estricto: 403 o 0 listings derriban el job (FAIL).
 """
 
 from __future__ import annotations
 
+from app.core.config import settings
 from app.jobs.base import Job, JobContext, JobResult
+from app.jobs.canary_state import set_last_canary_result
 from app.providers.autoscout24 import AutoScout24Provider
 from app.providers.exceptions import ProviderConnectionError, ProviderError
 from app.providers.mobile_de import MobileDeProvider
@@ -19,6 +23,13 @@ MOBILE_SEARCH_URL = (
     "https://suchen.mobile.de/fahrzeuge/search.html"
     "?dam=false&isSearchRequest=true&ref=srp&sb=rel&vc=Car"
 )
+
+
+def _anti_bot_configured() -> bool:
+    """True si hay proxy o cookies anti-bot configurados en settings."""
+    proxy = (getattr(settings, "provider_http_proxy", None) or "").strip()
+    cookies = (getattr(settings, "provider_http_cookies", None) or "").strip()
+    return bool(proxy or cookies)
 
 
 class ProviderCanaryJob(Job):
@@ -57,6 +68,7 @@ class ProviderCanaryJob(Job):
             await provider.close()
 
         # --- mobile.de (warn si anti-bot) ---
+        strict_mobile = _anti_bot_configured()
         mobile = MobileDeProvider()
         try:
             results = await mobile.search(MOBILE_SEARCH_URL)
@@ -64,13 +76,25 @@ class ProviderCanaryJob(Job):
             data["mobile_de"] = {"count": count}
             mobile_status = "ok" if count > 0 else "empty"
             if count == 0:
-                logger.warning("canary mobile.de: 0 listings")
+                if strict_mobile:
+                    logger.error(
+                        "canary mobile.de FAIL: 0 listings with proxy configured"
+                        " (possible selector drift)"
+                    )
+                else:
+                    logger.warning("canary mobile.de: 0 listings")
             else:
                 logger.info("canary mobile.de OK: %d listings", count)
         except ProviderConnectionError as exc:
             data["mobile_de"] = {"status": "blocked", "error": str(exc)}
             mobile_status = "blocked"
-            logger.warning("canary mobile.de WARN (anti-bot): %s", exc)
+            if strict_mobile:
+                logger.error(
+                    "canary mobile.de FAIL: still blocked with proxy configured: %s",
+                    exc,
+                )
+            else:
+                logger.warning("canary mobile.de blocked (no proxy; WARN): %s", exc)
         except ProviderError as exc:
             data["mobile_de"] = {"error": str(exc)}
             mobile_status = "error"
@@ -83,16 +107,21 @@ class ProviderCanaryJob(Job):
             await mobile.close()
 
         data["mobile_status"] = mobile_status
+        data["strict_mobile"] = strict_mobile
 
         if as24_ok:
-            return JobResult(
-                success=True,
-                message=f"Canary OK (AS24 listings>0, mobile={mobile_status})",
-                data=data,
-            )
+            if strict_mobile and mobile_status != "ok":
+                success = False
+                message = (
+                    "Canary FAIL: mobile.de bloqueado con proxy configurado "
+                    f"(status={mobile_status})"
+                )
+            else:
+                success = True
+                message = f"Canary OK (AS24 listings>0, mobile={mobile_status})"
+        else:
+            success = False
+            message = "Canary FAIL: AutoScout24 devolvió 0 listings o error"
 
-        return JobResult(
-            success=False,
-            message="Canary FAIL: AutoScout24 devolvió 0 listings o error",
-            data=data,
-        )
+        set_last_canary_result(success=success, message=message, data=data)
+        return JobResult(success=success, message=message, data=data)

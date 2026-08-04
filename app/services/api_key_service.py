@@ -99,6 +99,17 @@ class ApiKeyService:
         """Get all API keys for a user."""
         return await self.repository.list_active_by_user_id(user_id)
 
+    async def list_keys_for_user(
+        self, user_id: str, *, active_only: bool = True
+    ) -> list[ApiKey]:
+        """List API keys for a user (admin helper).
+
+        No cambia create_api_key / validate_api_key.
+        """
+        if active_only:
+            return await self.repository.list_active_by_user_id(user_id)
+        return await self.repository.get_by_user_id(user_id)
+
     async def deactivate_api_key(self, api_key_id: str) -> None:
         """Deactivate (revoke) an API key without deleting it."""
         await self.repository.deactivate(api_key_id)
