@@ -11,4 +11,4 @@
 - [x] 8. FE: `deals/page.tsx` pide `offer_price` al pasar a OFFER
 - [x] 9. FE: `opportunities/page.tsx` maneja 409/422 con mensaje "Ya tienes un deal abierto" + link a /deals
 - [x] 10. Verificar: `pytest` backend (19 passed) + `npm run build` frontend (OK, /deals y /opportunities generados)
-- [ ] 11. Commit + push
+- [x] 11. Commit (99e46f6) + push origin/main
