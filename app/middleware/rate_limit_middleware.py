@@ -10,6 +10,7 @@ from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoin
 from starlette.responses import Response
 
 from app.core.config import settings
+from app.core.redis import get_redis, rate_limit_hit
 from app.models.role import Role
 
 # ── Rate limit configuration per role ──────────────────────────────────────
@@ -40,6 +41,10 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     - Endpoint path
 
     Uses a sliding window approach with configurable limits per role.
+
+    Distributed: when Redis is available, counters live in Redis so multiple
+    workers share the same limits. If Redis is down, falls back to in-memory
+    counters (fail-soft, same pattern as the L1 cache).
     """
 
     def __init__(
@@ -80,45 +85,73 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         else:
             endpoint_limit = DEFAULT_RATE_LIMIT
 
-        if not self._check_limit(self._endpoint_limits, endpoint_key, endpoint_limit):
-            return JSONResponse(
-                status_code=429,
-                content={"detail": "Too many requests. Please try again later."},
-                headers={"Retry-After": str(self.window_seconds)},
-            )
+        if not await self._allow(
+            f"rl:ep:{endpoint_key}:{client_ip}",
+            endpoint_limit,
+            self.window_seconds,
+            local_bucket=self._endpoint_limits,
+            local_key=endpoint_key,
+        ):
+            return self._too_many(self.window_seconds)
 
         # Límites por identidad
         if user is not None and auth_method == "jwt":
             role = getattr(user, "role", None)
             limit = ROLE_RATE_LIMITS.get(role, DEFAULT_RATE_LIMIT) if role else DEFAULT_RATE_LIMIT
-            if not self._check_limit(self._user_limits, str(user.id), limit):
-                return JSONResponse(
-                    status_code=429,
-                    content={"detail": "Too many requests. Please try again later."},
-                    headers={"Retry-After": str(self.window_seconds)},
-                )
+            uid = str(user.id)
+            if not await self._allow(
+                f"rl:user:{uid}",
+                limit,
+                self.window_seconds,
+                local_bucket=self._user_limits,
+                local_key=uid,
+            ):
+                return self._too_many(self.window_seconds)
         elif auth_method == "api_key":
             # Usar el mismo techo de usuario autenticado (premium si role disponible)
             role = getattr(user, "role", None) if user is not None else None
             limit = ROLE_RATE_LIMITS.get(role, DEFAULT_RATE_LIMIT) if role else DEFAULT_RATE_LIMIT
             api_key_id = request.headers.get("X-API-Key", "")[:16] or client_ip
-            if not self._check_limit(self._api_key_limits, api_key_id, limit):
-                return JSONResponse(
-                    status_code=429,
-                    content={"detail": "Too many requests. Please try again later."},
-                    headers={"Retry-After": str(self.window_seconds)},
-                )
+            if not await self._allow(
+                f"rl:apikey:{api_key_id}",
+                limit,
+                self.window_seconds,
+                local_bucket=self._api_key_limits,
+                local_key=api_key_id,
+            ):
+                return self._too_many(self.window_seconds)
         else:
-            if not self._check_limit(self._ip_limits, client_ip, DEFAULT_RATE_LIMIT):
-                return JSONResponse(
-                    status_code=429,
-                    content={"detail": "Too many requests. Please try again later."},
-                    headers={"Retry-After": str(self.window_seconds)},
-                )
+            if not await self._allow(
+                f"rl:ip:{client_ip}",
+                DEFAULT_RATE_LIMIT,
+                self.window_seconds,
+                local_bucket=self._ip_limits,
+                local_key=client_ip,
+            ):
+                return self._too_many(self.window_seconds)
 
         return await call_next(request)
 
-    def _check_limit(
+    async def _allow(
+        self,
+        redis_key: str,
+        limit: int,
+        window: int,
+        *,
+        local_bucket: dict,
+        local_key: str,
+    ) -> bool:
+        """Redis primero; si no hay cliente Redis (o falla), memoria local."""
+        if get_redis() is not None:
+            try:
+                allowed, _retry = await rate_limit_hit(redis_key, limit, window)
+                return allowed
+            except Exception:
+                # Fallback a memoria local (fail-soft)
+                pass
+        return self._check_limit_local(local_bucket, local_key, limit)
+
+    def _check_limit_local(
         self,
         limits: dict[str, RateLimitEntry],
         key: str,
@@ -143,3 +176,10 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
         entry.count += 1
         return True
+
+    def _too_many(self, window: int) -> JSONResponse:
+        return JSONResponse(
+            status_code=429,
+            content={"detail": "Too many requests. Please try again later."},
+            headers={"Retry-After": str(window)},
+        )

@@ -88,3 +88,39 @@ async def cache_delete(key: str) -> None:
 def market_cache_key(market_hash: str) -> str:
     """Stable key for market estimation cache entries."""
     return f"market:est:{market_hash}"
+
+
+async def rate_limit_hit(key: str, limit: int, window_seconds: int) -> tuple[bool, int]:
+    """Incrementa un contador atómico en Redis para rate limiting distribuido.
+
+    Returns (allowed, retry_after_seconds):
+        allowed=True  → dentro del límite
+        allowed=False → superó el límite; retry_after ≈ segundos hasta fin de ventana
+
+    Raises RuntimeError si Redis no está disponible (o si falla la operación),
+    para que el caller pueda hacer fallback a la memoria local.
+    """
+    client = get_redis()
+    if client is None:
+        raise RuntimeError("redis unavailable")
+
+    try:
+        # INCR + TTL en una sola operación atómica (pipeline)
+        pipe = client.pipeline()
+        pipe.incr(key)
+        pipe.ttl(key)
+        count, ttl = await pipe.execute()
+        count = int(count)
+        ttl = int(ttl)
+
+        # Clave sin TTL (primer incremento de la ventana): fijar la ventana
+        if ttl < 0:
+            await client.expire(key, max(1, int(window_seconds)))
+            ttl = int(window_seconds)
+
+        if count > limit:
+            return False, max(1, ttl)
+        return True, 0
+    except Exception:
+        logger.warning("Redis rate_limit_hit failed for key=%s", key, exc_info=True)
+        raise
