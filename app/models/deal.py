@@ -80,6 +80,42 @@ class Deal(Base):
     contact_channel: Mapped[str | None] = mapped_column(String(20), nullable=True)
     """Canal de contacto: email | phone | portal | other."""
 
+    # ------------------------------------------------------------------
+    # Última simulación de margen (Task E.2)
+    # ------------------------------------------------------------------
+    last_sim_purchase_price: Mapped[float | None] = mapped_column(
+        Numeric(12, 2), nullable=True
+    )
+    """Precio de compra de la última simulación guardada."""
+
+    last_sim_sale_price: Mapped[float | None] = mapped_column(
+        Numeric(12, 2), nullable=True
+    )
+    """Precio de venta estimado de la última simulación guardada."""
+
+    last_sim_total_cost: Mapped[float | None] = mapped_column(
+        Numeric(12, 2), nullable=True
+    )
+    """Coste total de la última simulación guardada."""
+
+    last_sim_net_profit: Mapped[float | None] = mapped_column(
+        Numeric(12, 2), nullable=True
+    )
+    """Beneficio neto de la última simulación guardada."""
+
+    last_sim_roi: Mapped[float | None] = mapped_column(
+        Numeric(12, 2), nullable=True
+    )
+    """ROI (%) de la última simulación guardada."""
+
+    last_sim_profile: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    """Perfil de costes de la última simulación guardada."""
+
+    last_sim_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    """Fecha/hora en que se guardó la última simulación."""
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),

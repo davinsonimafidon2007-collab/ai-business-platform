@@ -10,7 +10,12 @@ vi.mock("@/app/services/api/client", () => ({
 }));
 
 import { api } from "@/app/services/api/client";
-import { fetchDeals, createDeal, updateDealStatus } from "@/app/services/deals";
+import {
+  fetchDeals,
+  createDeal,
+  updateDealStatus,
+  updateDealSimulation,
+} from "@/app/services/deals";
 
 describe("deals service", () => {
   beforeEach(() => {
@@ -139,10 +144,59 @@ describe("deals service", () => {
         offer_price: 15000,
       });
 
-      expect(api.patch).toHaveBeenCalledWith("/deals/deal-1/status", {
+expect(api.patch).toHaveBeenCalledWith("/deals/deal-1/status", {
         status: "OFFER",
         notes: "oferta enviada",
         offer_price: 15000,
+      });
+    });
+  });
+
+  describe("updateDealSimulation", () => {
+    it("patches simulation with deal id in path", async () => {
+      const mockDeal = {
+        id: "deal-1",
+        user_id: "user-1",
+        status: "NEW",
+        last_sim_net_profit: 2500,
+        last_sim_roi: 11.63,
+        last_sim_profile: "SPAIN",
+      };
+      vi.mocked(api.patch).mockResolvedValue({ data: mockDeal } as any);
+
+      const result = await updateDealSimulation("deal-1", {
+        purchase_price: 18000,
+        estimated_sale_price: 24000,
+        total_cost: 21500,
+        net_profit: 2500,
+        roi_percentage: 11.63,
+        profile_name: "SPAIN",
+      });
+
+      expect(api.patch).toHaveBeenCalledWith("/deals/deal-1/simulation", {
+        purchase_price: 18000,
+        estimated_sale_price: 24000,
+        total_cost: 21500,
+        net_profit: 2500,
+        roi_percentage: 11.63,
+        profile_name: "SPAIN",
+      });
+      expect(result).toEqual(mockDeal);
+    });
+
+    it("patches partial simulation body", async () => {
+      vi.mocked(api.patch).mockResolvedValue({
+        data: { id: "deal-1", status: "NEW" },
+      } as any);
+
+      await updateDealSimulation("deal-1", {
+        net_profit: 1000,
+        roi_percentage: 5,
+      });
+
+      expect(api.patch).toHaveBeenCalledWith("/deals/deal-1/simulation", {
+        net_profit: 1000,
+        roi_percentage: 5,
       });
     });
   });

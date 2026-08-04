@@ -17,8 +17,24 @@ export type Deal = {
   notes?: string | null;
   offer_price?: number | null;
   contact_channel?: string | null;
+  last_sim_purchase_price?: number | null;
+  last_sim_sale_price?: number | null;
+  last_sim_total_cost?: number | null;
+  last_sim_net_profit?: number | null;
+  last_sim_roi?: number | null;
+  last_sim_profile?: string | null;
+  last_sim_at?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
+};
+
+export type DealSimulationUpdate = {
+  purchase_price?: number;
+  estimated_sale_price?: number;
+  total_cost?: number;
+  net_profit?: number;
+  roi_percentage?: number;
+  profile_name?: string;
 };
 
 export type DealListResponse = {
@@ -64,5 +80,16 @@ export async function updateDealStatus(
   body: { status: DealStatus; notes?: string; offer_price?: number }
 ): Promise<Deal> {
   const { data } = await api.patch<Deal>(`/deals/${dealId}/status`, body);
+  return data;
+}
+
+export async function updateDealSimulation(
+  dealId: string,
+  body: DealSimulationUpdate
+): Promise<Deal> {
+  const { data } = await api.patch<Deal>(
+    `/deals/${dealId}/simulation`,
+    body
+  );
   return data;
 }

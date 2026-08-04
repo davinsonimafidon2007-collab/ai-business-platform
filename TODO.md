@@ -1,14 +1,18 @@
-# Task D.3 — Deals: sin duplicados activos + `offer_price` al pasar a OFFER
+# Plan Task E.2 — Guardar última simulación en el deal
 
-## Steps
-- [x] 1. Explorar backend deals API y frontend deals/opportunities
-- [x] 2. Backend: `deal_repository.get_active_by_opportunity` + filtro `opportunity_id` en `list_for_user`
-- [x] 3. Backend: `deal_service.create` bloquea deal activo (409) + `list` filtra por opportunity
-- [x] 4. Backend: `GET /deals?opportunity_id=` en `app/api/v1/deals.py`
-- [x] 5. Tests backend: `test_deal_service.py` (duplicado 409, tras terminal permitido)
-- [x] 6. Tests backend: `test_deals_api.py` (409 create, PATCH OFFER con offer_price)
-- [x] 7. FE: `deals.ts` añade `opportunity_id` a filtros
-- [x] 8. FE: `deals/page.tsx` pide `offer_price` al pasar a OFFER
-- [x] 9. FE: `opportunities/page.tsx` maneja 409/422 con mensaje "Ya tienes un deal abierto" + link a /deals
-- [x] 10. Verificar: `pytest` backend (19 passed) + `npm run build` frontend (OK, /deals y /opportunities generados)
-- [x] 11. Commit (99e46f6) + push origin/main
+## Pasos
+- [x] 1. Explorar backend: modelo Deal, schemas, service, API, repo
+- [x] 2. Explorar frontend: SimulateProfitPanel, opportunities, deals page, services, tests
+- [x] 3. Confirmar plan con el usuario (aprobado)
+- [x] 4. Backend: añadir columnas `last_sim_*` al modelo `Deal`
+- [x] 5. Backend: nueva migración Alembic (down_revision = e2f3a4b5c6d7)
+- [x] 6. Backend: schemas `DealSimulationUpdate` + campos `last_sim_*` en `DealRead`
+- [x] 7. Backend: `DealService.save_simulation()` (ownership + no tocar status)
+- [x] 8. Backend: endpoint `PATCH /deals/{id}/simulation`
+- [x] 9. Frontend: `updateDealSimulation()` + campos `last_sim_*` en `deals.ts`
+- [x] 10. Frontend: `SimulateProfitPanel` con prop `dealId` y botón "Guardar en deal"
+- [x] 11. Frontend: `opportunities/page.tsx` — pasar dealId al panel (Map de deals activos)
+- [x] 12. Frontend: `deals/page.tsx` — mostrar última simulación en la card
+- [x] 13. Tests backend: `test_deal_service.py` + `test_deals_api.py`
+- [x] 14. Tests frontend: `deals.test.ts` (updateDealSimulation)
+- [x] 15. Build + tests + commit

@@ -191,3 +191,51 @@ class DealService:
         deal.updated_at = self._now()
 
         return await self.repository.update(deal)
+
+    async def save_simulation(
+        self,
+        *,
+        deal_id: str,
+        user_id: str,
+        purchase_price: float | None = None,
+        estimated_sale_price: float | None = None,
+        total_cost: float | None = None,
+        net_profit: float | None = None,
+        roi_percentage: float | None = None,
+        profile_name: str | None = None,
+    ) -> Deal:
+        """Guarda la última simulación de margen en un deal (Task E.2).
+
+        Solo actualiza los campos de simulación ``last_sim_*`` y el timestamp
+        ``last_sim_at`` / ``updated_at``. No modifica el estado del pipeline ni
+        los campos de negociación (offer_price, notes, contact_channel).
+
+        Args:
+            deal_id: Id del deal en el que guardar la simulación.
+            user_id: Dueño del deal (ownership check).
+            purchase_price: Precio de compra de la simulación.
+            estimated_sale_price: Precio de venta estimado.
+            total_cost: Coste total de la simulación.
+            net_profit: Beneficio neto de la simulación.
+            roi_percentage: ROI (%) de la simulación.
+            profile_name: Perfil de costes usado.
+
+        Returns:
+            El Deal actualizado con los campos de simulación.
+
+        Raises:
+            HTTPException 404: Si el deal no existe o no pertenece al usuario.
+        """
+        deal = await self.get(deal_id, user_id)
+
+        now = self._now()
+        deal.last_sim_purchase_price = purchase_price
+        deal.last_sim_sale_price = estimated_sale_price
+        deal.last_sim_total_cost = total_cost
+        deal.last_sim_net_profit = net_profit
+        deal.last_sim_roi = roi_percentage
+        deal.last_sim_profile = profile_name
+        deal.last_sim_at = now
+        deal.updated_at = now
+
+        return await self.repository.update(deal)

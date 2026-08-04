@@ -150,3 +150,64 @@ async def test_transition_ownership_rejected() -> None:
             new_status=DealStatus.CONTACTED,
         )
     assert exc.value.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Task E.2 — Guardar última simulación en el deal
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_save_simulation_ok() -> None:
+    """Guardar simulación en un deal propio actualiza los campos last_sim_*."""
+    deal = _make_deal(status=DealStatus.NEW, user_id="user-1")
+    service = _make_service(deal)
+    result = await service.save_simulation(
+        deal_id="deal-1",
+        user_id="user-1",
+        purchase_price=18000.0,
+        estimated_sale_price=24000.0,
+        total_cost=21500.0,
+        net_profit=2500.0,
+        roi_percentage=11.63,
+        profile_name="SPAIN",
+    )
+    assert result.last_sim_purchase_price == 18000.0
+    assert result.last_sim_sale_price == 24000.0
+    assert result.last_sim_total_cost == 21500.0
+    assert result.last_sim_net_profit == 2500.0
+    assert result.last_sim_roi == 11.63
+    assert result.last_sim_profile == "SPAIN"
+    assert result.last_sim_at is not None
+    # No toca el status del pipeline.
+    assert result.status == DealStatus.NEW
+
+
+@pytest.mark.asyncio
+async def test_save_simulation_does_not_change_status() -> None:
+    """Guardar simulación no cambia el estado del deal."""
+    deal = _make_deal(status=DealStatus.OFFER, user_id="user-1")
+    service = _make_service(deal)
+    result = await service.save_simulation(
+        deal_id="deal-1",
+        user_id="user-1",
+        net_profit=1000.0,
+        roi_percentage=5.0,
+        profile_name="ES",
+    )
+    assert result.status == DealStatus.OFFER
+    assert result.last_sim_net_profit == 1000.0
+
+
+@pytest.mark.asyncio
+async def test_save_simulation_ownership_rejected() -> None:
+    """Guardar simulación sobre deal ajeno -> 404."""
+    deal = _make_deal(user_id="user-2", status=DealStatus.NEW)
+    service = _make_service(deal)
+    with pytest.raises(HTTPException) as exc:
+        await service.save_simulation(
+            deal_id="deal-1",
+            user_id="user-1",
+            net_profit=1000.0,
+        )
+    assert exc.value.status_code == 404

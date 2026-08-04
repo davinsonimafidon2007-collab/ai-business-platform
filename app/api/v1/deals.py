@@ -9,6 +9,7 @@ from app.api.v1.schemas.deal import (
     DealCreate,
     DealListResponse,
     DealRead,
+    DealSimulationUpdate,
     DealUpdateStatus,
 )
 from app.db.session import get_db_session
@@ -100,5 +101,30 @@ async def update_deal_status(
         new_status=payload.status,
         notes=payload.notes,
         offer_price=payload.offer_price,
+    )
+    return DealRead.model_validate(deal)
+
+
+@router.patch("/{deal_id}/simulation", response_model=DealRead)
+async def update_deal_simulation(
+    deal_id: str,
+    payload: DealSimulationUpdate,
+    service: DealService = Depends(get_deal_service),
+    current_user: User = Depends(get_current_user),
+) -> DealRead:
+    """Guarda la última simulación de margen en un deal (Task E.2).
+
+    Actualiza solo los campos ``last_sim_*``; no cambia el estado del
+    pipeline ni los campos de negociación. Ownership igual que el resto.
+    """
+    deal = await service.save_simulation(
+        deal_id=deal_id,
+        user_id=current_user.id,
+        purchase_price=payload.purchase_price,
+        estimated_sale_price=payload.estimated_sale_price,
+        total_cost=payload.total_cost,
+        net_profit=payload.net_profit,
+        roi_percentage=payload.roi_percentage,
+        profile_name=payload.profile_name,
     )
     return DealRead.model_validate(deal)

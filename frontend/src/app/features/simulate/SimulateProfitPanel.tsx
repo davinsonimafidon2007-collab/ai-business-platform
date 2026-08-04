@@ -5,6 +5,7 @@ import { useMutation } from "@tanstack/react-query";
 import type { AxiosError } from "axios";
 import { simulateProfit } from "@/app/services/simulateProfit";
 import type { SimulateProfitResponse } from "@/app/services/simulateProfit";
+import { updateDealSimulation } from "@/app/services/deals";
 import { RecommendationBadge } from "@/app/components/ui/ScoreBadge";
 import { Button } from "@/app/components/ui/button";
 
@@ -81,15 +82,22 @@ function getErrorMessage(err: Error): string {
 type Props = {
   vehicleId: string;
   defaultPurchasePrice?: number | null;
+  dealId?: string | null;
 };
 
-export function SimulateProfitPanel({ vehicleId, defaultPurchasePrice }: Props) {
+export function SimulateProfitPanel({
+  vehicleId,
+  defaultPurchasePrice,
+  dealId,
+}: Props) {
   const [open, setOpen] = useState(false);
   const [purchasePrice, setPurchasePrice] = useState<string>(
     defaultPurchasePrice != null ? String(defaultPurchasePrice) : ""
   );
   const [salePrice, setSalePrice] = useState<string>("");
   const [profile, setProfile] = useState<string>("SPAIN");
+  const [savedMsg, setSavedMsg] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const simulate = useMutation({
     mutationFn: () =>
@@ -98,6 +106,29 @@ export function SimulateProfitPanel({ vehicleId, defaultPurchasePrice }: Props) 
         purchase_price: purchasePrice ? Number(purchasePrice) : undefined,
         estimated_sale_price: salePrice ? Number(salePrice) : undefined,
       }),
+  });
+
+  const saveSim = useMutation({
+    mutationFn: () => {
+      if (!dealId) throw new Error("No hay deal vinculado");
+      if (!simulate.data) throw new Error("No hay simulación para guardar");
+      return updateDealSimulation(dealId, {
+        purchase_price: simulate.data.purchase_price,
+        estimated_sale_price: simulate.data.estimated_sale_price ?? undefined,
+        total_cost: simulate.data.total_cost,
+        net_profit: simulate.data.net_profit,
+        roi_percentage: simulate.data.roi_percentage,
+        profile_name: simulate.data.profile_name,
+      });
+    },
+    onSuccess: () => {
+      setSavedMsg("Guardado en el deal");
+      setSaveError(null);
+    },
+    onError: (err: Error) => {
+      setSaveError(err.message || "Error al guardar en el deal");
+      setSavedMsg(null);
+    },
   });
 
   return (
@@ -222,7 +253,7 @@ export function SimulateProfitPanel({ vehicleId, defaultPurchasePrice }: Props) 
                 </div>
               </div>
 
-              <div>
+<div>
                 <p className="mb-2 text-xs font-medium text-secondary-500 dark:text-secondary-400">
                   Desglose de costes
                 </p>
@@ -246,6 +277,29 @@ export function SimulateProfitPanel({ vehicleId, defaultPurchasePrice }: Props) 
                   </table>
                 </div>
               </div>
+
+              {dealId && (
+                <div className="flex flex-wrap items-center gap-3">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={saveSim.isPending}
+                    onClick={() => saveSim.mutate()}
+                  >
+                    {saveSim.isPending ? "Guardando..." : "Guardar en deal"}
+                  </Button>
+                  {savedMsg && (
+                    <span className="text-sm font-medium text-green-600 dark:text-green-400">
+                      {savedMsg}
+                    </span>
+                  )}
+                  {saveError && (
+                    <span className="text-sm font-medium text-red-600 dark:text-red-400">
+                      {saveError}
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>

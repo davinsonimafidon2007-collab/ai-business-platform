@@ -247,3 +247,79 @@ def test_patch_status_ok_returns_200(auth_override: None) -> None:
         )
         assert response.status_code == 200
         assert response.json()["status"] == "CONTACTED"
+
+
+# ---------------------------------------------------------------------------
+# Task E.2 — PATCH /deals/{id}/simulation
+# ---------------------------------------------------------------------------
+
+
+def test_patch_simulation_requires_auth() -> None:
+    """Sin token -> 401."""
+    response = client.patch(
+        "/api/v1/deals/deal-1/simulation",
+        json={"net_profit": 1000.0},
+    )
+    assert response.status_code == 401
+
+
+def test_patch_simulation_ok_returns_200(auth_override: None) -> None:
+    """PATCH /deals/{id}/simulation con deal propio -> 200 y campos guardados."""
+    deal = _make_deal(status=DealStatus.NEW)
+
+    async def _fake_get_by_id(self, deal_id):
+        return deal
+
+    async def _fake_update(self, deal: Deal) -> Deal:
+        deal.last_sim_net_profit = 2500.0
+        deal.last_sim_roi = 11.63
+        deal.last_sim_profile = "SPAIN"
+        return deal
+
+    async def _get_db_session() -> AsyncMock:
+        return AsyncMock()
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(DealRepository, "get_by_id", _fake_get_by_id)
+        mp.setattr(DealRepository, "update", _fake_update)
+        app.dependency_overrides[get_db_session] = _get_db_session
+
+        response = client.patch(
+            "/api/v1/deals/deal-1/simulation",
+            json={
+                "purchase_price": 18000.0,
+                "estimated_sale_price": 24000.0,
+                "total_cost": 21500.0,
+                "net_profit": 2500.0,
+                "roi_percentage": 11.63,
+                "profile_name": "SPAIN",
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["last_sim_net_profit"] == 2500.0
+        assert data["last_sim_roi"] == 11.63
+        assert data["last_sim_profile"] == "SPAIN"
+        # No cambia status.
+        assert data["status"] == "NEW"
+
+
+def test_patch_simulation_foreign_deal_returns_404(auth_override: None) -> None:
+    """PATCH /deals/{id}/simulation sobre deal ajeno -> 404."""
+    deal = _make_deal(user_id="user-2", status=DealStatus.NEW)
+
+    async def _fake_get_by_id(self, deal_id):
+        return deal
+
+    async def _get_db_session() -> AsyncMock:
+        return AsyncMock()
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(DealRepository, "get_by_id", _fake_get_by_id)
+        app.dependency_overrides[get_db_session] = _get_db_session
+
+        response = client.patch(
+            "/api/v1/deals/deal-1/simulation",
+            json={"net_profit": 1000.0},
+        )
+        assert response.status_code == 404

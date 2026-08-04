@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { fetchOpportunities } from "@/app/services/opportunities";
-import { createDeal } from "@/app/services/deals";
+import { createDeal, fetchDeals } from "@/app/services/deals";
 import type { Opportunity } from "@/app/services/opportunities";
 import { RecommendationBadge } from "@/app/components/ui/ScoreBadge";
 import { Button } from "@/app/components/ui/button";
@@ -43,10 +43,20 @@ const title = vehicle
         .join(" ") || "Vehículo sin nombre"
     : "Vehículo sin datos";
 
-  const queryClient = useQueryClient();
+const queryClient = useQueryClient();
   const [dealMsg, setDealMsg] = useState<string | null>(null);
   const [dealError, setDealError] = useState<string | null>(null);
   const [existingDealId, setExistingDealId] = useState<string | null>(null);
+
+  // Detectar si ya hay un deal activo para esta oportunidad.
+  const { data: dealData } = useQuery({
+    queryKey: ["deals", "by-opportunity", opportunity.id],
+    queryFn: () =>
+      fetchDeals({ opportunity_id: opportunity.id }).then((r) => r.items),
+    enabled: !!opportunity.id && !existingDealId,
+  });
+  const activeDealId =
+    existingDealId ?? dealData?.find((d) => d.id)?.id ?? null;
 
   const openDeal = useMutation({
     mutationFn: () =>
@@ -183,10 +193,11 @@ const title = vehicle
         </div>
       </div>
 
-      {vehicle?.id && (
+{vehicle?.id && (
         <SimulateProfitPanel
           vehicleId={vehicle.id}
           defaultPurchasePrice={vehicle.price}
+          dealId={activeDealId}
         />
       )}
     </div>

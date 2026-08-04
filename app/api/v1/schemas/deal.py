@@ -50,6 +50,21 @@ class DealUpdateStatus(BaseModel):
     offer_price: float | None = None
 
 
+class DealSimulationUpdate(BaseModel):
+    """Body para guardar la última simulación de margen en un deal (Task E.2).
+
+    Es un subset del ``SimulateProfitResponse`` + ``profile_name``. No toca
+    el estado del pipeline ni los campos de negociación.
+    """
+
+    purchase_price: float | None = None
+    estimated_sale_price: float | None = None
+    total_cost: float | None = None
+    net_profit: float | None = None
+    roi_percentage: float | None = None
+    profile_name: str | None = None
+
+
 class DealRead(BaseModel):
     """Deal lista para el frontend."""
 
@@ -61,6 +76,13 @@ class DealRead(BaseModel):
     notes: str | None = None
     offer_price: float | None = None
     contact_channel: str | None = None
+    last_sim_purchase_price: float | None = None
+    last_sim_sale_price: float | None = None
+    last_sim_total_cost: float | None = None
+    last_sim_net_profit: float | None = None
+    last_sim_roi: float | None = None
+    last_sim_profile: str | None = None
+    last_sim_at: datetime | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
 

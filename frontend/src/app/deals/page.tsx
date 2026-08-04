@@ -18,6 +18,9 @@ const eur = (n?: number | null) =>
 const formatDate = (d?: string | null) =>
   d ? new Date(d).toLocaleDateString("es-ES") : "—";
 
+const pct = (n?: number | null) =>
+  n == null ? "—" : `${Number(n).toFixed(2)} %`;
+
 const STATUS_LABELS: Record<DealStatus, string> = {
   NEW: "Nuevo",
   CONTACTED: "Contactado",
@@ -131,10 +134,62 @@ function DealRow({ deal }: { deal: Deal }) {
         </div>
       </div>
 
-      {deal.notes && (
+{deal.notes && (
         <p className="mt-3 rounded-md bg-secondary-50 p-3 text-sm text-secondary-600 dark:bg-secondary-900/40 dark:text-secondary-300">
           {deal.notes}
         </p>
+      )}
+
+      {deal.last_sim_net_profit != null && (
+        <div className="mt-4 rounded-lg border border-secondary-200 bg-secondary-50 p-4 dark:border-secondary-700 dark:bg-secondary-900/40">
+          <p className="text-xs font-medium text-secondary-500 dark:text-secondary-400">
+            Última simulación
+            {deal.last_sim_profile && ` · ${deal.last_sim_profile}`}
+            {deal.last_sim_at && ` · ${formatDate(deal.last_sim_at)}`}
+          </p>
+          <div className="mt-2 flex flex-wrap gap-x-6 gap-y-2">
+            <div>
+              <p className="text-xs text-secondary-500 dark:text-secondary-400">
+                Beneficio neto
+              </p>
+              <p className="font-semibold text-secondary-900 dark:text-secondary-100">
+                {eur(deal.last_sim_net_profit)}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-secondary-500 dark:text-secondary-400">
+                ROI
+              </p>
+              <p className="font-semibold text-secondary-900 dark:text-secondary-100">
+                {pct(deal.last_sim_roi)}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-secondary-500 dark:text-secondary-400">
+                Coste total
+              </p>
+              <p className="font-semibold text-secondary-900 dark:text-secondary-100">
+                {eur(deal.last_sim_total_cost)}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-secondary-500 dark:text-secondary-400">
+                Compra
+              </p>
+              <p className="font-semibold text-secondary-900 dark:text-secondary-100">
+                {eur(deal.last_sim_purchase_price)}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-secondary-500 dark:text-secondary-400">
+                Venta
+              </p>
+              <p className="font-semibold text-secondary-900 dark:text-secondary-100">
+                {eur(deal.last_sim_sale_price)}
+              </p>
+            </div>
+          </div>
+        </div>
       )}
 
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
