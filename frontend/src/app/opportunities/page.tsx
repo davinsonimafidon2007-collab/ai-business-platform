@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { fetchOpportunities } from "@/app/services/opportunities";
+import { createDeal } from "@/app/services/deals";
 import type { Opportunity } from "@/app/services/opportunities";
 import { RecommendationBadge } from "@/app/components/ui/ScoreBadge";
 import { Button } from "@/app/components/ui/button";
@@ -39,6 +40,27 @@ function OpportunityRow({ opportunity }: { opportunity: Opportunity }) {
         .filter(Boolean)
         .join(" ") || "Vehículo sin nombre"
     : "Vehículo sin datos";
+
+  const queryClient = useQueryClient();
+  const [dealMsg, setDealMsg] = useState<string | null>(null);
+  const [dealError, setDealError] = useState<string | null>(null);
+
+  const openDeal = useMutation({
+    mutationFn: () =>
+      createDeal({
+        opportunity_id: opportunity.id,
+        vehicle_id: vehicle?.id,
+      }),
+    onSuccess: () => {
+      setDealMsg("Deal creado");
+      setDealError(null);
+      queryClient.invalidateQueries({ queryKey: ["deals"] });
+    },
+    onError: (err: Error) => {
+      setDealError(err.message || "Error al crear el deal");
+      setDealMsg(null);
+    },
+  });
 
   return (
     <div className="rounded-lg border border-secondary-200 bg-white p-4 dark:border-secondary-700 dark:bg-secondary-800">
@@ -99,9 +121,27 @@ function OpportunityRow({ opportunity }: { opportunity: Opportunity }) {
           <span className="text-secondary-500 dark:text-secondary-400">Riesgo: </span>
           <span className={`font-medium ${riskColor(opportunity.risk_level)}`}>
             {opportunity.risk_level || "—"}
-          </span>
+</span>
         </p>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {dealMsg && (
+            <span className="text-sm font-medium text-green-600 dark:text-green-400">
+              {dealMsg}
+            </span>
+          )}
+          {dealError && (
+            <span className="text-sm font-medium text-red-600 dark:text-red-400">
+              {dealError}
+            </span>
+          )}
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={openDeal.isPending}
+            onClick={() => openDeal.mutate()}
+          >
+            {openDeal.isPending ? "Creando..." : "Abrir deal"}
+          </Button>
           {vehicle?.url && (
             <a
               href={vehicle.url}
