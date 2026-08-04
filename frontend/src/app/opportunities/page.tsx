@@ -7,6 +7,7 @@ import { createDeal } from "@/app/services/deals";
 import type { Opportunity } from "@/app/services/opportunities";
 import { RecommendationBadge } from "@/app/components/ui/ScoreBadge";
 import { Button } from "@/app/components/ui/button";
+import { SimulateProfitPanel } from "@/app/features/simulate/SimulateProfitPanel";
 import type { AxiosError } from "axios";
 
 const eur = (n?: number | null) =>
@@ -169,7 +170,7 @@ const title = vehicle
               {openDeal.isPending ? "Creando..." : "Abrir deal"}
             </Button>
           )}
-          {vehicle?.url && (
+{vehicle?.url && (
             <a
               href={vehicle.url}
               target="_blank"
@@ -181,6 +182,13 @@ const title = vehicle
           )}
         </div>
       </div>
+
+      {vehicle?.id && (
+        <SimulateProfitPanel
+          vehicleId={vehicle.id}
+          defaultPurchasePrice={vehicle.price}
+        />
+      )}
     </div>
   );
 }
