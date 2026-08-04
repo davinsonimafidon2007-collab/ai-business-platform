@@ -4,9 +4,11 @@ from fastapi import status
 from httpx import AsyncClient, ASGITransport
 import pytest
 
+from app.dependencies.auth import get_current_user
 from app.main import app
 from app.db.session import get_db_session
 from app.models.base import Base
+from app.models.user import User
 
 
 @pytest.fixture
@@ -33,10 +35,20 @@ def db_session():
 
 @pytest.fixture
 def client(db_session):
-    """Create a test client with the in-memory database."""
+    """Create a test client with the in-memory database and mocked auth."""
     app.dependency_overrides[get_db_session] = db_session
+
+    async def override_get_current_user() -> User:
+        return User(
+            id="22222222-2222-2222-2222-222222222222",
+            email="search@example.com",
+            hashed_password="not-used-in-override",
+        )
+
+    app.dependency_overrides[get_current_user] = override_get_current_user
     transport = ASGITransport(app=app)
-    return AsyncClient(transport=transport, base_url="http://test")
+    yield AsyncClient(transport=transport, base_url="http://test")
+    app.dependency_overrides.clear()
 
 
 @pytest.mark.asyncio
@@ -48,7 +60,7 @@ async def test_create_search(client: AsyncClient) -> None:
         "models": "X5",
         "filters": '{"year_min": 2018, "price_max": 50000}',
     }
-    response = await client.post("/searches", json=payload)
+    response = await client.post("/api/v1/searches", json=payload)
     assert response.status_code == status.HTTP_201_CREATED
     data = response.json()
     assert data["name"] == "BMW X5 en Alemania"
@@ -58,10 +70,10 @@ async def test_create_search(client: AsyncClient) -> None:
 
 @pytest.mark.asyncio
 async def test_list_searches(client: AsyncClient) -> None:
-    await client.post("/searches", json={"name": "Search 1", "country": "DE"})
-    await client.post("/searches", json={"name": "Search 2", "country": "ES"})
+    await client.post("/api/v1/searches", json={"name": "Search 1", "country": "DE"})
+    await client.post("/api/v1/searches", json={"name": "Search 2", "country": "ES"})
 
-    response = await client.get("/searches")
+    response = await client.get("/api/v1/searches")
     assert response.status_code == status.HTTP_200_OK
     data = response.json()
     assert len(data) == 2
@@ -69,24 +81,24 @@ async def test_list_searches(client: AsyncClient) -> None:
 
 @pytest.mark.asyncio
 async def test_get_search_not_found(client: AsyncClient) -> None:
-    response = await client.get("/searches/non-existent-id")
+    response = await client.get("/api/v1/searches/non-existent-id")
     assert response.status_code == status.HTTP_404_NOT_FOUND
 
 
 @pytest.mark.asyncio
 async def test_update_search(client: AsyncClient) -> None:
-    create_resp = await client.post("/searches", json={"name": "Original", "country": "DE"})
+    create_resp = await client.post("/api/v1/searches", json={"name": "Original", "country": "DE"})
     search_id = create_resp.json()["id"]
 
-    response = await client.patch(f"/searches/{search_id}", json={"name": "Updated"})
+    response = await client.patch(f"/api/v1/searches/{search_id}", json={"name": "Updated"})
     assert response.status_code == status.HTTP_200_OK
     assert response.json()["name"] == "Updated"
 
 
 @pytest.mark.asyncio
 async def test_delete_search(client: AsyncClient) -> None:
-    create_resp = await client.post("/searches", json={"name": "To Delete", "country": "DE"})
+    create_resp = await client.post("/api/v1/searches", json={"name": "To Delete", "country": "DE"})
     search_id = create_resp.json()["id"]
 
-    response = await client.delete(f"/searches/{search_id}")
+    response = await client.delete(f"/api/v1/searches/{search_id}")
     assert response.status_code == status.HTTP_204_NO_CONTENT

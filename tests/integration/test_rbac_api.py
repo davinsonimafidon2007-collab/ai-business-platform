@@ -15,9 +15,9 @@ from app.models.user import User
 
 
 class StubUserService:
-    def __init__(self) -> None:
+    def __init__(self, user_id=None) -> None:
         self.user = SimpleNamespace(
-            id=uuid4(),
+            id=user_id or uuid4(),
             email="member@example.com",
             hashed_password="secret",
             full_name=None,
@@ -40,8 +40,8 @@ class StubUserService:
 
 @pytest.fixture
 def client() -> TestClient:
-    service = StubUserService()
     current_user = User(email="member@example.com", hashed_password="secret", role=Role.USER)
+    service = StubUserService(user_id=current_user.id)
 
     async def override_get_user_service() -> StubUserService:
         return service
@@ -62,25 +62,25 @@ def client() -> TestClient:
 def test_admin_access_is_allowed(client: TestClient) -> None:
     client.current_user.role = Role.ADMIN  # type: ignore[attr-defined]
 
-    response = client.get("/users/")
+    response = client.get("/api/v1/users/")
 
     assert response.status_code == 200
 
 
 def test_user_access_is_allowed(client: TestClient) -> None:
-    response = client.get(f"/users/{uuid4()}")
+    response = client.get(f"/api/v1/users/{client.current_user.id}")  # type: ignore[attr-defined]
 
     assert response.status_code == 200
 
 
 def test_user_is_forbidden_from_admin_endpoint(client: TestClient) -> None:
-    response = client.get("/users/")
+    response = client.get("/api/v1/users/")
 
     assert response.status_code == 403
 
 
 def test_authenticated_user_without_permission_is_forbidden(client: TestClient) -> None:
-    response = client.delete(f"/users/{uuid4()}")
+    response = client.delete(f"/api/v1/users/{uuid4()}")
 
     assert response.status_code == 403
 
@@ -100,14 +100,14 @@ def unauthenticated_client() -> TestClient:
 
 
 def test_missing_jwt_returns_401(unauthenticated_client: TestClient) -> None:
-    response = unauthenticated_client.get(f"/users/{uuid4()}")
+    response = unauthenticated_client.get(f"/api/v1/users/{uuid4()}")
 
     assert response.status_code == 401
 
 
 def test_invalid_jwt_returns_401(unauthenticated_client: TestClient) -> None:
     response = unauthenticated_client.get(
-        f"/users/{uuid4()}",
+        f"/api/v1/users/{uuid4()}",
         headers={"Authorization": "Bearer invalid-token"},
     )
 
@@ -122,7 +122,7 @@ def test_expired_jwt_returns_401(unauthenticated_client: TestClient) -> None:
     )
 
     response = unauthenticated_client.get(
-        f"/users/{uuid4()}",
+        f"/api/v1/users/{uuid4()}",
         headers={"Authorization": f"Bearer {token}"},
     )
 

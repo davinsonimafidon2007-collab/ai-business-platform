@@ -9,6 +9,7 @@ mocked through dependency overrides.
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 from fastapi import FastAPI
@@ -17,11 +18,24 @@ import pytest
 
 from app.api.v1.dependencies import get_inspection_service
 from app.api.v1.routes.inspection import router
+from app.dependencies.auth import get_current_user
+from app.models.user import User
+
+TEST_USER_ID = "11111111-1111-1111-1111-111111111111"
+
+
+def _owned_session(session_id: str) -> SimpleNamespace | None:
+    """Devuelve una sesión que pertenece al TEST_USER_ID."""
+    if session_id == "invalid":
+        return None
+    return SimpleNamespace(user_id=TEST_USER_ID)
 
 
 @pytest.fixture
 def service() -> AsyncMock:
-    return AsyncMock()
+    service = AsyncMock()
+    service.get_session = AsyncMock(side_effect=_owned_session)
+    return service
 
 
 @pytest.fixture
@@ -29,6 +43,15 @@ def client(service: AsyncMock) -> TestClient:
     app = FastAPI()
     app.include_router(router, prefix="/api/v1")
     app.dependency_overrides[get_inspection_service] = lambda: service
+
+    async def override_get_current_user() -> User:
+        return User(
+            id=TEST_USER_ID,
+            email="test@example.com",
+            hashed_password="not-used-in-override",
+        )
+
+    app.dependency_overrides[get_current_user] = override_get_current_user
     return TestClient(app)
 
 
@@ -192,18 +215,15 @@ class TestAnalyzePhotosEndpoint:
         assert data["summary"] == "Sin defectos detectados."
         assert data["suggestions"] == []
 
-    def test_analyze_photos_missing_session_returns_400(
+    def test_analyze_photos_missing_session_returns_404(
         self, client: TestClient, service: AsyncMock
     ) -> None:
-        """Sesión inexistente debe devolver 400."""
-        service.analyze_photos = AsyncMock(
-            side_effect=ValueError("Session 'invalid' not found")
-        )
+        """Sesión inexistente (o de otro usuario) debe devolver 404."""
         response = client.post(
             "/api/v1/inspections/invalid/analyze",
             json={},
         )
-        assert response.status_code == 400
+        assert response.status_code == 404
         assert "not found" in response.json()["detail"]
 
     def test_analyze_photos_no_vision_provider_returns_400(
