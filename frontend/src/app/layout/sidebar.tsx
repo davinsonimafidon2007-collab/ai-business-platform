@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/app/utils/cn";
+import { useAuthStore } from "@/app/store/auth-store";
 
 const navigation = [
   { name: "Dashboard", href: "/dashboard/", icon: "📊" },
@@ -11,11 +12,22 @@ const navigation = [
   { name: "Oportunidades", href: "/opportunities/", icon: "💼" },
   { name: "Deals", href: "/deals/", icon: "🤝" },
   { name: "Inspección", href: "/inspection/", icon: "🔎" },
+  { name: "API keys", href: "/api-keys/", icon: "🔑" },
   { name: "Historial", href: "/history/", icon: "📋" },
+];
+
+const adminNavigation = [
+  { name: "Admin", href: "/admin/", icon: "⚙️" },
+  { name: "Admin API keys", href: "/admin/api-keys/", icon: "🛡️" },
 ];
 
 export function Sidebar() {
   const pathname = usePathname();
+  const user = useAuthStore((s) => s.user);
+  const items =
+    user?.role === "ADMIN"
+      ? [...navigation, ...adminNavigation]
+      : navigation;
 
   return (
     <aside className="fixed left-0 top-0 z-40 h-screen w-64 border-r border-secondary-200 bg-white dark:border-secondary-700 dark:bg-secondary-900">
@@ -25,7 +37,7 @@ export function Sidebar() {
         </Link>
       </div>
       <nav className="flex flex-col gap-1 p-4">
-        {navigation.map((item) => {
+        {items.map((item) => {
           const isActive = pathname.startsWith(item.href);
           return (
             <Link

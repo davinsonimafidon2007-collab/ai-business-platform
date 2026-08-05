@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { fetchDeals, updateDealStatus } from "@/app/services/deals";
 import type { Deal, DealStatus } from "@/app/services/deals";
+import { offerPricePrefill } from "@/app/deals/offerPrefill";
 import { Button } from "@/app/components/ui/button";
 
 const eur = (n?: number | null) =>
@@ -98,9 +99,11 @@ function DealRow({ deal }: { deal: Deal }) {
 
   const nextActions = TRANSITIONS[deal.status] ?? [];
 
-  const handleAction = (target: DealStatus) => {
+const handleAction = (target: DealStatus) => {
     if (target === "OFFER") {
       // Pedir offer_price antes de transicionar a OFFER.
+      // Prefill desde la última simulación de margen (E.2) si existe.
+      setOfferPriceInput(offerPricePrefill(deal));
       setPendingTarget(target);
       setErrorMsg(null);
       return;
@@ -244,8 +247,15 @@ function DealRow({ deal }: { deal: Deal }) {
               value={offerPriceInput}
               onChange={(e) => setOfferPriceInput(e.target.value)}
               placeholder="ej. 15000"
-              className="block w-40 rounded-md border border-secondary-300 bg-white px-3 py-1.5 text-sm text-secondary-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-secondary-600 dark:bg-secondary-900 dark:text-secondary-100"
+className="block w-40 rounded-md border border-secondary-300 bg-white px-3 py-1.5 text-sm text-secondary-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-secondary-600 dark:bg-secondary-900 dark:text-secondary-100"
             />
+            {deal.last_sim_purchase_price != null && (
+              <p className="text-xs text-secondary-500 dark:text-secondary-400">
+                Prefill desde simulación (compra{" "}
+                {eur(deal.last_sim_purchase_price)}
+                {deal.last_sim_profile ? ` · ${deal.last_sim_profile}` : ""})
+              </p>
+            )}
           </div>
           <Button
             variant="primary"
