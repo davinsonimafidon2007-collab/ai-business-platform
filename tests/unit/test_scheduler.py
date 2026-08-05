@@ -343,8 +343,12 @@ class TestErrorHandling:
     async def test_consecutive_failures_tracked(
         self, scheduler: Scheduler
     ) -> None:
-        """Consecutive failures are tracked in metrics."""
-        job = CallTrackerJob("always_fail", fail_on={1, 2, 3, 4, 5})
+        """Consecutive failures accumulate while the job keeps failing."""
+        # fail_on con rango amplio: no debe haber éxito que resetee la racha
+        job = CallTrackerJob(
+            "always_fail",
+            fail_on=set(range(1, 100)),
+        )
         scheduler.register(job, interval=0.02)
 
         await scheduler.start()
@@ -353,8 +357,66 @@ class TestErrorHandling:
 
         metrics = scheduler.get_job_metrics("always_fail")
         assert metrics is not None
-        assert metrics.consecutive_failures > 0
-        assert metrics.failure_count > 0
+        assert job.call_count >= 2
+        assert metrics.failure_count == job.call_count
+        assert metrics.success_count == 0
+        assert metrics.consecutive_failures == metrics.failure_count
+        assert metrics.consecutive_failures >= 2
+
+    @pytest.mark.asyncio
+    async def test_consecutive_failures_reset_on_success(
+        self, scheduler: Scheduler
+    ) -> None:
+        """Una ejecución OK pone consecutive_failures a 0."""
+        job = CallTrackerJob("flaky_then_ok", fail_on={1, 2})
+        scheduler.register(job, interval=0.02)
+
+        await scheduler.start()
+        await asyncio.sleep(0.15)
+        await scheduler.stop()
+
+        metrics = scheduler.get_job_metrics("flaky_then_ok")
+        assert metrics is not None
+        assert metrics.failure_count >= 2
+        assert metrics.success_count >= 1
+        assert metrics.consecutive_failures == 0
+
+    @pytest.mark.asyncio
+    async def test_job_failure_alert_notified_on_streak(
+        self, context: JobContext
+    ) -> None:
+        """Task J.1: tras racha >= threshold, maybe_notify es llamado.
+
+        El alert service se inyecta al Scheduler (DI) y no debe tumbar el
+        scheduler si falla. No hace falta SMTP real (mock).
+        """
+        from unittest.mock import AsyncMock, MagicMock
+
+        alert = MagicMock()
+        alert.maybe_notify = AsyncMock(return_value=True)
+
+        sched = Scheduler(
+            context,
+            max_concurrent=2,
+            job_failure_alert=alert,
+        )
+        job = CallTrackerJob(
+            "always_fail_alert",
+            fail_on=set(range(1, 100)),
+        )
+        sched.register(job, interval=0.02)
+
+        await sched.start()
+        await asyncio.sleep(0.12)
+        await sched.stop()
+
+        assert alert.maybe_notify.await_count >= 1
+        # Al menos una llamada con consecutive_failures >= 2
+        called = any(
+            c.kwargs.get("consecutive_failures", 0) >= 2
+            for c in alert.maybe_notify.await_args_list
+        )
+        assert called
 
 
 # =============================================================================
@@ -501,4 +563,3 @@ class TestJobStatus:
         # The job itself may have succeeded or failed during execution.
         # assert that execution_count matches success_count + failure_count
         assert metrics.execution_count == metrics.success_count + metrics.failure_count
-

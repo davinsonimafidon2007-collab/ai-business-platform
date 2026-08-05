@@ -86,6 +86,18 @@ class Settings(BaseSettings):
     provider_canary_interval: int = 21600
     """Seconds between provider canary runs (default 6h). 0 = disabled."""
 
+    job_failure_alert_enabled: bool = True
+    """Master toggle for job consecutive-failure alerts (Task J.1)."""
+
+    job_failure_alert_threshold: int = 3
+    """Minimum consecutive failures to trigger a job failure alert."""
+
+    job_failure_alert_cooldown_hours: int = 6
+    """Do not re-send an alert for the same job within N hours."""
+
+    job_failure_alert_to_email: str = ""
+    """Ops email for job failure alerts. Empty -> log-only (no send)."""
+
     # =========================================================================
     # Economics / Import cost profile
     # =========================================================================
@@ -206,4 +218,3 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
-

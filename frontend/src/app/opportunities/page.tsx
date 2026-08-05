@@ -64,11 +64,14 @@ const queryClient = useQueryClient();
         opportunity_id: opportunity.id,
         vehicle_id: vehicle?.id,
       }),
-    onSuccess: () => {
+onSuccess: (deal) => {
       setDealMsg("Deal creado");
       setDealError(null);
-      setExistingDealId(null);
+      setExistingDealId(deal.id);
       queryClient.invalidateQueries({ queryKey: ["deals"] });
+      queryClient.invalidateQueries({
+        queryKey: ["deals", "by-opportunity", opportunity.id],
+      });
     },
     onError: (err: Error) => {
       const axiosErr = err as AxiosError;
@@ -198,6 +201,16 @@ const queryClient = useQueryClient();
           vehicleId={vehicle.id}
           defaultPurchasePrice={vehicle.price}
           dealId={activeDealId}
+          onEnsureDeal={async () => {
+            if (activeDealId) return activeDealId;
+            const deal = await createDeal({
+              opportunity_id: opportunity.id,
+              vehicle_id: vehicle?.id,
+            });
+            setExistingDealId(deal.id);
+            queryClient.invalidateQueries({ queryKey: ["deals"] });
+            return deal.id;
+          }}
         />
       )}
     </div>

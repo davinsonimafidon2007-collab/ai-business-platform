@@ -68,6 +68,7 @@ class Scheduler:
         *,
         max_concurrent: int = 4,
         logger: logging.Logger | None = None,
+        job_failure_alert: Any | None = None,
     ) -> None:
         """Initialize the scheduler.
 
@@ -75,6 +76,8 @@ class Scheduler:
             context: Shared ``JobContext`` passed to every job.
             max_concurrent: Maximum number of jobs that can run simultaneously.
             logger: Optional logger; defaults to ``app.jobs.scheduler``.
+            job_failure_alert: Optional ``JobFailureAlertService`` used to
+                notify ops when a job accumulates N consecutive failures.
         """
         self._context = context
         self._max_concurrent = max_concurrent
@@ -82,6 +85,7 @@ class Scheduler:
         self._jobs: dict[str, ScheduledJob] = {}
         self._semaphore: asyncio.Semaphore | None = None
         self._running = False
+        self._job_failure_alert = job_failure_alert
 
     # ------------------------------------------------------------------
     # Properties
@@ -291,6 +295,21 @@ class Scheduler:
             result = await self._execute_with_semaphore(entry.job)
             entry.job._record_execution(result)
 
+            # Task J.1 — notificar racha de fallos (nunca tumba el scheduler)
+            if not result.success and self._job_failure_alert is not None:
+                try:
+                    metrics = entry.metrics
+                    await self._job_failure_alert.maybe_notify(
+                        job_name=entry.job.name,
+                        consecutive_failures=metrics.consecutive_failures,
+                        failure_count=metrics.failure_count,
+                        last_message=result.message or "",
+                    )
+                except Exception:
+                    self._logger.exception(
+                        "job_failure_alert failed for job %s", entry.job.name
+                    )
+
         entry.metrics.status = JobStatus.CANCELLED
 
     async def _execute_with_semaphore(self, job: Job) -> JobResult:
@@ -341,4 +360,3 @@ class Scheduler:
             except asyncio.TimeoutError:
                 pass
             remaining -= wait_time
-

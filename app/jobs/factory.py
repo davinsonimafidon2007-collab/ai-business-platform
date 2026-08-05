@@ -15,6 +15,7 @@ from app.jobs.provider_canary import ProviderCanaryJob
 from app.jobs.refresh_market_cache import RefreshMarketCacheJob
 from app.jobs.refresh_opportunities import RefreshOpportunityJob
 from app.jobs.scheduler import Scheduler
+from app.services.job_failure_alert_service import JobFailureAlertService
 
 
 def create_scheduler(context: JobContext) -> Scheduler:
@@ -30,6 +31,7 @@ def create_scheduler(context: JobContext) -> Scheduler:
         context=context,
         max_concurrent=context.settings.max_concurrent_jobs,
         logger=logging.getLogger("app.jobs.scheduler"),
+        job_failure_alert=JobFailureAlertService(),
     )
 
     # Register all standard jobs with their configured intervals
@@ -57,4 +59,3 @@ def create_scheduler(context: JobContext) -> Scheduler:
         scheduler.register(ProviderCanaryJob(), interval=canary_interval)
 
     return scheduler
-

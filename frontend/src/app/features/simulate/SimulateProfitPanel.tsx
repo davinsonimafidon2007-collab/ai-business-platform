@@ -6,6 +6,7 @@ import type { AxiosError } from "axios";
 import { simulateProfit } from "@/app/services/simulateProfit";
 import type { SimulateProfitResponse } from "@/app/services/simulateProfit";
 import { updateDealSimulation } from "@/app/services/deals";
+import { mapSimToDealUpdate } from "@/app/features/simulate/mapSimToDealUpdate";
 import { RecommendationBadge } from "@/app/components/ui/ScoreBadge";
 import { Button } from "@/app/components/ui/button";
 
@@ -83,12 +84,15 @@ type Props = {
   vehicleId: string;
   defaultPurchasePrice?: number | null;
   dealId?: string | null;
+  /** Si no hay dealId, permite crear el deal y luego guardar la simulación. Devuelve el deal id. */
+  onEnsureDeal?: () => Promise<string>;
 };
 
 export function SimulateProfitPanel({
   vehicleId,
   defaultPurchasePrice,
   dealId,
+  onEnsureDeal,
 }: Props) {
   const [open, setOpen] = useState(false);
   const [purchasePrice, setPurchasePrice] = useState<string>(
@@ -108,21 +112,31 @@ export function SimulateProfitPanel({
       }),
   });
 
-  const saveSim = useMutation({
+const saveSim = useMutation({
     mutationFn: () => {
       if (!dealId) throw new Error("No hay deal vinculado");
       if (!simulate.data) throw new Error("No hay simulación para guardar");
-      return updateDealSimulation(dealId, {
-        purchase_price: simulate.data.purchase_price,
-        estimated_sale_price: simulate.data.estimated_sale_price ?? undefined,
-        total_cost: simulate.data.total_cost,
-        net_profit: simulate.data.net_profit,
-        roi_percentage: simulate.data.roi_percentage,
-        profile_name: simulate.data.profile_name,
-      });
+      return updateDealSimulation(dealId, mapSimToDealUpdate(simulate.data));
     },
     onSuccess: () => {
       setSavedMsg("Guardado en el deal");
+      setSaveError(null);
+    },
+    onError: (err: Error) => {
+      setSaveError(err.message || "Error al guardar en el deal");
+      setSavedMsg(null);
+    },
+  });
+
+  const saveWithDeal = useMutation({
+    mutationFn: async () => {
+      if (!simulate.data) throw new Error("No hay simulación para guardar");
+      const id = dealId ?? (await onEnsureDeal?.());
+      if (!id) throw new Error("No se pudo obtener el deal");
+      return updateDealSimulation(id, mapSimToDealUpdate(simulate.data));
+    },
+    onSuccess: () => {
+      setSavedMsg("Deal creado y simulación guardada");
       setSaveError(null);
     },
     onError: (err: Error) => {
@@ -278,8 +292,8 @@ export function SimulateProfitPanel({
                 </div>
               </div>
 
-              {dealId && (
-                <div className="flex flex-wrap items-center gap-3">
+<div className="flex flex-wrap items-center gap-3">
+                {dealId ? (
                   <Button
                     variant="outline"
                     size="sm"
@@ -288,18 +302,43 @@ export function SimulateProfitPanel({
                   >
                     {saveSim.isPending ? "Guardando..." : "Guardar en deal"}
                   </Button>
-                  {savedMsg && (
-                    <span className="text-sm font-medium text-green-600 dark:text-green-400">
-                      {savedMsg}
+                ) : (
+                  <>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={saveSim.isPending}
+                    >
+                      Guardar en deal
+                    </Button>
+                    <span className="text-xs text-secondary-500 dark:text-secondary-400">
+                      Abre un deal para guardar la simulación
                     </span>
-                  )}
-                  {saveError && (
-                    <span className="text-sm font-medium text-red-600 dark:text-red-400">
-                      {saveError}
-                    </span>
-                  )}
-                </div>
-              )}
+                    {onEnsureDeal && (
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        disabled={saveWithDeal.isPending}
+                        onClick={() => saveWithDeal.mutate()}
+                      >
+                        {saveWithDeal.isPending
+                          ? "Creando..."
+                          : "Crear deal y guardar"}
+                      </Button>
+                    )}
+                  </>
+                )}
+                {savedMsg && (
+                  <span className="text-sm font-medium text-green-600 dark:text-green-400">
+                    {savedMsg}
+                  </span>
+                )}
+                {saveError && (
+                  <span className="text-sm font-medium text-red-600 dark:text-red-400">
+                    {saveError}
+                  </span>
+                )}
+              </div>
             </div>
           )}
         </div>

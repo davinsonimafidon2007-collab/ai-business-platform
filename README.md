@@ -161,6 +161,23 @@ el código. Salida esperada por provider: `search: OK count=N` y
 
 Exit 0 = ambos providers OK; 1 = alguno falló; 2 = error de setup.
 
+### Dependencias — `requirements.txt` es GENERATED
+
+`requirements.txt` es un **fichero generado** (NO editar a mano). La fuente de
+verdad es `pyproject.toml` (+ `uv.lock`). Para regenerarlo:
+
+```powershell
+uv export --no-hashes --no-dev --no-emit-project -o requirements.txt
+# o, para runtime + dev:
+powershell -ExecutionPolicy Bypass -File scripts/export_requirements.ps1
+```
+
+> **Guardrail (pendiente de CI):** cuando exista CI/pre-commit, comprobar que
+> `requirements.txt` == al export recién generado
+> (`uv export --no-hashes --no-dev --no-emit-project -o requirements.txt.generated`
+> y comparar normalizando finales de línea). Evita regresiones tipo dep en
+> `pyproject` ausente en `requirements.txt` (p.ej. `redis`).
+
 ### Fuera de este bootstrap
 
 - Tests (`TODO.md`, sesión paralela)

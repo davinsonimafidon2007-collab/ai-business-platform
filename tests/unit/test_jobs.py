@@ -151,6 +151,29 @@ class TestJobBase:
         track_job._record_execution(JobResult(success=True))
         assert track_job._metrics.consecutive_failures == 0
 
+    def test_five_consecutive_failures(self) -> None:
+        """Five consecutive failures accumulate; success resets the streak."""
+
+        class FailJob(Job):
+            @property
+            def name(self) -> str:
+                return "five_fail"
+
+            async def execute(self, context: JobContext) -> JobResult:
+                return JobResult(success=False)
+
+        job = FailJob()
+        for _ in range(5):
+            job._record_execution(JobResult(success=False, duration=0.01))
+        assert job._metrics.consecutive_failures == 5
+        assert job._metrics.failure_count == 5
+
+        # A subsequent success resets the streak without touching failure_count.
+        job._record_execution(JobResult(success=True, duration=0.01))
+        assert job._metrics.consecutive_failures == 0
+        assert job._metrics.failure_count == 5
+        assert job._metrics.success_count == 1
+
     def test_reset_metrics(self) -> None:
         """reset_metrics restores initial state."""
 
@@ -450,4 +473,3 @@ class TestCleanupOldSearchesJob:
 
         assert result.success is False
         assert "Bad data" in result.message
-

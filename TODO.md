@@ -1,9 +1,9 @@
-# Task E.3 — Frontend: prellenar `offer_price` al pasar deal a OFFER
+# TASK J.1 — Alertas por racha de fallos de jobs (`consecutive_failures`)
 
-## Steps
-- [x] FIX 1: Prefill en `handleAction` (DealRow) vía `offerPricePrefill(deal)` al abrir OFFER
-- [x] FIX 2: Hint visual bajo el input (origen del prefill con `eur` + profile)
-- [x] FIX 3: Crear `frontend/src/app/deals/offerPrefill.ts` (helper puro)
-- [x] FIX 3: Crear `frontend/src/__tests__/deals/offerPrefill.test.ts` (3 tests Vitest)
-- [x] Verificación: `cd frontend && npm test -- offerPrefill` → **3 passed**
-- [x] Verificación: `cd frontend && npm run build` → **OK** (compiled + lint/types + 16 static pages)
+## TODO Steps
+
+- [x] FIX 1: `app/core/config.py` + `.env.example` — añadir 4 settings `JOB_FAILURE_ALERT_*`
+- [x] FIX 2: Crear `app/services/job_failure_alert_service.py` (threshold + cooldown por job_name)
+- [x] FIX 3: Hook en `app/jobs/scheduler.py` (`_run_periodic`) + DI en `Scheduler.__init__` + wiring en `factory.py`
+- [x] FIX 4: Tests `tests/unit/test_job_failure_alert_service.py` (nuevo) + test integración en `test_scheduler.py`
+- [x] Verificación: `pytest -q tests/unit/test_job_failure_alert_service.py tests/unit/test_scheduler.py tests/unit/test_jobs.py` → 53 passed

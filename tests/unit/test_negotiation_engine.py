@@ -548,6 +548,51 @@ class TestWalkAwayRecommendation:
             f"discount_needed={result.discount_needed:.1f}%, leverage={result.leverage_score:.1f}"
         )
 
+    def test_walk_away_negative_profit_despite_high_leverage(
+        self, engine: NegotiationEngine
+    ) -> None:
+        """Pérdida neta: leverage alto NO puede forzar NEGOTIATE."""
+        inp = NegotiationInput(
+            inspection_result=InspectionResult(
+                defects=[
+                    DefectItem(
+                        category="estético",
+                        description="Rayones leves",
+                        severity=3,
+                        estimated_repair_cost=200.0,
+                        is_safety_relevant=False,
+                    ),
+                ],
+                overall_condition=7,
+            ),
+            repair_estimate=RepairEstimate(total_repair_cost=200.0),
+            market_estimation=MarketEstimationStub(
+                market_price=20000.0,
+                supply_level=80.0,
+                demand_level=30.0,
+                market_trend="falling",
+            ),
+            asking_price=21000.0,
+            minimum_desired_profit=2000.0,
+            target_margin=15.0,
+            profit_analysis_data={
+                "net_profit": -500.0,
+                "roi_percentage": -2.5,
+                "risk_level": "HIGH",
+                "purchase_price": 21000.0,
+                "total_cost": 23000.0,
+                "estimated_sale_price": 22500.0,
+            },
+            vehicle_score_data={"score": 35},
+        )
+        result = engine.analyze(inp)
+        assert result.recommendation == NegotiationRecommendation.WALK_AWAY, (
+            f"Esperado WALK_AWAY con net_profit=-500, obtenido {result.recommendation}. "
+            f"discount_needed={result.discount_needed:.1f}% "
+            f"leverage={result.leverage_score:.1f} "
+            f"expected_profit={getattr(result, 'expected_profit', None)}"
+        )
+
 
 # =============================================================================
 # Tests: Cálculo de precios

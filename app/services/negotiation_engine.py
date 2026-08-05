@@ -667,7 +667,7 @@ class NegotiationEngine:
         Reglas:
             - BUY: descuento necesario ≤ 5%, O ROI ≥ 5% y margen ≥ 10%.
             - WALK_AWAY: descuento necesario ≥ 25%, O beneficio negativo
-              (tanto original como recalculado).
+(tanto original como recalculado).
             - NEGOTIATE: casos intermedios con apalancamiento suficiente.
         """
         # WALK_AWAY: descuento excesivo necesario
@@ -678,11 +678,17 @@ class NegotiationEngine:
         if expected_profit < MIN_PROFIT_FOR_NEGOTIATE:
             return NegotiationRecommendation.WALK_AWAY
 
+        # WALK_AWAY: cinturón de seguridad — el profit analysis ya es negativo
+        # (pérdida económica domina sobre leverage / NEGOTIATE)
+        profit_data = input_data.profit_analysis_data
+        net_profit = profit_data.get("net_profit", 0.0) or 0.0
+        if net_profit <= 0:
+            return NegotiationRecommendation.WALK_AWAY
+
         # BUY: descuento pequeño necesario
         if discount_needed <= BUY_MAX_DISCOUNT_NEEDED:
             return NegotiationRecommendation.BUY
 
-        profit_data = input_data.profit_analysis_data
         roi = profit_data.get("roi_percentage", profit_data.get("roi", 0.0)) or 0.0
         margin = profit_data.get("profit_margin_percentage", 0.0) or 0.0
 
