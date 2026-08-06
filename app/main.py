@@ -63,6 +63,9 @@ async def scheduler_lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     context = JobContext(db_manager=db_manager, settings=settings)
     scheduler: Scheduler = create_scheduler(context)
 
+    # Exponer el scheduler para que el endpoint admin (G.4) lea métricas.
+    app.state.scheduler = scheduler
+
     if settings.enable_scheduler:
         await scheduler.start()
 

@@ -1,7 +1,12 @@
 from app.core.config import Settings
 
 
-def test_settings_use_default_values() -> None:
+def test_settings_use_default_values(monkeypatch) -> None:
+    # Aislar del entorno del runner (release_check inyecta ENVIRONMENT=test + JWT_SECRET_KEY largo).
+    # Este test valida los defaults de "development" con un secret válido (>= 32 chars).
+    monkeypatch.delenv("ENVIRONMENT", raising=False)
+    monkeypatch.setenv("JWT_SECRET_KEY", "defaults-test-secret-that-is-at-least-32-characters-long")
+
     settings = Settings()
 
     assert settings.app_name == "AI Business Platform API"

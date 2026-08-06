@@ -15,7 +15,8 @@ def test_settings_loads_from_env():
         {
             "ENVIRONMENT": "production",
             "DATABASE_URL": "postgresql+asyncpg://user:pass@host:5432/db",
-            "JWT_SECRET_KEY": "super-secret-key",
+            # production exige JWT_SECRET_KEY con >= 32 caracteres (ver Settings.validate_jwt_secret_for_env)
+            "JWT_SECRET_KEY": "super-secret-key-that-is-at-least-32-characters-long",
             "JWT_ALGORITHM": "HS512",
             "JWT_ACCESS_TOKEN_EXPIRE_MINUTES": "60",
             "CORS_ORIGINS": "https://example.com,https://admin.example.com",
@@ -25,7 +26,7 @@ def test_settings_loads_from_env():
         
         assert settings.environment == "production"
         assert settings.database_url == "postgresql+asyncpg://user:pass@host:5432/db"
-        assert settings.jwt_secret_key == "super-secret-key"
+        assert settings.jwt_secret_key == "super-secret-key-that-is-at-least-32-characters-long"
         assert settings.jwt_algorithm == "HS512"
         assert settings.jwt_access_token_expire_minutes == 60
         assert settings.cors_origins == "https://example.com,https://admin.example.com"
@@ -33,7 +34,14 @@ def test_settings_loads_from_env():
 
 def test_settings_default_values():
     """Verifica que Settings tiene valores por defecto correctos."""
-    with patch.dict("os.environ", {}, clear=True):
+    with patch.dict(
+        "os.environ",
+        {
+            # development exige JWT_SECRET_KEY con >= 32 caracteres (ver Settings.validate_jwt_secret_for_env)
+            "JWT_SECRET_KEY": "defaults-test-secret-that-is-at-least-32-characters-long",
+        },
+        clear=True,
+    ):
         settings = Settings()
         
         assert settings.environment == "development"
@@ -72,11 +80,13 @@ def test_settings_environment_validation():
 
 
 def test_settings_jwt_secret_key_default():
-    """Verifica que el JWT secret key tiene un valor por defecto seguro."""
+    """Verifica que el JWT secret key tiene un valor seguro en cualquier entorno."""
     settings = Settings()
-    
-    assert settings.jwt_secret_key == "change-me-in-production"
-    assert len(settings.jwt_secret_key) > 0
+
+    # En 'test' el validator auto-rellena un secret largo; en dev/prod exige uno >= 32 chars.
+    # En cualquier entorno el secret resultante debe ser no vacío y suficientemente largo.
+    assert settings.jwt_secret_key
+    assert len(settings.jwt_secret_key) >= 32
 
 
 def test_settings_database_url_default():
@@ -94,14 +104,14 @@ def test_settings_case_insensitive():
         {
             "environment": "production",
             "database_url": "postgresql+asyncpg://test:test@localhost:5432/test",
-            "jwt_secret_key": "test-secret",
+            "jwt_secret_key": "test-secret-that-is-at-least-32-characters-long",
         },
     ):
         settings = Settings()
         
         assert settings.environment == "production"
         assert settings.database_url == "postgresql+asyncpg://test:test@localhost:5432/test"
-        assert settings.jwt_secret_key == "test-secret"
+        assert settings.jwt_secret_key == "test-secret-that-is-at-least-32-characters-long"
 
 
 def test_settings_ignores_extra_env_vars():

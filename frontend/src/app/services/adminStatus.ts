@@ -10,9 +10,23 @@ export type ProviderCanaryStatus = {
   mobile_status: string | null;
 };
 
+export type JobMetricsRead = {
+  name: string;
+  interval: number;
+  status: string;
+  last_execution: string | null;
+  next_execution: string | null;
+  last_duration: number;
+  execution_count: number;
+  success_count: number;
+  failure_count: number;
+  consecutive_failures: number;
+};
+
 export type AdminSystemStatus = {
   redis_ok: boolean | null;
   canary: ProviderCanaryStatus;
+  jobs: JobMetricsRead[];
 };
 
 export async function fetchAdminStatus(): Promise<AdminSystemStatus> {

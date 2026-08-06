@@ -167,6 +167,72 @@ export default function AdminStatusPage() {
             </div>
           </div>
 
+          <div className="rounded-xl border border-secondary-200 bg-white p-5 dark:border-secondary-700 dark:bg-secondary-900">
+            <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-secondary-500">
+              Jobs ({status.jobs.length})
+            </h2>
+            {status.jobs.length === 0 ? (
+              <p className="text-sm text-secondary-500">
+                Sin jobs registrados (scheduler desactivado o sin configurar).
+              </p>
+            ) : (
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr className="border-b border-secondary-200 text-secondary-500 dark:border-secondary-700">
+                    <th className="py-2 pr-3 font-medium">Job</th>
+                    <th className="py-2 pr-3 font-medium">Status</th>
+                    <th className="py-2 pr-3 font-medium">OK / Fail</th>
+                    <th className="py-2 pr-3 font-medium">Racha</th>
+                    <th className="py-2 font-medium">Last run</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {status.jobs.map((job) => (
+                    <tr
+                      key={job.name}
+                      className="border-b border-secondary-100 last:border-0 dark:border-secondary-800"
+                    >
+                      <td className="py-2 pr-3 font-medium text-secondary-900 dark:text-white">
+                        {job.name}
+                      </td>
+                      <td className="py-2 pr-3">
+                        <Badge
+                          ok={
+                            job.status === "success"
+                              ? true
+                              : job.status === "failed"
+                                ? false
+                                : null
+                          }
+                          label={job.status}
+                        />
+                      </td>
+                      <td className="py-2 pr-3 font-mono text-secondary-700 dark:text-secondary-300">
+                        {job.success_count} / {job.failure_count}
+                      </td>
+                      <td className="py-2 pr-3">
+                        <span
+                          className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                            job.consecutive_failures >= 3
+                              ? "bg-red-100 text-red-800"
+                              : job.consecutive_failures > 0
+                                ? "bg-amber-100 text-amber-800"
+                                : "bg-green-100 text-green-800"
+                          }`}
+                        >
+                          {job.consecutive_failures}
+                        </span>
+                      </td>
+                      <td className="py-2 font-mono text-secondary-700 dark:text-secondary-300">
+                        {job.last_execution ?? "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+
           <button
             type="button"
             onClick={() => queryClient.invalidateQueries({ queryKey: ["admin-status"] })}

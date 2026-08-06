@@ -36,3 +36,7 @@ foreach ($f in @("requirements.txt", "requirements-dev.txt")) {
 }
 
 Write-Host "OK - requirements.txt listo (UTF-8 sin BOM)."
+
+# Guardrail Task C.1: fallar si requirements.txt no queda en sync con uv export.
+python scripts/check_requirements_sync.py
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

@@ -4,6 +4,8 @@ import pytest
 from fastapi import HTTPException, Request
 from fastapi.testclient import TestClient
 
+from unittest.mock import patch
+
 from app.api.v1 import auth as auth_module
 from app.main import app
 from app.models.user import User
@@ -109,6 +111,18 @@ verification_service = VerificationService(
 
 
 @pytest.fixture
+def fixed_verify_token() -> str:
+    """Token raw determinista para verificación (el repo fake guarda el hash).
+
+    La VerificationService hashea el raw antes de persistirlo; al leer el
+    registro del repo fake solo tenemos el hash. Para poder enviar el RAW al
+    endpoint /verify (que lo vuelve a hashear), fijamos _generate_token a un
+    valor conocido.
+    """
+    return "deterministic-verify-token-raw-1234567890"
+
+
+@pytest.fixture
 def client() -> TestClient:
     # Clear state between tests
     user_repository._users.clear()
@@ -205,122 +219,139 @@ def test_request_verification_requires_auth(client: TestClient) -> None:
     assert response.status_code == 401
 
 
-def test_request_and_verify_email(client: TestClient) -> None:
+def test_request_and_verify_email(client: TestClient, fixed_verify_token: str) -> None:
     """Verifica el flujo completo: registrar, solicitar verificación y confirmar."""
-    # 1. Registrar usuario
-    register_response = client.post(
-        "/api/v1/auth/register",
-        json={"email": "verify@example.com", "password": "secret123"},
-    )
-    assert register_response.status_code == 201
-    user_data = register_response.json()
-    assert user_data["is_verified"] is False
+    with patch(
+        "app.services.verification_service.VerificationService._generate_token",
+        return_value=fixed_verify_token,
+    ):
+        # 1. Registrar usuario
+        register_response = client.post(
+            "/api/v1/auth/register",
+            json={"email": "verify@example.com", "password": "secret123"},
+        )
+        assert register_response.status_code == 201
+        user_data = register_response.json()
+        assert user_data["is_verified"] is False
 
-    # 2. Login para obtener token
-    login_response = client.post(
-        "/api/v1/auth/login",
-        json={"email": "verify@example.com", "password": "secret123"},
-    )
-    assert login_response.status_code == 200
-    access_token = login_response.json()["access_token"]
+        # 2. Login para obtener token
+        login_response = client.post(
+            "/api/v1/auth/login",
+            json={"email": "verify@example.com", "password": "secret123"},
+        )
+        assert login_response.status_code == 200
+        access_token = login_response.json()["access_token"]
 
-    # 3. Solicitar verificación
-    request_response = client.post(
-        "/api/v1/auth/request-verification",
-        headers={"Authorization": f"Bearer {access_token}"},
-    )
-    assert request_response.status_code == 200
-    assert request_response.json()["message"] == "Verification email sent"
+        # 3. Solicitar verificación
+        request_response = client.post(
+            "/api/v1/auth/request-verification",
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+        assert request_response.status_code == 200
+        assert request_response.json()["message"] == "Verification email sent"
 
-    # 4. Obtener el token generado (acceso al repositorio fake)
-    token_record = verification_token_repository._tokens[0]
-    raw_token = token_record.token
+        # 4. Obtener el token generado (acceso al repositorio fake)
+        token_record = verification_token_repository._tokens[0]
+        # El repo fake guarda el HASH; el raw lo sabemos porque lo fijamos.
+        raw_token = fixed_verify_token
 
-    # 5. Confirmar verificación
-    verify_response = client.post(
-        "/api/v1/auth/verify",
-        json={"token": raw_token},
-    )
-    assert verify_response.status_code == 200
-    assert verify_response.json()["message"] == "Email verified successfully"
+        # 5. Confirmar verificación
+        verify_response = client.post(
+            "/api/v1/auth/verify",
+            json={"token": raw_token},
+        )
+        assert verify_response.status_code == 200
+        assert verify_response.json()["message"] == "Email verified successfully"
 
-    # 6. Verificar que el usuario ahora está verificado
-    me_response = client.get(
-        "/api/v1/auth/me",
-        headers={"Authorization": f"Bearer {access_token}"},
-    )
-    assert me_response.status_code == 200
-    assert me_response.json()["is_verified"] is True
+        # 6. Verificar que el usuario ahora está verificado
+        me_response = client.get(
+            "/api/v1/auth/me",
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+        assert me_response.status_code == 200
+        assert me_response.json()["is_verified"] is True
 
 
-def test_verify_with_expired_token_returns_error(client: TestClient) -> None:
+def test_verify_with_expired_token_returns_error(
+    client: TestClient, fixed_verify_token: str
+) -> None:
     """Verifica que un token expirado devuelve error."""
     from datetime import datetime, timedelta, timezone
 
-    # Registrar y login
-    client.post(
-        "/api/v1/auth/register",
-        json={"email": "expired@example.com", "password": "secret123"},
-    )
-    login_response = client.post(
-        "/api/v1/auth/login",
-        json={"email": "expired@example.com", "password": "secret123"},
-    )
-    access_token = login_response.json()["access_token"]
+    with patch(
+        "app.services.verification_service.VerificationService._generate_token",
+        return_value=fixed_verify_token,
+    ):
+        # Registrar y login
+        client.post(
+            "/api/v1/auth/register",
+            json={"email": "expired@example.com", "password": "secret123"},
+        )
+        login_response = client.post(
+            "/api/v1/auth/login",
+            json={"email": "expired@example.com", "password": "secret123"},
+        )
+        access_token = login_response.json()["access_token"]
 
-    # Solicitar verificación
-    client.post(
-        "/api/v1/auth/request-verification",
-        headers={"Authorization": f"Bearer {access_token}"},
-    )
+        # Solicitar verificación
+        client.post(
+            "/api/v1/auth/request-verification",
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
 
-    # Forzar expiración del token
-    token_record = verification_token_repository._tokens[0]
-    token_record.expires_at = datetime.now(timezone.utc) - timedelta(hours=1)
+        # Forzar expiración del token
+        token_record = verification_token_repository._tokens[0]
+        token_record.expires_at = datetime.now(timezone.utc) - timedelta(hours=1)
 
-    # Confirmar con token expirado
-    verify_response = client.post(
-        "/api/v1/auth/verify",
-        json={"token": token_record.token},
-    )
-    assert verify_response.status_code == 400
-    response_json = verify_response.json()
-    assert "error" in response_json
-    assert "expired" in response_json["error"]["message"].lower()
+        # Confirmar con token expirado
+        verify_response = client.post(
+            "/api/v1/auth/verify",
+            json={"token": fixed_verify_token},
+        )
+        assert verify_response.status_code == 400
+        response_json = verify_response.json()
+        assert "error" in response_json
+        assert "expired" in response_json["error"]["message"].lower()
 
 
-def test_verify_with_already_used_token_returns_error(client: TestClient) -> None:
+def test_verify_with_already_used_token_returns_error(
+    client: TestClient, fixed_verify_token: str
+) -> None:
     """Verifica que un token ya usado devuelve error."""
-    # Registrar y login
-    client.post(
-        "/api/v1/auth/register",
-        json={"email": "used@example.com", "password": "secret123"},
-    )
-    login_response = client.post(
-        "/api/v1/auth/login",
-        json={"email": "used@example.com", "password": "secret123"},
-    )
-    access_token = login_response.json()["access_token"]
+    with patch(
+        "app.services.verification_service.VerificationService._generate_token",
+        return_value=fixed_verify_token,
+    ):
+        # Registrar y login
+        client.post(
+            "/api/v1/auth/register",
+            json={"email": "used@example.com", "password": "secret123"},
+        )
+        login_response = client.post(
+            "/api/v1/auth/login",
+            json={"email": "used@example.com", "password": "secret123"},
+        )
+        access_token = login_response.json()["access_token"]
 
-    # Solicitar y confirmar verificación
-    client.post(
-        "/api/v1/auth/request-verification",
-        headers={"Authorization": f"Bearer {access_token}"},
-    )
-    token_record = verification_token_repository._tokens[0]
+        # Solicitar y confirmar verificación
+        client.post(
+            "/api/v1/auth/request-verification",
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+        token_record = verification_token_repository._tokens[0]
 
-    # Primera confirmación (debe funcionar)
-    client.post("/api/v1/auth/verify", json={"token": token_record.token})
+        # Primera confirmación (debe funcionar)
+        client.post("/api/v1/auth/verify", json={"token": fixed_verify_token})
 
-    # Segunda confirmación con el mismo token (debe fallar)
-    verify_response = client.post(
-        "/api/v1/auth/verify",
-        json={"token": token_record.token},
-    )
-    assert verify_response.status_code == 400
-    response_json = verify_response.json()
-    assert "error" in response_json
-    assert "used" in response_json["error"]["message"].lower()
+        # Segunda confirmación con el mismo token (debe fallar)
+        verify_response = client.post(
+            "/api/v1/auth/verify",
+            json={"token": fixed_verify_token},
+        )
+        assert verify_response.status_code == 400
+        response_json = verify_response.json()
+        assert "error" in response_json
+        assert "used" in response_json["error"]["message"].lower()
 
 
 def test_verify_with_invalid_token_returns_error(client: TestClient) -> None:

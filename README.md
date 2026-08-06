@@ -1,13 +1,22 @@
 # ai-business-platform
 
+### Continuidad entre sesiones de IA
+
+Ver [docs/HANDOFF_GROK_NEXT_SESSION.md](docs/HANDOFF_GROK_NEXT_SESSION.md) antes de proponer el siguiente task.
+
 ## Bootstrap local
 
 ### Requisitos
 
-- Python 3.13+
+- **Python 3.13.x** (obligatorio). Python 3.14 **no está soportado** todavía:
+  algunas dependencias con binarios nativos (p. ej. `lxml`) aún no publican
+  wheels para 3.14 en Windows y fallan al compilar. Usa 3.13.x.
 - PostgreSQL 15+ (o 14+)
 - Node 20+ (solo si levantas el frontend)
 - [uv](https://github.com/astral-sh/uv) recomendado
+
+> **Python 3.14:** `scripts/release_check.py` abortará con exit 2 si detecta
+> 3.14. Fija el runtime con `uv python pin 3.13` (o `uv venv --python 3.13`).
 
 ### 1. Clonar / abrir el proyecto
 
@@ -81,6 +90,52 @@ curl -s http://localhost:8000/api/v1/health
 ```
 
 Ambos deben responder 200.
+
+### Smoke camino crítico
+```bash
+# API en marcha en :8000
+python scripts/smoke_critical_path.py
+# BASE_URL=http://127.0.0.1:8000 python scripts/smoke_critical_path.py
+```
+Exit 0 = flujo register→vehicle→deal→simulation→OFFER OK.
+Exit 1 = fallo de aserción/HTTP; Exit 2 = API caída o setup.
+
+Variantes opcionales (Task E2E.2):
+
+```bash
+python scripts/smoke_critical_path.py --with-opportunities   # GET /opportunities?limit=5 → 200
+python scripts/smoke_critical_path.py --with-admin           # requiere user ADMIN
+```
+
+- `--with-opportunities`: además del camino crítico, valida el listado de
+  oportunidades (puede estar vacío en una DB limpia).
+- `--with-admin`: además del camino crítico, hace login como ADMIN y llama
+  `GET /api/v1/admin/status` (imprime `redis_ok`, `jobs` count y
+  `canary.success`). Sin credenciales sale con exit 1.
+
+#### Usuario ADMIN para smoke
+Para `--with-admin` necesitas un user con rol `ADMIN`. Puedes crearlo (o
+promover uno existente) con el script idempotente ya incluido:
+
+```bash
+# Crea/promueve un admin (interactivo, o con ADMIN_EMAIL/ADMIN_PASSWORD en .env)
+uv run python -m app.scripts.create_admin
+```
+
+Después, pasa las credenciales al smoke:
+
+```powershell
+$env:SMOKE_ADMIN_EMAIL="ops@example.com"
+$env:SMOKE_ADMIN_PASSWORD="..."
+python scripts/smoke_critical_path.py --with-admin
+# o: python scripts/smoke_critical_path.py --with-admin --admin-email ... --admin-password ...
+```
+
+Alternativa manual en DB:
+
+```sql
+UPDATE users SET role = 'ADMIN' WHERE email = 'ops@example.com';
+```
 
 ### 6. Registro de prueba
 
@@ -161,6 +216,66 @@ el código. Salida esperada por provider: `search: OK count=N` y
 
 Exit 0 = ambos providers OK; 1 = alguno falló; 2 = error de setup.
 
+### Runbook — Alertas por email (SMTP) — Task SMTP.1
+
+El backend ya incorpora dos servicios de alerta por email que reutilizan el
+mismo `SmtpEmailProvider` (`app/notifications/email_provider.py`):
+
+- **J.1 — `JobFailureAlertService`**: avisa por email cuando un job acumula una
+  racha de fallos `>= JOB_FAILURE_ALERT_THRESHOLD` (default 3), con cooldown por
+  job (`JOB_FAILURE_ALERT_COOLDOWN_HOURS`, default 6h).
+- **C.2 — `OpportunityAlertService`**: avisa cuando una oportunidad supera el
+  umbral (`OPPORTUNITY_ALERT_MIN_RECOMMENDATION`/`..._MIN_SCORE`), con cooldown
+  por vehículo (`OPPORTUNITY_ALERT_COOLDOWN_HOURS`, default 24h).
+
+#### Variables (`.env`)
+
+```env
+# --- SMTP / Email ---
+SMTP_HOST=smtp.example.com
+SMTP_PORT=587
+SMTP_USER=apikey
+SMTP_PASSWORD=<secreto>
+SMTP_FROM_EMAIL=noreply@yourdomain.com
+SMTP_USE_TLS=true
+
+# Oportunidades (C.2)
+OPPORTUNITY_ALERT_ENABLED=true
+OPPORTUNITY_ALERT_MIN_RECOMMENDATION=BUY
+OPPORTUNITY_ALERT_MIN_SCORE=0
+OPPORTUNITY_ALERT_COOLDOWN_HOURS=24
+
+# Job failure (J.1)
+JOB_FAILURE_ALERT_ENABLED=true
+JOB_FAILURE_ALERT_THRESHOLD=3
+JOB_FAILURE_ALERT_COOLDOWN_HOURS=6
+JOB_FAILURE_ALERT_TO_EMAIL=ops@yourdomain.com
+```
+
+> **Sin `SMTP_HOST` / sin `JOB_FAILURE_ALERT_TO_EMAIL` → solo log; no falla la
+> app.** Ambos servicios (y el `EmailProvider`) entran en modo *dry-run*: loguean
+> el email que habrían enviado y no lanzan excepciones. Esto es intencional y
+> está cubierto por los tests unitarios.
+
+#### Smoke de envío real
+
+```bash
+# Verifica que SMTP está configurado y envía 1 email de prueba.
+# Exit 2 = falta configurar SMTP_HOST/SMTP_USER; Exit 1 = error de envío; Exit 0 = enviado.
+python scripts/smoke_smtp.py
+python scripts/smoke_smtp.py --to ops@example.com
+
+# Smoke casi-E2E de J.1 (JobFailureAlertService con umbral=1 y sender real).
+# Solo envía por SMTP si está activado SMOKE_SMTP=1.
+$env:SMOKE_SMTP="1"; python scripts/smoke_smtp.py --to ops@example.com --job-failure
+```
+
+Para una prueba manual J.1 sin esperar 3 fallos reales: pon
+`JOB_FAILURE_ALERT_THRESHOLD=1` temporalmente, fuerza un fallo de un job y
+revisa el email; restaura el umbral después. **No dejes secretos SMTP en el
+repo** (`SMTP_PASSWORD` vive solo en `.env`, que está en `.gitignore`).
+
+
 ### Dependencias — `requirements.txt` es GENERATED
 
 `requirements.txt` es un **fichero generado** (NO editar a mano). La fuente de
@@ -172,11 +287,50 @@ uv export --no-hashes --no-dev --no-emit-project -o requirements.txt
 powershell -ExecutionPolicy Bypass -File scripts/export_requirements.ps1
 ```
 
-> **Guardrail (pendiente de CI):** cuando exista CI/pre-commit, comprobar que
-> `requirements.txt` == al export recién generado
-> (`uv export --no-hashes --no-dev --no-emit-project -o requirements.txt.generated`
-> y comparar normalizando finales de línea). Evita regresiones tipo dep en
-> `pyproject` ausente en `requirements.txt` (p.ej. `redis`).
+### Checklist release local
+Un solo comando para orquestar las comprobaciones mínimas antes de considerar un
+build "listo para staging": sync de `requirements.txt` → pytest unitario → smoke
+(camino crítico + ext. opcionales). Se detiene con exit ≠ 0 al primer fallo.
+
+```bash
+# Solo deps + unit (sin API)
+python scripts/release_check.py --skip-smoke
+
+# Completo con API en :8000
+python scripts/release_check.py --with-api --with-opportunities
+
+# Unit + integración crítica (INT.1) sin smoke
+python scripts/release_check.py --skip-smoke --with-integration
+```
+
+Semántica de exit y flags:
+
+- **exit 0** = `RELEASE CHECK PASSED`. **exit ≠ 0** = falló algún paso
+  (1 = requirements out-of-sync / fallo de aserción; 2 = setup, p.ej. API caída).
+- Sin `--with-api`, el smoke es **opcional**: si la API no responde (exit 2 del
+  smoke) el release de solo `deps + unit` se marca `SKIP: smoke (API not
+  reachable)` y continúa. Para **exigir** que la API esté up, usa `--with-api`
+  (recomendado para staging).
+- `--skip-requirements` / `--skip-pytest` / `--skip-smoke`: debug rápido.
+- `--with-integration`: además de unit, ejecuta el subconjunto crítico de
+  integration (Task INT.1): `test_admin_status_api`, `test_api_keys_api`,
+  `test_admin_api_keys_api`, `test_auth_api`, `test_vehicles_api`. Corre bajo
+  `ENVIRONMENT=test` y un `JWT_SECRET_KEY` de test (≥32 chars). Default: off.
+- `--with-opportunities` / `--with-admin`: extienden el smoke (ver
+  "Smoke camino crítico"). `--with-admin` requiere `SMOKE_ADMIN_EMAIL` /
+  `SMOKE_ADMIN_PASSWORD` o `--admin-email` / `--admin-password`.
+- `--pytest-args "tests/unit -q"`: subset de tests (default `tests/unit -q`).
+
+### Verificar sync (CI / local)
+
+```bash
+python scripts/check_requirements_sync.py
+# exit 0 = OK; exit 1 = regenerar con scripts/export_requirements.ps1
+```
+
+> **CI pendiente:** cuando exista GitHub Actions u otro CI, añadir un workflow que
+> ejecute `python scripts/check_requirements_sync.py` (Task C.1). El script ya
+> existe; solo hay que invocarlo.
 
 ### Fuera de este bootstrap
 

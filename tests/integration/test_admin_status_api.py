@@ -1,4 +1,4 @@
-"""Integration tests for admin system status endpoints (Tasks G.1 + G.2).
+"""Integration tests for admin system status endpoints (Tasks G.1 + G.2 + G.4).
 
 G.1 — GET /api/v1/admin/status:
 1. Sin auth → 401
@@ -13,6 +13,11 @@ G.2 — POST /api/v1/admin/status/canary:
 8. ADMIN con job mockeado success=True → 200, canary.success is True
 9. ADMIN con job que deja success=False → 200 (FAIL de negocio ≠ 500)
 10. Tras POST, GET refleja el mismo snapshot (estado compartido)
+
+G.4 — jobs metrics en /api/v1/admin/status:
+11. ADMIN con scheduler y 1 job (consecutive_failures=3) → 200, jobs[0] incluye racha
+12. Sin scheduler (ENABLE_SCHEDULER=false) → 200 con jobs == []
+13. POST canary devuelve el mismo shape (incluye jobs)
 """
 
 from __future__ import annotations
@@ -24,6 +29,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.jobs import canary_state
+from app.main import app
 from app.models.role import Role
 from tests.integration.conftest import user_repository
 
@@ -69,6 +75,119 @@ def _reset_canary_state():
     canary_state._last = None
     yield
     canary_state._last = None
+
+
+class _FakeScheduler:
+    """Fake scheduler con la misma API de ``Scheduler.list_jobs`` (G.4)."""
+
+    def __init__(self, rows: list[dict]) -> None:
+        self._rows = rows
+
+    def list_jobs(self) -> list[dict]:
+        return list(self._rows)
+
+
+@pytest.fixture(autouse=True)
+def _reset_scheduler_state():
+    """Limpia ``app.state.scheduler`` antes y después de cada test (G.4).
+
+    El test puede dejar un ``_FakeScheduler`` en ``app.state.scheduler``;
+    al terminar lo restauramos al estado previo (o a ``None`` si no había).
+    """
+    had_scheduler = hasattr(app.state, "scheduler")
+    prev = getattr(app.state, "scheduler", None)
+    app.state.scheduler = None
+    yield
+    if had_scheduler:
+        app.state.scheduler = prev
+    else:
+        app.state.scheduler = None
+
+
+class TestJobMetrics:
+    """Integration tests para jobs metrics en /admin/status (Task G.4)."""
+
+    def test_admin_sees_job_metrics_with_streak(self, client: TestClient) -> None:
+        admin = _register(client, role=Role.ADMIN)
+        app.state.scheduler = _FakeScheduler(
+            [
+                {
+                    "name": "refresh_market_cache",
+                    "interval": 3600,
+                    "status": "failed",
+                    "last_execution": "2026-08-04T12:00:00Z",
+                    "next_execution": "2026-08-04T13:00:00Z",
+                    "last_duration": 1.5,
+                    "execution_count": 10,
+                    "success_count": 7,
+                    "failure_count": 3,
+                    "consecutive_failures": 3,
+                }
+            ]
+        )
+
+        r = client.get("/api/v1/admin/status", headers=_auth(admin["token"]))
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert "jobs" in data
+        assert len(data["jobs"]) == 1
+        job = data["jobs"][0]
+        assert job["name"] == "refresh_market_cache"
+        assert job["interval"] == 3600
+        assert job["status"] == "failed"
+        assert job["last_execution"] == "2026-08-04T12:00:00Z"
+        assert job["next_execution"] == "2026-08-04T13:00:00Z"
+        assert job["last_duration"] == 1.5
+        assert job["execution_count"] == 10
+        assert job["success_count"] == 7
+        assert job["failure_count"] == 3
+        assert job["consecutive_failures"] == 3
+
+    def test_no_scheduler_returns_empty_jobs(self, client: TestClient) -> None:
+        admin = _register(client, role=Role.ADMIN)
+        app.state.scheduler = None
+
+        r = client.get("/api/v1/admin/status", headers=_auth(admin["token"]))
+        assert r.status_code == 200, r.text
+        assert r.json()["jobs"] == []
+
+    def test_post_canary_includes_jobs(self, client: TestClient) -> None:
+        admin = _register(client, role=Role.ADMIN)
+        app.state.scheduler = _FakeScheduler(
+            [
+                {
+                    "name": "cleanup_old_searches",
+                    "interval": 86400,
+                    "status": "success",
+                    "last_execution": "2026-08-04T10:00:00Z",
+                    "next_execution": "2026-08-05T10:00:00Z",
+                    "last_duration": 0.5,
+                    "execution_count": 5,
+                    "success_count": 5,
+                    "failure_count": 0,
+                    "consecutive_failures": 0,
+                }
+            ]
+        )
+
+        fake_job = _FakeCanaryJob(
+            success=True,
+            message="Canary OK (AS24 listings>0, mobile=ok)",
+            data={"autoscout24": {"count": 3}, "mobile_de": {"count": 2}, "mobile_status": "ok"},
+        )
+        with patch(
+            "app.api.v1.admin_status.ProviderCanaryJob", return_value=fake_job
+        ):
+            r = client.post(
+                "/api/v1/admin/status/canary", headers=_auth(admin["token"])
+            )
+
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert "jobs" in data
+        assert len(data["jobs"]) == 1
+        assert data["jobs"][0]["name"] == "cleanup_old_searches"
+        assert data["jobs"][0]["consecutive_failures"] == 0
 
 
 class TestAdminSystemStatus:
