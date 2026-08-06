@@ -8,6 +8,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Button } from "@/app/components/ui/button";
 import { Input } from "@/app/components/ui/input";
+import { useQueryClient } from "@tanstack/react-query";
 import { api } from "@/app/services/api/client";
 import { signInWithGoogle } from "@/app/services/google-auth";
 import { useAuthStore } from "@/app/store/auth-store";
@@ -29,7 +30,8 @@ type RegisterForm = z.infer<typeof registerSchema>;
 
 export function RegisterPage() {
   const router = useRouter();
-  const { setUser } = useAuthStore();
+  const queryClient = useQueryClient();
+  const { setSession } = useAuthStore();
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
@@ -61,12 +63,16 @@ export function RegisterPage() {
         password: data.password,
       });
 
-      localStorage.setItem("access_token", authRes.data.access_token);
-      localStorage.setItem("refresh_token", authRes.data.refresh_token);
-
       const userRes = await api.get<User>("/auth/me");
-      localStorage.setItem("user", JSON.stringify(userRes.data));
-      setUser(userRes.data);
+      // Persistencia unificada (tokens + user + store) en un solo lugar.
+      setSession({
+        accessToken: authRes.data.access_token,
+        refreshToken: authRes.data.refresh_token,
+        user: userRes.data,
+      });
+
+      // Evitar mostrar datos en caché de un usuario previo.
+      queryClient.clear();
 
       router.push("/dashboard/");
     } catch {
@@ -83,6 +89,8 @@ export function RegisterPage() {
       // authenticate_with_google crea el usuario automáticamente si no existe
       // (ver app/services/auth_service.py), así que sirve igual para registro.
       await signInWithGoogle();
+      // google-auth ya persiste via setSession; limpiamos caché de usuario previo.
+      queryClient.clear();
       router.push("/dashboard/");
     } catch {
       setError("Error al registrarse con Google");

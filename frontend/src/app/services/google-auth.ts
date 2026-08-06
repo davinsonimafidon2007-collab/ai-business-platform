@@ -82,8 +82,12 @@ export async function signInWithGoogle(): Promise<void> {
   localStorage.setItem("refresh_token", authRes.data.refresh_token);
 
   const userRes = await api.get<User>("/auth/me");
-  localStorage.setItem("user", JSON.stringify(userRes.data));
-  useAuthStore.getState().setUser(userRes.data);
+  // Persistencia unificada via setSession (mismo contrato que login/register).
+  useAuthStore.getState().setSession({
+    accessToken: authRes.data.access_token,
+    refreshToken: authRes.data.refresh_token,
+    user: userRes.data,
+  });
 }
 
 export async function signOutOfGoogle(): Promise<void> {

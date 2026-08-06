@@ -108,7 +108,7 @@ onSuccess: (deal) => {
         </div>
         <div className="flex items-center gap-2">
           {opportunity.recommendation && (
-            <RecommendationBadge recommendation={opportunity.recommendation} />
+            <RecommendationBadge recommendation={opportunity.recommendation} label={opportunity.recommendation_label_es} />
           )}
         </div>
       </div>
@@ -152,8 +152,8 @@ onSuccess: (deal) => {
         <p className="text-sm">
           <span className="text-secondary-500 dark:text-secondary-400">Riesgo: </span>
           <span className={`font-medium ${riskColor(opportunity.risk_level)}`}>
-            {opportunity.risk_level || "—"}
-</span>
+            {opportunity.risk_label_es || opportunity.risk_level || "—"}
+          </span>
         </p>
         <div className="flex flex-wrap items-center gap-2">
           {dealMsg && (
@@ -368,3 +368,4 @@ function OpportunitiesContent() {
 export default function OpportunitiesPage() {
   return <OpportunitiesContent />;
 }
+

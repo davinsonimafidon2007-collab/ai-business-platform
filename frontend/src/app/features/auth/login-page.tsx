@@ -8,6 +8,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Button } from "@/app/components/ui/button";
 import { Input } from "@/app/components/ui/input";
+import { useQueryClient } from "@tanstack/react-query";
 import { api } from "@/app/services/api/client";
 import { signInWithGoogle } from "@/app/services/google-auth";
 import { useAuthStore } from "@/app/store/auth-store";
@@ -22,7 +23,8 @@ type LoginForm = z.infer<typeof loginSchema>;
 
 export function LoginPage() {
   const router = useRouter();
-  const { setUser, isAuthenticated } = useAuthStore();
+  const queryClient = useQueryClient();
+  const { setSession, isAuthenticated } = useAuthStore();
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
@@ -52,12 +54,16 @@ export function LoginPage() {
         password: data.password,
       });
 
-      localStorage.setItem("access_token", authRes.data.access_token);
-      localStorage.setItem("refresh_token", authRes.data.refresh_token);
-
       const userRes = await api.get<User>("/auth/me");
-      localStorage.setItem("user", JSON.stringify(userRes.data));
-      setUser(userRes.data);
+      // Persistencia unificada (tokens + user + store) en un solo lugar.
+      setSession({
+        accessToken: authRes.data.access_token,
+        refreshToken: authRes.data.refresh_token,
+        user: userRes.data,
+      });
+
+      // No mostrar datos en caché del usuario anterior tras este login.
+      queryClient.clear();
 
       router.push("/dashboard/");
     } catch {
@@ -72,6 +78,8 @@ export function LoginPage() {
     setError(null);
     try {
       await signInWithGoogle();
+      // google-auth ya persiste via setSession; limpiamos caché de usuario previo.
+      queryClient.clear();
       router.push("/dashboard/");
     } catch (err) {
       // eslint-disable-next-line no-console

@@ -19,7 +19,9 @@ export type Opportunity = {
   estimated_profit?: number | null;
   roi_percentage?: number | null;
   recommendation?: string | null;
+  recommendation_label_es?: string | null;
   risk_level?: string | null;
+  risk_label_es?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
 };

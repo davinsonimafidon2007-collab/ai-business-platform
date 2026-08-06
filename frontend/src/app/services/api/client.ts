@@ -77,8 +77,13 @@ class ApiClient {
           return this.client(originalRequest);
         }
       } catch {
+        // Refresco fallido → naufrageo la sesión igual que logout pero SIN
+        // importar el store (evitaría dependencia circular). Estrategia elegida:
+        // clearTokens() + evento "auth:logout" que el provider escucha para
+        // resetear el store y vaciar el caché de React Query.
         this.clearTokens();
         if (typeof window !== "undefined") {
+          window.dispatchEvent(new Event("auth:logout"));
           window.location.href = "/auth/login/";
         }
       }

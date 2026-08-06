@@ -115,9 +115,11 @@ export function NegotiationBadge({
 
 export function RecommendationBadge({
   recommendation,
+  label,
   size = "sm",
 }: {
   recommendation: string;
+  label?: string | null;
   size?: "sm" | "md" | "lg";
 }) {
   const config: Record<string, { color: string; label: string }> = {
@@ -130,6 +132,7 @@ export function RecommendationBadge({
   };
 
   const c = config[recommendation] || { color: "bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400", label: recommendation };
+  const displayLabel = label || c.label;
 
   return (
     <span
@@ -143,7 +146,7 @@ export function RecommendationBadge({
         c.color
       )}
     >
-      {c.label}
+      {displayLabel}
     </span>
   );
 }

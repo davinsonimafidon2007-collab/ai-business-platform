@@ -21,6 +21,8 @@ export interface MarketEstimation {
   notes: string[];
   /** Texto legible ES del diferencial (MKT.1/MKT.2). Opcional por compat. */
   explanation?: string;
+  /** Proveedores que aportaron comparables (ej. mobile_de, es_market_fixture). */
+  provider_sources?: string[];
 }
 
 // =============================================================================
@@ -38,6 +40,16 @@ export interface CostBreakdown {
   total_fixed_costs: number;
   total_variable_costs: number;
   total_cost: number;
+  cost_lines?: CostLine[];
+}
+
+// =============================================================================
+// Cost line (PROFIT.1)
+// =============================================================================
+export interface CostLine {
+  key: string;
+  label_es: string;
+  amount: number;
 }
 
 // =============================================================================
@@ -59,7 +71,11 @@ export interface ProfitAnalysis {
   roi_percentage: number;
   profit_margin_percentage: number;
   risk_level: string;
+  risk_label_es?: string;
   recommendation: string;
+  recommendation_label_es?: string;
+  /** Avisos de coherencia ES (ROI.1); no bloquean la respuesta. */
+  coherence_warnings?: string[];
   cost_breakdown: CostBreakdown;
 }
 
@@ -70,10 +86,12 @@ export interface OpportunityAnalysis {
   overall_score: number;
   opportunity_level: string;
   recommendation: string;
+  recommendation_label_es?: string;
   estimated_profit: number;
   roi: number;
   market_confidence: number;
   risk_level: string;
+  risk_label_es?: string;
   strengths: string[];
   weaknesses: string[];
 }

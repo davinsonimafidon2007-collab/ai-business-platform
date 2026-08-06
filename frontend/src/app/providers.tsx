@@ -1,6 +1,6 @@
 "use client";
 
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { useState, useEffect } from "react";
 import { useAuthStore } from "@/app/store/auth-store";
 import { useThemeStore } from "@/app/store/theme-store";
@@ -18,10 +18,22 @@ function ThemeInitializer({ children }: { children: React.ReactNode }) {
 
 function AuthInitializer({ children }: { children: React.ReactNode }) {
   const initialize = useAuthStore((state) => state.initialize);
+  const logout = useAuthStore((state) => state.logout);
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     initialize();
-  }, [initialize]);
+
+    // Escucha el evento "auth:logout" que emite el API client cuando un refresh
+    // falla (401). Evita importar el store desde el client (sin dependencia
+    // circular) y garantiza que store + query cache queden coherentes.
+    const onAuthLogout = () => {
+      queryClient.clear();
+      logout();
+    };
+    window.addEventListener("auth:logout", onAuthLogout);
+    return () => window.removeEventListener("auth:logout", onAuthLogout);
+  }, [initialize, logout, queryClient]);
 
   return <>{children}</>;
 }

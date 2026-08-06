@@ -111,6 +111,19 @@ export function VehicleDrawer({ vehicle, onClose }: VehicleDrawerProps) {
                 <InfoItem label="Tendencia" value={me.market_trend} />
                 <InfoItem label="Comparables" value={me.comparable_count.toString()} />
               </div>
+              {(me.provider_sources?.length ?? 0) > 0 && (
+                <div className="mt-2 flex flex-wrap items-center gap-1">
+                  <span className="text-xs text-secondary-500 dark:text-secondary-400">Fuentes:</span>
+                  {me.provider_sources!.map((p) => (
+                    <span
+                      key={p}
+                      className="rounded-full bg-secondary-100 px-2 py-0.5 text-xs font-medium text-secondary-800 dark:bg-secondary-700 dark:text-secondary-100"
+                    >
+                      {p}
+                    </span>
+                  ))}
+                </div>
+              )}
               {me.explanation ? (
                 <div className="mt-3 rounded-md border border-secondary-200 bg-secondary-50 p-3 dark:border-secondary-600 dark:bg-secondary-900/40">
                   <p className="mb-1 text-sm font-medium text-secondary-800 dark:text-secondary-200">
@@ -139,6 +152,19 @@ export function VehicleDrawer({ vehicle, onClose }: VehicleDrawerProps) {
           {/* Profit Analysis */}
           {pa && (
             <Section title="Profit Analysis">
+              {(pa.coherence_warnings?.length ?? 0) > 0 && (
+                <div className="rounded-md border border-amber-300 bg-amber-50 p-3 dark:border-amber-700 dark:bg-amber-900/20">
+                  <p className="mb-1 text-sm font-medium text-amber-800 dark:text-amber-300">
+                    Avisos de coherencia
+                  </p>
+                  <ul className="list-disc space-y-1 pl-4 text-xs text-amber-700 dark:text-amber-400">
+                    {pa.coherence_warnings!.map((msg, i) => (
+                      <li key={i}>{msg}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
               <div className="grid grid-cols-2 gap-3">
                 <InfoItem label="Precio compra" value={formatEur(pa.purchase_price)} />
                 <InfoItem label="Coste total" value={formatEur(pa.total_cost)} />
@@ -147,21 +173,32 @@ export function VehicleDrawer({ vehicle, onClose }: VehicleDrawerProps) {
                 <InfoItem label="Beneficio neto" value={formatEur(pa.net_profit)} />
                 <InfoItem label="ROI" value={`${pa.roi_percentage.toFixed(2)}%`} />
                 <InfoItem label="Margen" value={`${pa.profit_margin_percentage.toFixed(2)}%`} />
-                <InfoItem label="Riesgo" value={pa.risk_level} />
+                <InfoItem label="Riesgo" value={pa.risk_label_es || pa.risk_level} />
               </div>
 
               {/* Cost Breakdown */}
               <div className="mt-3">
                 <p className="mb-2 text-sm font-medium text-secondary-700 dark:text-secondary-300">Desglose de costes</p>
-                <div className="grid grid-cols-2 gap-2 text-sm">
-                  <InfoItem label="Transporte" value={formatEur(pa.cost_breakdown.transport_cost)} />
-                  <InfoItem label="Matriculación" value={formatEur(pa.cost_breakdown.registration_cost)} />
-                  <InfoItem label="Impuestos" value={formatEur(pa.cost_breakdown.taxes)} />
-                  <InfoItem label="Inspección" value={formatEur(pa.cost_breakdown.inspection_cost)} />
-                  <InfoItem label="Reparaciones" value={formatEur(pa.cost_breakdown.repair_estimate)} />
-                  <InfoItem label="Comisión" value={formatEur(pa.cost_breakdown.commission_cost)} />
-                  <InfoItem label="Otros" value={formatEur(pa.cost_breakdown.miscellaneous_cost)} />
-                </div>
+                {pa.cost_breakdown?.cost_lines && pa.cost_breakdown.cost_lines.length > 0 ? (
+                  <ul className="space-y-1 text-sm">
+                    {pa.cost_breakdown.cost_lines.map((line) => (
+                      <li key={line.key} className="flex justify-between gap-2">
+                        <span className="text-secondary-600 dark:text-secondary-400">{line.label_es}</span>
+                        <span className="font-medium">{formatEur(line.amount)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <div className="grid grid-cols-2 gap-2 text-sm">
+                    <InfoItem label="Transporte" value={formatEur(pa.cost_breakdown.transport_cost)} />
+                    <InfoItem label="Matriculación" value={formatEur(pa.cost_breakdown.registration_cost)} />
+                    <InfoItem label="Impuestos" value={formatEur(pa.cost_breakdown.taxes)} />
+                    <InfoItem label="Inspección" value={formatEur(pa.cost_breakdown.inspection_cost)} />
+                    <InfoItem label="Reparaciones" value={formatEur(pa.cost_breakdown.repair_estimate)} />
+                    <InfoItem label="Comisión" value={formatEur(pa.cost_breakdown.commission_cost)} />
+                    <InfoItem label="Otros" value={formatEur(pa.cost_breakdown.miscellaneous_cost)} />
+                  </div>
+                )}
               </div>
             </Section>
           )}
@@ -172,13 +209,13 @@ export function VehicleDrawer({ vehicle, onClose }: VehicleDrawerProps) {
               <div className="flex flex-wrap items-center gap-3">
                 <ScoreBadge score={Math.round(opp.overall_score)} label="Oportunidad" size="md" />
                 <OpportunityBadge level={opp.opportunity_level} size="md" />
-                <RecommendationBadge recommendation={opp.recommendation} size="md" />
+                <RecommendationBadge recommendation={opp.recommendation} label={opp.recommendation_label_es} size="md" />
               </div>
               <div className="mt-3 grid grid-cols-2 gap-3">
                 <InfoItem label="Beneficio estimado" value={formatEur(opp.estimated_profit)} />
                 <InfoItem label="ROI" value={`${opp.roi.toFixed(2)}%`} />
                 <InfoItem label="Confianza mercado" value={`${opp.market_confidence.toFixed(1)}%`} />
-                <InfoItem label="Riesgo" value={opp.risk_level} />
+                <InfoItem label="Riesgo" value={opp.risk_label_es || opp.risk_level} />
               </div>
               {opp.strengths.length > 0 && (
                 <div className="mt-2">
