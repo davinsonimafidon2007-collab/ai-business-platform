@@ -12,8 +12,10 @@ Ver [docs/HANDOFF_GROK_NEXT_SESSION.md](docs/HANDOFF_GROK_NEXT_SESSION.md) antes
   algunas dependencias con binarios nativos (p. ej. `lxml`) aún no publican
   wheels para 3.14 en Windows y fallan al compilar. Usa 3.13.x.
 - PostgreSQL 15+ (o 14+)
+- Redis 7 (opcional en local; obligatorio en producción)
 - Node 20+ (solo si levantas el frontend)
 - [uv](https://github.com/astral-sh/uv) recomendado
+- Docker + Docker Compose (si usas el stack contenedorizado)
 
 > **Python 3.14:** `scripts/release_check.py` abortará con exit 2 si detecta
 > 3.14. Fija el runtime con `uv python pin 3.13` (o `uv venv --python 3.13`).
@@ -24,7 +26,26 @@ Ver [docs/HANDOFF_GROK_NEXT_SESSION.md](docs/HANDOFF_GROK_NEXT_SESSION.md) antes
 cd "ruta/al/proyecto"
 ```
 
-### 2. Entorno Python
+### 2. Docker Compose (stack completo API + Postgres + Redis)
+
+```bash
+docker compose up --build
+```
+
+Esto levanta:
+
+- API → http://localhost:8000
+- Postgres → localhost:5432
+- Redis → localhost:6379
+
+La API solo pasa el healthcheck cuando Redis y Postgres están `healthy`.
+Para parar:
+
+```bash
+docker compose down -v   # -v elimina los volúmenes (DB y Redis)
+```
+
+### 2-alt. Entorno Python local (sin Docker)
 
 ```bash
 uv sync --group dev
@@ -57,24 +78,32 @@ createdb ai_business_platform
 
 ### 4. Migraciones (OBLIGATORIO)
 
-Head actual esperado: `f8a9b0c1d2e3`
+Head canónico actual: `g1h2i3j4k5l6`
 
 ```bash
-alembic upgrade head
-alembic heads
-alembic current
+uv run alembic upgrade head
+uv run alembic heads          # debe devolver exactamente 1 head
+uv run alembic current
 ```
 
-Si `upgrade` falla por huérfanos / FK:
+Si `upgrade` falla por datos huérfanos / FK en una DB ya existente:
 
-- Leer el mensaje de la migración `f8a9b0c1d2e3` / `d6e7f8a9b0c1`
-- En dev es aceptable vaciar tablas de tokens/keys/vehicles huérfanos y reintentar
+- Revisar el mensaje de la migración que falla (habitualmente `d6e7f8a9b0c1` o `f8a9b0c1d2e3`).
+- En **development** es aceptable limpiar tablas de tokens/keys/vehicles huérfanos y reintentar.
+- En **production** usar un plan de migración de datos (no `DROP`).
 
-Migraciones recientes que deben aplicarse si vienes de un schema viejo:
+Migraciones recientes relevantes si vienes de un schema antiguo:
 
 - `d6e7f8a9b0c1` — vehicles.user_id NOT NULL + índices
 - `e7f8a9b0c1d2` — search_history.user_id
 - `f8a9b0c1d2e3` — FK api_keys / refresh_tokens → users
+- `e2f3a4b5c6d7` — tabla deals
+- `f2a3b4c5d6e8` — last_simulation en deals
+- `g1h2i3j4k5l6` — explanation en cached_market_data
+
+> **Nota:** Los revision IDs históricos (`g1h2i3j4k5l6`, `a1b2c3d4e5f7`, etc.) se mantienen
+> por compatibilidad con bases de datos ya migradas. Las **nuevas** migraciones deben
+> generarse con `alembic revision --autogenerate -m "..."`.
 
 ### 5. Arrancar API
 
@@ -188,6 +217,31 @@ ENABLE_SCHEDULER=false
 | 429 en login | Rate limit login=5/min | Esperar o reiniciar proceso API (límites en memoria) |
 | Scrapers vacíos | HTML de mobile.de/AS24 cambió | Revisar logs del provider; no es fallo de bootstrap |
 
+### Seguridad (SEC-001) — CORS / Firebase / secretos
+
+- **JWT obligatorio**: `JWT_SECRET_KEY` debe tener ≥ 32 caracteres o la app no
+  arranca (excepto `environment=test`, que inyecta un secret de test).
+- **CORS estricto en production**: con `ENVIRONMENT=production`, `CORS_ORIGINS`
+  debe ser una lista explícita y real (dominios HTTPS del frontend). Están
+  prohibidos `*`, la lista vacía y una lista con **solo** orígenes de desarrollo
+  (localhost / capacitor / ionic). Si se infringe, `Settings` no carga y la API
+  no arranca. En production un `CORS_ALLOW_HEADERS=*` se endurece
+  automáticamente a una lista explícita
+  (`Authorization,Content-Type,Accept,X-Request-ID,X-API-Key,X-Requested-With`).
+  En development/test se mantienen los defaults de localhost/Capacitor.
+- **Firebase opcional en dev, configurable como requerido en prod**:
+  `FIREBASE_REQUIRED=false` por defecto. Sin credenciales en development/test la
+  API arranca igual (WARNING, Google Login deshabilitado). En production:
+  - `FIREBASE_REQUIRED=false` → WARNING/ERROR al boot; los endpoints de Google
+    Login devuelven error claro al usarse.
+  - `FIREBASE_REQUIRED=true` → la API **no arranca** si no hay credenciales
+    (`RuntimeError` en el boot, fail-fast).
+- **API keys hasheadas (Argon2)**: solo se persiste `key_hash` (vía
+  `pwdlib.PasswordHash.recommended()`) + `prefix`. El secreto bruto solo se
+  muestra **una vez** al crear la key; ningún listado devuelve `key_hash` ni la
+  key completa. `verify` usa `password_hasher.verify` (con sal aleatoria, no se
+  busca por igualdad de hash).
+
 ### 9. Verificación en vivo de providers (mobile.de / AutoScout24)
 
 > **Runbook mobile.de con proxy:** ver [`docs/PROXY_MOBILE_DE.md`](docs/PROXY_MOBILE_DE.md)
@@ -233,6 +287,15 @@ python scripts/smoke_es_providers.py --live-as24-es
 
 Exit 0 = OK; 1 = fallo de aserción / error inesperado; 2 = skip de live.
 
+
+### Ops — readiness (OPS.READY)
+
+```bash
+python scripts/check_integrations_ready.py
+python scripts/check_integrations_ready.py --strict   # jwt + db + fixtures
+```
+
+BLOCKED en smtp/firebase/proxy es esperado sin credenciales (app sigue up).
 
 ### Runbook — Alertas por email (SMTP) — Task SMTP.1
 
@@ -437,8 +500,73 @@ uv run alembic upgrade head
 
 No incluye: smoke E2E, providers live, SMTP, Firebase verify real, frontend.
 
+### Rendimiento (PERF-001) — rate-limit/cache distribuido + paginación segura
+
+- **Rate limiting**: Redis primero (distribuido); si Redis no está disponible cae
+  a contadores en memoria (fail-soft, mismo patrón que el cache L1). Toda
+  respuesta del middleware incluye `X-RateLimit-Mode: redis|memory`. En
+  **production**, una degradación a memoria loguea `ERROR` (throttled a ~1
+  log/10s por proceso) — nunca es silenciosa. En production la app no arranca
+  sin Redis (P0-001), así que este fallback solo cubre caídas en runtime.
+- **Cache de mercado**: L1 en **Redis** (`market:est:*`) + L2 en **Postgres**
+  (`cached_market`) + `_local_cache` en proceso. Si Redis cae, se sigue sirviendo
+  desde Postgres / cómputo en vivo (fail-soft). Sin Redis no se debilita: en
+  production Redis es obligatorio.
+- **Paginación segura**: los listados críticos (`/vehicles`, `/deals`,
+  `/opportunities`, `/searches`) validan `limit` en `[1, 100]` (422 si se supera)
+  y los repositorios además recortan a 100 por defensa en profundidad
+  (`app/core/limits.py::clamp_limit`). `offset >= 0`.
+- **Métricas mínimas de latencia**: `AccessLogMiddleware` ya emite
+  `duration_ms` en el log estructurado de cada request (sin Prometheus/OTEL;
+  eso es DEVOPS-001).
+
+Verificación local:
+
+```bash
+docker compose up -d redis
+.venv/Scripts/python.exe -m pytest tests/unit/test_rate_limit_mode.py tests/unit/test_pagination_caps.py -q
+.venv/Scripts/python.exe -m pytest tests/unit -q
+```
+
+### Modelo de costes de importación (ECON-001)
+
+Los perfiles de costes viven en `app/config/import_costs_data.json` (versionado,
+`version: "2026.08"`). Al importar `app.config.import_costs`, el módulo carga los
+perfiles desde el archivo; si el archivo falta, usa los defaults embebidos con un
+warning (fallback).
+
+Campos del perfil:
+- Costes fijos (EUR): `transport_cost`, `registration_cost`, `inspection_cost`
+  (ITV), `paperwork_cost` (gestoría), `miscellaneous_cost`.
+- Costes variables (fracción del precio de compra): `tax_rate` (impuestos),
+  `commission_rate` (comisión), `repair_estimate_rate` (reparación estimada).
+- Umbrales de riesgo: `risk_{high,low}_{roi,profit,cost_ratio}_threshold`.
+
+Los valores fuera de rango lanzan `ValueError` (fail-fast) al cargar/construir:
+- costes fijos en `[0, 50000]`; tasas en `[0, 0.5]`; ROI `0 <= low < high <= 1`;
+  profit `0 <= low < high`; cost_ratio `0 <= low < high <= 3` (el perfil DEFAULT
+  legado usa `2.0`, por lo que el tope sube por encima de 1 — ver nota en el código).
+
+`ProfitAnalysis.warnings` ofrece avisos no bloqueantes (disclaimer de estimación y
+aviso si los costes de importación superan el 50% del precio de compra).
+
+El `CostBreakdown` expone cada componente con label legible vía
+`breakdown.components()` (lista de `{key, label, kind, amount}` en EUR, p. ej.
+`transport_cost` → "Transporte", `registration_cost` → "Matriculación",
+`inspection_cost` → "ITV / inspección", `taxes` → "Impuestos (sobre compra)",
+`commission_cost` → "Comisión", `repair_estimate` → "Reparaciones estimadas") y
+`breakdown.as_dict()` para serialización plana. Útil para explicar en el front
+cada partida sin duplicar nombres técnicos.
+
+Para actualizar costes 2026:
+1. Editar `app/config/import_costs_data.json`.
+2. Ejecutar `pytest tests/unit/test_profit_analyzer.py tests/unit/test_import_costs_validation.py tests/unit/test_import_cost_default_wiring.py -q`.
+3. No hardcodear valores en el analyzer.
+
+> Los valores son **estimaciones de trabajo**, no asesoramiento fiscal. Deben
+> contrastarse con gestoría, ITV, DGT/ISV según el caso.
+
 ### Fuera de este bootstrap
 
 - Tests (`TODO.md`, sesión paralela)
-- Redis como backend de rate limit
 - CRUD HTTP de API keys

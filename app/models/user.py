@@ -1,13 +1,23 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from sqlalchemy import Boolean, DateTime, Enum, String, Uuid
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
 from app.models.role import Role
+
+if TYPE_CHECKING:
+    from app.models.api_key import ApiKey
+    from app.models.deal import Deal
+    from app.models.inspection import InspectionSession
+    from app.models.refresh_token import RefreshToken
+    from app.models.search import Search
+    from app.models.search_history import SearchHistory
+    from app.models.vehicle import Vehicle
 
 
 class User(Base):
@@ -34,6 +44,49 @@ class User(Base):
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
         nullable=False,
+    )
+
+    vehicles: Mapped[list["Vehicle"]] = relationship(
+        "Vehicle",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+    searches: Mapped[list["Search"]] = relationship(
+        "Search",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+    deals: Mapped[list["Deal"]] = relationship(
+        "Deal",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+    api_keys: Mapped[list["ApiKey"]] = relationship(
+        "ApiKey",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+    refresh_tokens: Mapped[list["RefreshToken"]] = relationship(
+        "RefreshToken",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+    search_histories: Mapped[list["SearchHistory"]] = relationship(
+        "SearchHistory",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+    inspection_sessions: Mapped[list["InspectionSession"]] = relationship(
+        "InspectionSession",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
     )
 
     def __init__(self, **kwargs: object) -> None:

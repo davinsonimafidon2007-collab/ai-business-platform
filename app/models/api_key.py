@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text, Uuid
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
+
+if TYPE_CHECKING:
+    from app.models.user import User
 
 
 class ApiKey(Base):
@@ -32,6 +36,8 @@ class ApiKey(Base):
         default=lambda: datetime.now(timezone.utc),
         nullable=False,
     )
+
+    user: Mapped["User"] = relationship("User", back_populates="api_keys")
 
     def __init__(self, **kwargs: object) -> None:
         super().__init__(**kwargs)

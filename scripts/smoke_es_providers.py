@@ -58,6 +58,19 @@ async def _smoke_fixtures() -> int:
     return 0
 
 
+async def _smoke_html_coches() -> int:
+    from app.providers.coches_net_html import CochesNetHtmlFixtureProvider
+
+    p = CochesNetHtmlFixtureProvider()
+    hits = await p.search("")
+    print(f"coches_net_html_fixture search('') -> {len(hits)}")
+    if len(hits) < 1:
+        print("FAIL: coches_net_html_fixture sin resultados", file=sys.stderr)
+        return 1
+    print("OK coches_net_html_fixture")
+    return 0
+
+
 async def _smoke_live_as24_es() -> int:
     from app.core.config import settings
     from app.providers.registry import ProviderRegistry
@@ -98,6 +111,11 @@ def main() -> int:
         action="store_true",
         help="Do not run offline fixture searches",
     )
+    parser.add_argument(
+        "--html-coches",
+        action="store_true",
+        help="Run offline Coches.net HTML fixture smoke (direct instantiation)",
+    )
     args = parser.parse_args()
 
     if args.registry:
@@ -107,6 +125,10 @@ def main() -> int:
         code = 0
         if not args.skip_fixtures:
             code = await _smoke_fixtures()
+            if code != 0:
+                return code
+        if args.html_coches:
+            code = await _smoke_html_coches()
             if code != 0:
                 return code
         if args.live_as24_es:

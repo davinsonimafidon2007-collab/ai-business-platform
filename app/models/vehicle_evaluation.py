@@ -2,14 +2,17 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text, Uuid
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
 from app.models.negotiation import NegotiationResult
+
+if TYPE_CHECKING:
+    from app.models.vehicle import Vehicle
 
 
 def _negotiation_default() -> None:
@@ -50,6 +53,8 @@ class VehicleEvaluation(Base):
     _negotiation: Mapped[str | None] = mapped_column(
         "negotiation", Text, nullable=True, default=None
     )
+
+    vehicle: Mapped["Vehicle"] = relationship("Vehicle", back_populates="evaluations")
 
     def __init__(self, **kwargs: Any) -> None:
         # Extraer negotiation antes de pasar a super() para evitar duplicación

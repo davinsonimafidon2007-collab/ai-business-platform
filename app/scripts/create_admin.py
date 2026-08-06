@@ -21,7 +21,7 @@ import os
 import sys
 
 from app.core.config import settings
-from app.db.session import get_db_session
+from app.database import get_db_session
 from app.models.role import Role
 from app.repositories.user_repository import UserRepository
 from app.services.auth_service import AuthService, password_hasher

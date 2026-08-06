@@ -19,7 +19,7 @@ from app.core.config import settings
 from app.core.exception_handlers import register_exception_handlers
 from app.core.logging import setup_logging
 from app.core.redis import close_redis, init_redis
-from app.db.session import db_manager
+from app.database import db_manager
 from app.jobs.base import JobContext
 from app.jobs.factory import create_scheduler
 from app.jobs.scheduler import Scheduler
@@ -44,6 +44,13 @@ if len(settings.jwt_secret_key) < 32:
         f"JWT_SECRET_KEY is too short ({len(settings.jwt_secret_key)} chars). "
         "It must be at least 32 characters long."
     )
+
+# SEC-001 — Firebase fail-fast: in production with FIREBASE_REQUIRED=true the
+# app must not boot without Firebase credentials (Google Login would be dead).
+if settings.environment == "production" and settings.firebase_required:
+    from app.core.firebase import get_firebase_app
+
+    get_firebase_app()  # raises RuntimeError if Firebase is not available
 
 # ---------------------------------------------------------------------------
 # Scheduler lifecycle

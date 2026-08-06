@@ -4,7 +4,9 @@ from uuid import UUID
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
+from app.core.limits import clamp_limit
 from app.models.opportunity import Opportunity
 from app.models.vehicle import Vehicle
 
@@ -75,6 +77,7 @@ class OpportunityRepository:
         result = await self.session.execute(
             select(Opportunity)
             .where(Opportunity.vehicle_id == str(vehicle_id))
+            .options(selectinload(Opportunity.vehicle))
             .order_by(Opportunity.analyzed_at.desc())
         )
         return list(result.scalars().all())
@@ -111,9 +114,10 @@ class OpportunityRepository:
         """
         result = await self.session.execute(
             select(Opportunity)
+            .options(selectinload(Opportunity.vehicle))
             .order_by(Opportunity.created_at.desc())
             .offset(skip)
-            .limit(limit)
+            .limit(clamp_limit(limit))
         )
         return list(result.scalars().all())
 
@@ -146,6 +150,7 @@ class OpportunityRepository:
         Returns:
             A tuple of (list of Opportunity, total count).
         """
+        limit = clamp_limit(limit)
         base_query = select(Opportunity).join(
             Vehicle, Vehicle.id == Opportunity.vehicle_id
         )
@@ -168,7 +173,8 @@ class OpportunityRepository:
 
         # Items query
         items_query = (
-            base_query.order_by(Opportunity.opportunity_score.desc())
+            base_query.options(selectinload(Opportunity.vehicle))
+            .order_by(Opportunity.opportunity_score.desc())
             .offset(offset)
             .limit(limit)
         )

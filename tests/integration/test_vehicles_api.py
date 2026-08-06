@@ -5,7 +5,7 @@ from httpx import AsyncClient, ASGITransport
 import pytest
 
 from app.main import app
-from app.db.session import get_db_session
+from app.database import get_db_session
 from app.models.base import Base
 from app.models.vehicle import Vehicle
 from app.models.vehicle_evaluation import VehicleEvaluation

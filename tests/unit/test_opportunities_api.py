@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from fastapi.testclient import TestClient
 
-from app.db.session import get_db_session
+from app.database import get_db_session
 from app.dependencies.auth import get_current_user
 from app.main import app
 from app.models.opportunity import Opportunity
@@ -116,6 +116,8 @@ def test_opportunities_returns_200_shape(auth_override: None) -> None:
         assert item["roi_percentage"] == 18.3
         assert item["recommendation"] == "BUY_NOW"
         assert item["risk_level"] == "LOW"
+        assert item["recommendation_label_es"] == "Comprar ya"
+        assert item["risk_label_es"] == "Bajo"
         assert item["vehicle"] is not None
         assert item["vehicle"]["brand"] == "BMW"
         assert item["vehicle"]["model"] == "320d"

@@ -16,6 +16,7 @@ from app.providers.mobile_de import MobileDeProvider
 from app.providers.autoscout24 import AutoScout24Provider
 from app.providers.vision_provider import MockVisionProvider, VisionProvider
 from app.providers.openai_vision import OpenAIVisionProvider, VisionProviderError
+from app.providers.coches_net_html import CochesNetHtmlFixtureProvider
 
 __all__ = [
     "VehicleProvider",
@@ -37,5 +38,6 @@ __all__ = [
     "VisionProvider",
     "OpenAIVisionProvider",
     "VisionProviderError",
+    "CochesNetHtmlFixtureProvider",
 ]
 

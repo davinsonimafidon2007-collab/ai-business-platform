@@ -13,11 +13,11 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text, Uuid
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.config.inspection import (
     InspectionItemStatus,
@@ -25,6 +25,10 @@ from app.config.inspection import (
     SeverityLevel,
 )
 from app.models.base import Base
+
+if TYPE_CHECKING:
+    from app.models.user import User
+    from app.models.vehicle import Vehicle
 
 
 class InspectionSession(Base):
@@ -95,6 +99,21 @@ class InspectionSession(Base):
     # Storage for summary JSON (generado al finalizar)
     _summary_json: Mapped[str | None] = mapped_column(
         "summary_json", Text, nullable=True, default=None
+    )
+
+    vehicle: Mapped["Vehicle"] = relationship("Vehicle", back_populates="inspection_sessions")
+    user: Mapped["User"] = relationship("User", back_populates="inspection_sessions")
+    observations: Mapped[list["InspectionObservation"]] = relationship(
+        "InspectionObservation",
+        back_populates="session",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+    photos: Mapped[list["InspectionPhoto"]] = relationship(
+        "InspectionPhoto",
+        back_populates="session",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
     )
 
     def __init__(self, **kwargs: Any) -> None:
@@ -209,6 +228,14 @@ class InspectionObservation(Base):
         nullable=False,
     )
 
+    session: Mapped["InspectionSession"] = relationship("InspectionSession", back_populates="observations")
+    photos: Mapped[list["InspectionPhoto"]] = relationship(
+        "InspectionPhoto",
+        back_populates="observation",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
     def __init__(self, **kwargs: Any) -> None:
         """Inicializa la observación con valores por defecto."""
         super().__init__(**kwargs)
@@ -293,6 +320,9 @@ class InspectionPhoto(Base):
         default=lambda: datetime.now(timezone.utc),
         nullable=False,
     )
+
+    observation: Mapped["InspectionObservation"] = relationship("InspectionObservation", back_populates="photos")
+    session: Mapped["InspectionSession"] = relationship("InspectionSession", back_populates="photos")
 
     def __init__(self, **kwargs: Any) -> None:
         """Inicializa la foto con valores por defecto."""

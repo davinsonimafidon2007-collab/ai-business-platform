@@ -18,6 +18,31 @@ logger = logging.getLogger(__name__)
 _firebase_app = None
 
 
+def _handle_firebase_unavailable(reason: str) -> None:
+    """Handle a Firebase-not-available situation.
+
+    In production with ``firebase_required=True`` this fails fast by raising a
+    RuntimeError so the app refuses to boot (SEC-001). Otherwise it logs an
+    ERROR in production (Google Login disabled) or a WARNING in dev/test and
+    returns control to the caller, which returns None.
+    """
+    if settings.environment == "production" and settings.firebase_required:
+        raise RuntimeError(
+            "Firebase is required (FIREBASE_REQUIRED=true) in production but "
+            f"cannot be configured: {reason}"
+        )
+    if settings.environment == "production":
+        logger.error(
+            "Firebase is not configured (%s). Google Login is DISABLED.", reason
+        )
+    else:
+        logger.warning(
+            "Firebase is not configured (%s). Google Login will not work until "
+            "it is configured.",
+            reason,
+        )
+
+
 def get_firebase_app():
     """Initialize and return the Firebase Admin SDK app singleton.
 
@@ -25,6 +50,10 @@ def get_firebase_app():
     1. FIREBASE_CREDENTIALS_JSON env var (JSON string)
     2. FIREBASE_CREDENTIALS_PATH env var (path to JSON file)
     3. GOOGLE_APPLICATION_CREDENTIALS (ADC)
+
+    Production fail-fast (SEC-001): if ``FIREBASE_REQUIRED=true`` and no
+    credentials are available, a RuntimeError is raised so the app refuses to
+    boot rather than silently disabling Google Login.
     """
     global _firebase_app
 
@@ -35,10 +64,7 @@ def get_firebase_app():
         import firebase_admin
         from firebase_admin import credentials
     except ImportError:
-        logger.warning(
-            "firebase_admin package is not installed. "
-            "Google Login will not work until it is installed."
-        )
+        _handle_firebase_unavailable("firebase_admin package is not installed")
         return None
 
     creds_json = os.environ.get("FIREBASE_CREDENTIALS_JSON") or (
@@ -51,6 +77,17 @@ def get_firebase_app():
         creds_json = None
     if creds_path == "":
         creds_path = None
+
+    # Nothing configured anywhere -> treat as missing credentials (fail-fast
+    # in production when required). Never log credential contents.
+    if not creds_json and not creds_path and not os.environ.get(
+        "GOOGLE_APPLICATION_CREDENTIALS"
+    ):
+        _handle_firebase_unavailable(
+            "no credentials (set FIREBASE_CREDENTIALS_JSON or "
+            "FIREBASE_CREDENTIALS_PATH, or GOOGLE_APPLICATION_CREDENTIALS)"
+        )
+        return None
 
     try:
         if creds_json:
@@ -66,12 +103,7 @@ def get_firebase_app():
             _firebase_app = firebase_admin.initialize_app()
             logger.info("Firebase Admin SDK initialized with ADC")
     except Exception as exc:
-        logger.warning(
-            "Firebase Admin SDK initialization failed: %s. "
-            "Google Login will not work until Firebase is configured.",
-            exc,
-        )
-        # Don't raise — the app should still work without Firebase for local dev
+        _handle_firebase_unavailable(f"initialization failed: {exc}")
         _firebase_app = None
 
     return _firebase_app

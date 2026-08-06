@@ -4,7 +4,7 @@ from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.session import get_db_session
+from app.database import get_db_session
 from app.exceptions import AuthenticationError, AuthorizationError, UserNotFoundError
 from app.models.role import Role
 from app.models.user import User

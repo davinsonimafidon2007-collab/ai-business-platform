@@ -4,6 +4,11 @@ Toda la configuración económica de importación de vehículos vive aquí.
 Modificar estos valores cambia el comportamiento del analizador
 sin necesidad de tocar el código del mismo.
 
+Los perfiles se cargan desde ``import_costs_data.json`` (versionado) al importar
+este módulo. Si el archivo falta o no existe, se usan los defaults embebidos
+con un warning (fallback). Los valores fuera de rango lanzan ``ValueError``
+(fail-fast) al cargar o al construir un perfil.
+
 Perfiles disponibles (nombre canónico → uso):
     - DEFAULT: genérico.
     - GERMANY (alias DE): costes orientados a origen Alemania (legado).
@@ -14,13 +19,38 @@ Perfiles disponibles (nombre canónico → uso):
 Uso típico en el negocio DE→ES:
     analyzer.analyze(vehicle, profile_name="SPAIN")  # o "ES"
 
-Para añadir un país, crea un ImportCostProfile y regístralo en PROFILES.
+Para añadir un país, añade el perfil al archivo versionado
+``import_costs_data.json`` y añade el alias correspondiente si procede.
+
+Los valores son estimaciones de trabajo, no asesoramiento fiscal; deben
+contrastarse con gestoría/ITV/DGT/ISV según el caso.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Final
+import json
+import logging
+import os
+from dataclasses import dataclass
+from typing import Any, Final
+
+logger = logging.getLogger(__name__)
+
+# -----------------------------------------------------------------------------
+# Rangos razonables para validación (fail-fast al cargar perfiles)
+# -----------------------------------------------------------------------------
+
+FIXED_COST_MIN: Final[float] = 0.0
+FIXED_COST_MAX: Final[float] = 50000.0
+RATE_MIN: Final[float] = 0.0
+RATE_MAX: Final[float] = 0.5
+ROI_THRESHOLD_MAX: Final[float] = 1.0
+# Nota (desviación documentada de la tabla del task, que pedía `<= 1`): el perfil
+# DEFAULT legado usa risk_high_cost_ratio_threshold=2.0 porque los costes de
+# importación pueden superar el 100% del precio de compra en vehículos baratos.
+# Para no cambiar números legados, el límite superior se fija en 3.0 (sigue
+# rechazando valores absurdos).
+COST_RATIO_THRESHOLD_MAX: Final[float] = 3.0
 
 # =============================================================================
 # Perfil de costes por país
@@ -79,6 +109,92 @@ class ImportCostProfile:
 
     risk_low_cost_ratio_threshold: float
     """Ratio coste total / precio de compra por debajo del cual los costes son bajos."""
+
+    # -------------------------------------------------------------------------
+    # Validación de rangos (fail-fast al cargar perfiles)
+    # -------------------------------------------------------------------------
+
+    def __post_init__(self) -> None:
+        """Valida los rangos razonables al construir el perfil (fail-fast)."""
+        self.validate()
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> ImportCostProfile:
+        """Construye un perfil desde un dict (p. ej. cargado de JSON).
+
+        Raises:
+            ValueError: si falta algún campo o algún valor sale de rango.
+        """
+        keys = (
+            "transport_cost", "registration_cost", "inspection_cost",
+            "paperwork_cost", "miscellaneous_cost", "tax_rate",
+            "commission_rate", "repair_estimate_rate",
+            "risk_high_roi_threshold", "risk_low_roi_threshold",
+            "risk_high_profit_threshold", "risk_low_profit_threshold",
+            "risk_high_cost_ratio_threshold", "risk_low_cost_ratio_threshold",
+        )
+        try:
+            values = {key: float(data[key]) for key in keys}
+        except KeyError as exc:
+            raise ValueError(
+                f"ImportCostProfile incompleto: falta el campo {exc.args[0]!r}."
+            ) from exc
+        return cls(**values)
+
+    def validate(self) -> None:
+        """Comprueba que todos los valores están dentro de rangos razonables.
+
+        Raises:
+            ValueError: si algún valor queda fuera de rango.
+        """
+        errors: list[str] = []
+
+        for name in (
+            "transport_cost", "registration_cost", "inspection_cost",
+            "paperwork_cost", "miscellaneous_cost",
+        ):
+            value = getattr(self, name)
+            if not (FIXED_COST_MIN <= value <= FIXED_COST_MAX):
+                errors.append(
+                    f"{name}={value} fuera de "
+                    f"[{FIXED_COST_MIN}, {FIXED_COST_MAX}]"
+                )
+
+        for name in ("tax_rate", "commission_rate", "repair_estimate_rate"):
+            value = getattr(self, name)
+            if not (RATE_MIN <= value <= RATE_MAX):
+                errors.append(
+                    f"{name}={value} fuera de [{RATE_MIN}, {RATE_MAX}]"
+                )
+
+        low_roi = self.risk_low_roi_threshold
+        high_roi = self.risk_high_roi_threshold
+        if not (0.0 <= low_roi < high_roi <= ROI_THRESHOLD_MAX):
+            errors.append(
+                "ROI thresholds inválidos: se requiere "
+                f"0.0 <= low ({low_roi}) < high ({high_roi}) "
+                f"<= {ROI_THRESHOLD_MAX}"
+            )
+
+        low_profit = self.risk_low_profit_threshold
+        high_profit = self.risk_high_profit_threshold
+        if not (0.0 <= low_profit < high_profit):
+            errors.append(
+                "profit thresholds inválidos: se requiere "
+                f"0.0 <= low ({low_profit}) < high ({high_profit})"
+            )
+
+        low_ratio = self.risk_low_cost_ratio_threshold
+        high_ratio = self.risk_high_cost_ratio_threshold
+        if not (0.0 <= low_ratio < high_ratio <= COST_RATIO_THRESHOLD_MAX):
+            errors.append(
+                "cost_ratio thresholds inválidos: se requiere "
+                f"0.0 <= low ({low_ratio}) < high ({high_ratio}) "
+                f"<= {COST_RATIO_THRESHOLD_MAX}"
+            )
+
+        if errors:
+            raise ValueError("ImportCostProfile inválido: " + "; ".join(errors))
 
 
 # =============================================================================
@@ -184,10 +300,10 @@ PORTUGAL_PROFILE: Final[ImportCostProfile] = ImportCostProfile(
 )
 
 # =============================================================================
-# Registro de perfiles
+# Registro de perfiles (versión embebida = fallback)
 # =============================================================================
 
-PROFILES: Final[dict[str, ImportCostProfile]] = {
+_EMBEDDED_PROFILES: Final[dict[str, ImportCostProfile]] = {
     "DEFAULT": DEFAULT_PROFILE,
     "GERMANY": GERMANY_PROFILE,
     "FRANCE": FRANCE_PROFILE,
@@ -195,8 +311,8 @@ PROFILES: Final[dict[str, ImportCostProfile]] = {
     "PORTUGAL": PORTUGAL_PROFILE,
 }
 
-# Alias ISO / cortos → nombre canónico
-PROFILE_ALIASES: Final[dict[str, str]] = {
+# Alias ISO / cortos → nombre canónico (se amplían con los del archivo de datos)
+PROFILE_ALIASES: dict[str, str] = {
     "DE": "GERMANY",
     "FR": "FRANCE",
     "ES": "SPAIN",
@@ -205,6 +321,46 @@ PROFILE_ALIASES: Final[dict[str, str]] = {
     "SPA": "SPAIN",
     "POR": "PORTUGAL",
 }
+
+# =============================================================================
+# Carga desde archivo versionado (JSON) con fallback a defaults embebidos
+# =============================================================================
+
+_IMPORT_COSTS_DATA_FILE: Final[str] = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "import_costs_data.json"
+)
+
+FALLBACK_MESSAGE: Final[str] = (
+    "Perfiles de costes no encontrados; usando defaults embebidos."
+)
+
+
+def _load_profiles_from_file() -> tuple[dict[str, ImportCostProfile], dict[str, str]] | None:
+    """Carga los perfiles del archivo JSON versionado.
+
+    Returns:
+        (perfiles, aliases) si el archivo existe y es JSON válido; None si no existe.
+    """
+    if not os.path.isfile(_IMPORT_COSTS_DATA_FILE):
+        return None
+    with open(_IMPORT_COSTS_DATA_FILE, "r", encoding="utf-8") as fh:
+        data = json.load(fh)
+    profiles: dict[str, ImportCostProfile] = {}
+    for name, raw in (data.get("profiles") or {}).items():
+        profiles[name.upper()] = ImportCostProfile.from_dict(raw)
+    aliases: dict[str, str] = {}
+    for alias, canonical in (data.get("aliases") or {}).items():
+        aliases[alias.upper()] = canonical.upper()
+    return profiles, aliases
+
+
+_loaded_profiles = _load_profiles_from_file()
+if _loaded_profiles is not None:
+    PROFILES: dict[str, ImportCostProfile] = _loaded_profiles[0]
+    PROFILE_ALIASES.update(_loaded_profiles[1])
+else:
+    logger.warning("%s no encontrado → %s", _IMPORT_COSTS_DATA_FILE, FALLBACK_MESSAGE)
+    PROFILES = dict(_EMBEDDED_PROFILES)
 
 # =============================================================================
 # Costes adicionales opcionales (extensibles)

@@ -8,7 +8,7 @@ from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoin
 from starlette.responses import Response
 
 from app.core.config import settings
-from app.db.session import db_manager
+from app.database import db_manager
 from app.exceptions import AuthenticationError
 from app.models.user import User
 from app.repositories.api_key_repository import ApiKeyRepository

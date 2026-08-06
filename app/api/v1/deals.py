@@ -12,7 +12,7 @@ from app.api.v1.schemas.deal import (
     DealSimulationUpdate,
     DealUpdateStatus,
 )
-from app.db.session import get_db_session
+from app.database import get_db_session
 from app.dependencies.auth import get_current_user
 from app.models.deal import DealStatus
 from app.models.user import User

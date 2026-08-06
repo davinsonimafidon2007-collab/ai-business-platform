@@ -1,7 +1,8 @@
-"""Async Redis client for shared caching.
+"""Async Redis client for shared caching and distributed rate limiting.
 
-Fails soft: if Redis is unavailable, get/set become no-ops and the app
-continues using Postgres cache + live computation.
+Fails soft in development/test: if Redis is unavailable, get/set become no-ops
+and the app continues using in-memory fallbacks. In production the app refuses
+to start if Redis is unreachable.
 """
 
 from __future__ import annotations
@@ -33,8 +34,17 @@ async def init_redis() -> None:
         )
         await _client.ping()
         logger.info("Redis connected: %s", settings.redis_url)
-    except Exception:
-        logger.exception("Redis unavailable — cache L1 disabled")
+    except Exception as exc:
+        if settings.environment == "production":
+            raise RuntimeError(
+                "Redis is required in production but could not be reached: "
+                f"{exc}"
+            ) from exc
+        logger.warning(
+            "Redis unavailable (%s) — cache and rate-limit fall back to "
+            "in-memory mode",
+            exc,
+        )
         _client = None
 
 

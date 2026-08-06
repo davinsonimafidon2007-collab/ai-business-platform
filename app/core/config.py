@@ -32,6 +32,45 @@ class Settings(BaseSettings):
                 f"environment={self.environment!r}"
             )
         return self
+
+    @model_validator(mode="after")
+    def validate_cors_for_env(self) -> "Settings":
+        """Enforce strict CORS defaults for production (SEC-001).
+
+        In development/test the existing localhost/Capacitor defaults are kept
+        so local DX is not broken. In production:
+        - `cors_origins` must be a non-empty, explicit list (no ``*``).
+        - origins that look development-only (localhost / capacitor / ionic)
+          are rejected when the whole list is dev-only.
+        - a wildcard `cors_allow_headers` is hardened to an explicit list.
+        """
+        origins = [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+        if self.environment == "production":
+            if not origins:
+                raise ValueError(
+                    "CORS_ORIGINS must be set to explicit origins in production"
+                )
+            if "*" in origins:
+                raise ValueError("CORS_ORIGINS cannot include '*' in production")
+            dev_like = all(
+                o.startswith("http://localhost")
+                or o.startswith("https://localhost")
+                or o.startswith("capacitor://")
+                or o.startswith("ionic://")
+                for o in origins
+            )
+            if dev_like:
+                raise ValueError(
+                    "CORS_ORIGINS in production looks like development-only origins. "
+                    "Set real frontend HTTPS origins."
+                )
+            if self.cors_allow_headers.strip() == "*":
+                object.__setattr__(
+                    self,
+                    "cors_allow_headers",
+                    "Authorization,Content-Type,Accept,X-Request-ID,X-API-Key,X-Requested-With",
+                )
+        return self
     jwt_access_token_expire_minutes: int = 30
     jwt_refresh_token_expire_minutes: int = 60 * 24 * 7  # 7 días
     cors_origins: str = "http://localhost:3000,http://localhost:5173,http://localhost:8080,capacitor://localhost,ionic://localhost,http://localhost,https://localhost"
@@ -131,6 +170,9 @@ class Settings(BaseSettings):
     enable_coches_net_fixture: bool = False
     """Si True, registra provider coches_net_fixture (comparables ES offline)."""
 
+    enable_coches_net_html_fixture: bool = False
+    """Si True, registra provider coches_net_html_fixture (listados Coches.net offline desde HTML)."""
+
     # =========================================================================
     # OpenAI Vision provider
     # =========================================================================
@@ -227,6 +269,13 @@ class Settings(BaseSettings):
 
     firebase_credentials_path: str = ""
     """Path to Firebase service account credentials JSON file."""
+
+    firebase_required: bool = False
+    """If True in production, the app refuses to boot without Firebase credentials.
+
+    Read from env ``FIREBASE_REQUIRED`` (default ``false``). In development/test
+    Firebase stays optional regardless: missing credentials only log a warning.
+    """
 
     # =========================================================================
     # Upload directory for inspection photos

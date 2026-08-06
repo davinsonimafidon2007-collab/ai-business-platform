@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text, Uuid
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
+
+if TYPE_CHECKING:
+    from app.models.user import User
 
 
 class SearchHistory(Base):
@@ -47,6 +50,8 @@ class SearchHistory(Base):
 
     execution_time: Mapped[float | None] = mapped_column(Float, nullable=True)
     """Tiempo total de ejecución de la búsqueda en segundos."""
+
+    user: Mapped["User | None"] = relationship("User", back_populates="search_histories")
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)

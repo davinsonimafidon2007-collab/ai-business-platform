@@ -67,6 +67,9 @@ jobs:
         # Migraciones contra el service Postgres 16 (DB vacía). Debe correr antes de INT.1.
         run: uv run --no-sync alembic upgrade head
 
+      - name: Verify single Alembic head
+        run: uv run --no-sync python scripts/check_migrations.py
+
       - name: Unit tests
         run: uv run --no-sync python -m pytest tests/unit -q --tb=line
 

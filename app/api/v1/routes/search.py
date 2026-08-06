@@ -30,9 +30,24 @@ from app.api.v1.schemas.negotiation import (
     NegotiationResultSchema,
     NegotiationScriptSchema,
 )
+from app.services.cost_breakdown_labels import build_cost_lines
+from app.services.profit_coherence import build_coherence_warnings
+from app.services.recommendation_labels import recommendation_label_es, risk_label_es
 from app.services.search_engine import SearchEngineService
 
 router = APIRouter(tags=["Search"])
+
+
+def _provider_sources_from_me(me: Any) -> list[str]:
+    src = getattr(me, "provider_sources", None)
+    if src:
+        return list(src)
+    notes = getattr(me, "notes", None) or []
+    for n in notes:
+        if isinstance(n, str) and n.startswith("providers="):
+            raw = n.split("=", 1)[1].strip()
+            return [p for p in raw.split(",") if p]
+    return []
 
 
 def _build_search_result_item(result: Any) -> SearchResultItem:
@@ -82,6 +97,7 @@ def _build_search_result_item(result: Any) -> SearchResultItem:
             comparable_count=getattr(me, "comparable_count", 0) or 0,
             notes=notes,
             explanation=getattr(me, "explanation", "") or "",
+            provider_sources=_provider_sources_from_me(me),
         )
 
     # --- ProfitAnalysis ---
@@ -92,6 +108,7 @@ def _build_search_result_item(result: Any) -> SearchResultItem:
         cb = getattr(pa, "cost_breakdown", None)
         cost_breakdown_schema: CostBreakdownSchema | None = None
         if cb is not None:
+            cost_lines = build_cost_lines(cb)
             cost_breakdown_schema = CostBreakdownSchema(
                 purchase_price=getattr(cb, "purchase_price", 0.0) or 0.0,
                 transport_cost=getattr(cb, "transport_cost", 0.0) or 0.0,
@@ -104,6 +121,7 @@ def _build_search_result_item(result: Any) -> SearchResultItem:
                 total_fixed_costs=getattr(cb, "total_fixed_costs", 0.0) or 0.0,
                 total_variable_costs=getattr(cb, "total_variable_costs", 0.0) or 0.0,
                 total_cost=getattr(cb, "total_cost", 0.0) or 0.0,
+                cost_lines=cost_lines,
             )
 
         risk_level = getattr(pa, "risk_level", None)
@@ -113,6 +131,20 @@ def _build_search_result_item(result: Any) -> SearchResultItem:
         recommendation = getattr(pa, "recommendation", None)
         if recommendation is not None:
             recommendation = recommendation.value if hasattr(recommendation, "value") else str(recommendation)
+
+        # ROI.1 — Avisos de coherencia (no bloqueantes, solo señales)
+        market_price = None
+        if me is not None:
+            market_price = getattr(me, "market_price", None)
+        if market_price is not None and market_price <= 0:
+            market_price = None
+        coherence_warnings = build_coherence_warnings(
+            purchase_price=getattr(pa, "purchase_price", None),
+            total_cost=getattr(pa, "total_cost", None),
+            estimated_profit=getattr(pa, "net_profit", None),
+            roi=getattr(pa, "roi_percentage", None),
+            market_price=market_price,
+        )
 
         profit_analysis_schema = ProfitAnalysisSchema(
             purchase_price=getattr(pa, "purchase_price", 0.0) or 0.0,
@@ -130,7 +162,9 @@ def _build_search_result_item(result: Any) -> SearchResultItem:
             roi_percentage=getattr(pa, "roi_percentage", 0.0) or 0.0,
             profit_margin_percentage=getattr(pa, "profit_margin_percentage", 0.0) or 0.0,
             risk_level=risk_level or "UNKNOWN",
-            recommendation=recommendation or "UNKNOWN",
+            recommendation_label_es=recommendation_label_es(recommendation or "UNKNOWN"),
+            risk_label_es=risk_label_es(risk_level or "UNKNOWN"),
+            coherence_warnings=coherence_warnings,
             cost_breakdown=cost_breakdown_schema or CostBreakdownSchema(
                 purchase_price=0.0, transport_cost=0.0, registration_cost=0.0,
                 taxes=0.0, inspection_cost=0.0, repair_estimate=0.0,
@@ -155,10 +189,12 @@ def _build_search_result_item(result: Any) -> SearchResultItem:
             overall_score=getattr(opp, "overall_score", 0.0) or 0.0,
             opportunity_level=opp_level_str,
             recommendation=opp_rec_str,
+            recommendation_label_es=recommendation_label_es(opp_rec_str),
             estimated_profit=getattr(opp, "estimated_profit", 0.0) or 0.0,
             roi=getattr(opp, "roi", 0.0) or 0.0,
             market_confidence=getattr(opp, "market_confidence", 0.0) or 0.0,
             risk_level=getattr(opp, "risk_level", "UNKNOWN") or "UNKNOWN",
+            risk_label_es=risk_label_es(getattr(opp, "risk_level", None) or "UNKNOWN"),
             strengths=opp_strengths,
             weaknesses=opp_weaknesses,
         )

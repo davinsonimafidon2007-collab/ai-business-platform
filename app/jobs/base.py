@@ -15,7 +15,7 @@ from enum import Enum
 from typing import Any
 
 from app.core.config import settings as app_settings
-from app.database.manager import DatabaseManager
+from app.database import DatabaseManager
 
 
 # =============================================================================

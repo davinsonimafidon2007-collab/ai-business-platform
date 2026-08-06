@@ -42,6 +42,13 @@ class InspectionSessionRepository:
         result = await self.session.execute(
             select(InspectionSession)
             .where(InspectionSession.vehicle_id == str(vehicle_id))
+            .options(
+                selectinload(InspectionSession.observations).selectinload(
+                    InspectionObservation.photos
+                ),
+                selectinload(InspectionSession.user),
+                selectinload(InspectionSession.vehicle),
+            )
             .order_by(InspectionSession.created_at.desc())
         )
         return list(result.scalars().all())
@@ -52,6 +59,13 @@ class InspectionSessionRepository:
         """Lista todas las sesiones."""
         result = await self.session.execute(
             select(InspectionSession)
+            .options(
+                selectinload(InspectionSession.observations).selectinload(
+                    InspectionObservation.photos
+                ),
+                selectinload(InspectionSession.user),
+                selectinload(InspectionSession.vehicle),
+            )
             .offset(skip)
             .limit(limit)
             .order_by(InspectionSession.created_at.desc())

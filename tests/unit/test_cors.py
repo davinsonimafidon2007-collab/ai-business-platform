@@ -5,9 +5,88 @@ from unittest.mock import patch
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 
 from app.core.config import Settings
 from app.main import app
+
+
+# ---------------------------------------------------------------------------
+# SEC-001 — Production CORS strictness (config validators)
+# ---------------------------------------------------------------------------
+
+_PROD_JWT = "prod-secret-that-is-at-least-32-characters-long"
+
+
+def test_cors_production_rejects_wildcard():
+    with patch.dict(
+        "os.environ",
+        {
+            "ENVIRONMENT": "production",
+            "JWT_SECRET_KEY": _PROD_JWT,
+            "CORS_ORIGINS": "*",
+        },
+    ):
+        with pytest.raises(ValidationError, match="\\*|CORS"):
+            Settings()
+
+
+def test_cors_production_rejects_empty():
+    with patch.dict(
+        "os.environ",
+        {
+            "ENVIRONMENT": "production",
+            "JWT_SECRET_KEY": _PROD_JWT,
+            "CORS_ORIGINS": "",
+        },
+    ):
+        with pytest.raises(ValidationError, match="CORS_ORIGINS"):
+            Settings()
+
+
+def test_cors_production_rejects_dev_only_origins():
+    with patch.dict(
+        "os.environ",
+        {
+            "ENVIRONMENT": "production",
+            "JWT_SECRET_KEY": _PROD_JWT,
+            "CORS_ORIGINS": "http://localhost:3000,capacitor://localhost",
+        },
+    ):
+        with pytest.raises(ValidationError, match="development-only"):
+            Settings()
+
+
+def test_cors_production_hardens_wildcard_headers():
+    with patch.dict(
+        "os.environ",
+        {
+            "ENVIRONMENT": "production",
+            "JWT_SECRET_KEY": _PROD_JWT,
+            "CORS_ORIGINS": "https://app.example.com",
+            "CORS_ALLOW_HEADERS": "*",
+        },
+    ):
+        settings = Settings()
+        assert "*" not in settings.cors_headers_list
+        assert "Authorization" in settings.cors_headers_list
+        assert "X-API-Key" in settings.cors_headers_list
+
+
+def test_cors_production_allows_explicit_origins():
+    with patch.dict(
+        "os.environ",
+        {
+            "ENVIRONMENT": "production",
+            "JWT_SECRET_KEY": _PROD_JWT,
+            "CORS_ORIGINS": "https://app.example.com,https://admin.example.com",
+        },
+    ):
+        settings = Settings()
+        assert settings.cors_origins_list == [
+            "https://app.example.com",
+            "https://admin.example.com",
+        ]
 
 
 def test_cors_headers_present():

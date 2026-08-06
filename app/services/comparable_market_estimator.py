@@ -499,13 +499,19 @@ class ComparableMarketEstimator:
             discarded_ratio=discarded_ratio,
         )
         estimation = MarketEstimation(
-            market_price=round(market_price, 2), confidence=confidence,
-            supply_level=50.0, demand_level=50.0, market_trend="stable",
+            market_price=round(market_price, 2),
+            confidence=confidence,
+            supply_level=50.0,
+            demand_level=50.0,
+            market_trend="stable",
             comparable_count=stats.count,
             notes=[
-                f"mean={stats.mean:.0f}", f"median={stats.median:.0f}",
-                f"std_dev={stats.std_dev:.0f}", f"q1={stats.q1:.0f}",
-                f"q3={stats.q3:.0f}", f"cv={stats.coefficient_of_variation:.3f}",
+                f"mean={stats.mean:.0f}",
+                f"median={stats.median:.0f}",
+                f"std_dev={stats.std_dev:.0f}",
+                f"q1={stats.q1:.0f}",
+                f"q3={stats.q3:.0f}",
+                f"cv={stats.coefficient_of_variation:.3f}",
                 f"percentile={stats.percentile_position:.1f}%",
                 f"weighted_mean={stats.weighted_mean:.0f}",
                 f"discarded_ratio={discarded_ratio:.2f}",
@@ -513,6 +519,7 @@ class ComparableMarketEstimator:
                 f"pricing={price_detection}",
             ],
             explanation=explanation,
+            provider_sources=tuple(sorted(provider_sources)),
         )
         self._local_cache[market_hash] = estimation
         await self._save_to_redis(market_hash=market_hash, estimation=estimation)
@@ -536,6 +543,7 @@ class ComparableMarketEstimator:
             "comparable_count": estimation.comparable_count,
             "notes": estimation.notes,
             "explanation": estimation.explanation,
+            "provider_sources": list(estimation.provider_sources),
         }
         try:
             await cache_set(market_cache_key(market_hash), json.dumps(payload, ensure_ascii=False), int(self._cache_ttl.total_seconds()))
@@ -684,6 +692,11 @@ class ComparableMarketEstimator:
                 notes = json.loads(notes)
             except (json.JSONDecodeError, TypeError):
                 notes = [notes]
+        provider_sources = payload.get("provider_sources") or []
+        if isinstance(provider_sources, list):
+            provider_sources = tuple(str(p) for p in provider_sources if p)
+        else:
+            provider_sources = ()
         return MarketEstimation(
             market_price=float(payload.get("market_price", 0.0) or 0.0),
             confidence=float(payload.get("confidence", 0.0) or 0.0),
@@ -693,16 +706,22 @@ class ComparableMarketEstimator:
             comparable_count=int(payload.get("comparable_count", 0) or 0),
             notes=[str(item) for item in notes],
             explanation=str(payload.get("explanation") or ""),
+            provider_sources=provider_sources,
         )
 
     @staticmethod
     def _from_cached(cached: CachedMarketData) -> MarketEstimation:
         notes: list[str] = []
+        provider_sources: tuple[str, ...] = ()
         if cached.notes:
             try:
                 notes = json.loads(cached.notes)
             except (json.JSONDecodeError, TypeError):
                 notes = [cached.notes] if cached.notes else []
+            for n in notes:
+                if isinstance(n, str) and n.startswith("providers="):
+                    raw = n.split("=", 1)[1].strip()
+                    provider_sources = tuple(p for p in raw.split(",") if p)
         return MarketEstimation(
             market_price=cached.market_price or 0.0,
             confidence=cached.confidence or 0.0,
@@ -712,6 +731,7 @@ class ComparableMarketEstimator:
             comparable_count=cached.comparable_count or 0,
             notes=notes,
             explanation=cached.explanation or "",
+            provider_sources=provider_sources,
         )
 
     @staticmethod

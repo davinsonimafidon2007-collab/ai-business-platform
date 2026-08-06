@@ -1,10 +1,7 @@
 """DatabaseManager — Thin wrapper around SQLAlchemy async session infrastructure.
 
-Reuses the existing engine/sessionmaker patterns from app/db/session.py
-while adding lifecycle management (init, shutdown) for testability.
-
-The manager is designed to work with any async SQLAlchemy-compatible driver
-(aiosqlite for development/testing, asyncpg for production).
+Provides lifecycle management (init, shutdown) for testability while keeping
+a single engine + session factory as the canonical database layer.
 """
 
 from __future__ import annotations

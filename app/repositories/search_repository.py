@@ -4,7 +4,9 @@ from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
+from app.core.limits import clamp_limit
 from app.models.search import Search
 
 
@@ -23,13 +25,22 @@ class SearchRepository:
         return result.scalar_one_or_none()
 
     async def list_all(self, skip: int = 0, limit: int = 100) -> list[Search]:
-        result = await self.session.execute(select(Search).order_by(Search.created_at.desc()).offset(skip).limit(limit))
+        limit = clamp_limit(limit)
+        result = await self.session.execute(
+            select(Search)
+            .options(selectinload(Search.user))
+            .order_by(Search.created_at.desc())
+            .offset(skip)
+            .limit(limit)
+        )
         return list(result.scalars().all())
 
     async def list_by_user(self, user_id: str, skip: int = 0, limit: int = 100) -> list[Search]:
+        limit = clamp_limit(limit)
         result = await self.session.execute(
             select(Search)
             .where(Search.user_id == str(user_id))
+            .options(selectinload(Search.user))
             .order_by(Search.created_at.desc())
             .offset(skip)
             .limit(limit)

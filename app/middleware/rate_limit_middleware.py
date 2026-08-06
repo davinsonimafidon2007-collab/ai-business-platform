@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import time
 from collections import defaultdict
 from typing import Any
@@ -12,6 +13,37 @@ from starlette.responses import Response
 from app.core.config import settings
 from app.core.redis import get_redis, rate_limit_hit
 from app.models.role import Role
+
+logger = logging.getLogger(__name__)
+
+# Header that tells clients which backend enforced the current limits.
+RATE_LIMIT_MODE_HEADER = "X-RateLimit-Mode"
+
+# Rate-limit the production fallback ERROR log so it does not flood the logs
+# when Redis is down for a long stretch (criterion: at most ~1 log / 10 s).
+_RATE_LIMIT_FALLBACK_MIN_INTERVAL = 10.0
+
+
+class _TinyRateThrottle:
+    """Per-process log throttle (simple, no external dependency)."""
+
+    def __init__(self, interval: float) -> None:
+        self.interval = interval
+        self._last: float = 0.0
+
+    def ready(self) -> bool:
+        now = time.monotonic()
+        if now - self._last >= self.interval:
+            self._last = now
+            return True
+        return False
+
+    def reset(self) -> None:
+        """Clear the throttle state (used by tests)."""
+        self._last = 0.0
+
+
+_FALLBACK_LOG_THROTTLE = _TinyRateThrottle(_RATE_LIMIT_FALLBACK_MIN_INTERVAL)
 
 # ── Rate limit configuration per role ──────────────────────────────────────
 ROLE_RATE_LIMITS: dict[Role, int] = {
@@ -55,6 +87,8 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     ) -> None:
         super().__init__(app)
         self.window_seconds = window_seconds
+        # Backend currently in use: "redis" (distributed) or "memory" (fail-soft).
+        self._mode: str = "memory"
         # Stores: {key_type: {identifier: RateLimitEntry}}
         self._ip_limits: dict[str, RateLimitEntry] = defaultdict(RateLimitEntry)
         self._user_limits: dict[str, RateLimitEntry] = defaultdict(RateLimitEntry)
@@ -130,7 +164,24 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             ):
                 return self._too_many(self.window_seconds)
 
-        return await call_next(request)
+        response = await call_next(request)
+        response.headers[RATE_LIMIT_MODE_HEADER] = self._mode
+        return response
+
+    def _log_fallback(self) -> None:
+        """Explicitly surface a Redis→memory rate-limit degradation.
+
+        In production this is an ERROR (visible, not silent) but throttled to
+        at most ~1 log / 10 s per process to avoid log flooding. In dev/test we
+        keep a debug-level line so the behaviour is still visible.
+        """
+        if settings.environment == "production" and _FALLBACK_LOG_THROTTLE.ready():
+            logger.error(
+                "Redis unavailable — rate limiting degraded to in-memory mode "
+                "(non-distributed, single-process only). Investigate Redis ASAP."
+            )
+        elif settings.environment != "production":
+            logger.debug("Redis unavailable — using in-memory rate-limit fallback")
 
     async def _allow(
         self,
@@ -145,10 +196,15 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         if get_redis() is not None:
             try:
                 allowed, _retry = await rate_limit_hit(redis_key, limit, window)
+                self._mode = "redis"
                 return allowed
             except Exception:
-                # Fallback a memoria local (fail-soft)
-                pass
+                # Fallback a memoria local (fail-soft) — log visible in prod.
+                self._mode = "memory"
+                self._log_fallback()
+        else:
+            self._mode = "memory"
+            self._log_fallback()
         return self._check_limit_local(local_bucket, local_key, limit)
 
     def _check_limit_local(
@@ -178,8 +234,12 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         return True
 
     def _too_many(self, window: int) -> JSONResponse:
-        return JSONResponse(
+        response = JSONResponse(
             status_code=429,
             content={"detail": "Too many requests. Please try again later."},
-            headers={"Retry-After": str(window)},
+            headers={
+                "Retry-After": str(window),
+                RATE_LIMIT_MODE_HEADER: self._mode,
+            },
         )
+        return response

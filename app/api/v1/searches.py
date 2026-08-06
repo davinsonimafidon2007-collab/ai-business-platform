@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.session import get_db_session
+from app.database import get_db_session
 from app.dependencies.auth import get_current_user
 from app.models.user import User
 from app.repositories.search_repository import SearchRepository
@@ -40,7 +40,7 @@ async def create_search(
 @router.get("", response_model=list[SearchRead])
 async def list_searches(
     skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=1000),
+    limit: int = Query(100, ge=1, le=100),
     service: SearchService = Depends(get_search_service),
     current_user: User = Depends(get_current_user),
 ) -> list[SearchRead]:

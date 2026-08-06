@@ -125,6 +125,25 @@ class ProviderRegistry:
         cls.register(CochesNetFixtureProvider())
 
     @classmethod
+    def ensure_coches_net_html_fixture(cls, enabled: bool | None = None) -> None:
+        """Registra coches_net_html_fixture si enabled y aún no está.
+
+        Idempotente. ``enabled=None`` → lee settings.enable_coches_net_html_fixture.
+        No se auto-registra por perfil SPAIN/ES (solo flag explícito).
+        """
+        if enabled is None:
+            from app.core.config import settings
+
+            enabled = bool(getattr(settings, "enable_coches_net_html_fixture", False))
+        if not enabled:
+            return
+        if "coches_net_html_fixture" in cls._providers:
+            return
+        from app.providers.coches_net_html import CochesNetHtmlFixtureProvider
+
+        cls.register(CochesNetHtmlFixtureProvider())
+
+    @classmethod
     def ensure_default_providers(cls) -> None:
         """Registra los providers de búsqueda/comparables usados en runtime.
 
@@ -196,3 +215,4 @@ class ProviderRegistry:
         # Auto-registra fixtures ES offline según flag o perfil SPAIN/ES.
         cls.ensure_es_market_fixture()
         cls.ensure_coches_net_fixture()
+        cls.ensure_coches_net_html_fixture()

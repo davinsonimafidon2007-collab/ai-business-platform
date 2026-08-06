@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
@@ -6,6 +8,22 @@ from sqlalchemy.orm import sessionmaker
 from app.models.base import Base
 from app.models.user import User
 from app.repositories.user_repository import UserRepository
+
+
+def _aiosqlite_available() -> bool:
+    try:
+        import aiosqlite  # noqa: F401
+        return True
+    except ImportError:
+        return False
+
+
+requires_aiosqlite = pytest.mark.skipif(
+    not _aiosqlite_available(),
+    reason="aiosqlite/_sqlite3 not importable on this host (e.g. Windows AppLocker)",
+)
+
+pytestmark = requires_aiosqlite
 
 
 @pytest_asyncio.fixture

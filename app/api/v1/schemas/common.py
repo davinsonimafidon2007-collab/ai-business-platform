@@ -50,11 +50,23 @@ class MarketEstimationSchema(BaseModel):
         "",
         description="Texto legible (ES) del diferencial de precio vs comparables (MKT.1/MKT.2)",
     )
+    provider_sources: list[str] = Field(
+        default_factory=list,
+        description="Providers que aportaron comparables (ej. mobile_de, es_market_fixture)",
+    )
 
 
 # =============================================================================
 # CostBreakdown
 # =============================================================================
+
+
+class CostLineSchema(BaseModel):
+    """Línea individual del desglose de costes."""
+
+    key: str = Field(..., description="Clave interna de la partida")
+    label_es: str = Field(..., description="Etiqueta legible en español")
+    amount: float = Field(..., description="Importe (EUR)")
 
 
 class CostBreakdownSchema(BaseModel):
@@ -71,6 +83,10 @@ class CostBreakdownSchema(BaseModel):
     total_fixed_costs: float = Field(0.0, description="Total costes fijos (EUR)")
     total_variable_costs: float = Field(0.0, description="Total costes variables (EUR)")
     total_cost: float = Field(..., description="Coste total (EUR)")
+    cost_lines: list[CostLineSchema] = Field(
+        default_factory=list,
+        description="Desglose legible ES (PROFIT.1)",
+    )
 
 
 # =============================================================================
@@ -97,6 +113,18 @@ class ProfitAnalysisSchema(BaseModel):
     profit_margin_percentage: float = Field(..., description="Margen de beneficio (%)")
     risk_level: str = Field(..., description="Nivel de riesgo (LOW, MEDIUM, HIGH)")
     recommendation: str = Field(..., description="Recomendación (BUY, CONSIDER, REJECT)")
+    recommendation_label_es: str = Field(
+        default="",
+        description="Etiqueta legible en español de la recomendación (REC.1)",
+    )
+    risk_label_es: str = Field(
+        default="",
+        description="Etiqueta legible en español del nivel de riesgo (REC.1)",
+    )
+    coherence_warnings: list[str] = Field(
+        default_factory=list,
+        description="Avisos de coherencia ES (ROI.1); no bloquean la respuesta",
+    )
     cost_breakdown: CostBreakdownSchema = Field(..., description="Desglose detallado")
 
 
@@ -123,6 +151,15 @@ class OpportunityAnalysisSchema(BaseModel):
         ..., description="Confianza de mercado 0-100", ge=0, le=100
     )
     risk_level: str = Field(..., description="Nivel de riesgo")
+    recommendation_label_es: str = Field(
+        default="",
+        description="Etiqueta legible en español de la recomendación (REC.1)",
+    )
+    risk_label_es: str = Field(
+        default="",
+        description="Etiqueta legible en español del nivel de riesgo (REC.1)",
+    )
     strengths: list[str] = Field(default_factory=list, description="Fortalezas")
+
     weaknesses: list[str] = Field(default_factory=list, description="Debilidades")
 

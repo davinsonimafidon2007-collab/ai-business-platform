@@ -71,3 +71,57 @@ def test_build_search_result_item_maps_explanation() -> None:
     assert item.market_estimation is not None
     assert "por debajo" in item.market_estimation.explanation.lower()
     assert item.market_estimation.notes[0] == "pricing=underpriced"
+
+
+def test_schema_provider_sources() -> None:
+    s = MarketEstimationSchema(
+        market_price=1.0,
+        confidence=50.0,
+        provider_sources=["mobile_de", "es_market_fixture"],
+    )
+    assert "es_market_fixture" in s.provider_sources
+
+
+def test_mapper_parses_providers_note() -> None:
+    me = SimpleNamespace(
+        market_price=9000.0,
+        confidence=60.0,
+        supply_level=50.0,
+        demand_level=50.0,
+        market_trend="stable",
+        comparable_count=3,
+        notes=["mean=9000", "providers=mobile_de,es_market_fixture", "pricing=fair"],
+        explanation="texto",
+    )
+    vehicle = SimpleNamespace(
+        external_id="x1",
+        source="autoscout24",
+        brand="BMW",
+        model="320d",
+        year=2019,
+        mileage=120000,
+        price=8500.0,
+        fuel_type="Diesel",
+        transmission="Manual",
+        location="Berlin",
+        url="https://example.com/1",
+        images=[],
+        description=None,
+        title="BMW 320d",
+        power_hp=None,
+        color=None,
+        first_registration=None,
+        sellers=None,
+        seller_type=None,
+    )
+    result = SimpleNamespace(
+        vehicle=vehicle,
+        vehicle_score=None,
+        market_estimation=me,
+        profit_analysis=None,
+        opportunity=None,
+        negotiation=None,
+    )
+    item = _build_search_result_item(result)
+    assert item.market_estimation is not None
+    assert item.market_estimation.provider_sources == ["mobile_de", "es_market_fixture"]

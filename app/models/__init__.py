@@ -1,6 +1,12 @@
+from app.models.api_key import ApiKey
 from app.models.base import Base
 from app.models.cached_market import CachedMarketData
 from app.models.deal import Deal, DealStatus
+from app.models.inspection import (
+    InspectionObservation,
+    InspectionPhoto,
+    InspectionSession,
+)
 from app.models.negotiation import (
     DefectItem,
     InspectionResult,
@@ -30,12 +36,16 @@ from app.models.vision import (
 )
 
 __all__ = [
+    "ApiKey",
     "Base",
     "CachedMarketData",
     "Deal",
     "DealStatus",
     "DefectItem",
+    "InspectionObservation",
+    "InspectionPhoto",
     "InspectionResult",
+    "InspectionSession",
     "NegotiationArgument",
     "NegotiationInput",
     "NegotiationRecommendation",

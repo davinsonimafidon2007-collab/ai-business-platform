@@ -52,3 +52,6 @@ class MarketEstimation:
 
     explanation: str = ""
     """Texto legible (ES) del diferencial de precio vs comparables."""
+
+    provider_sources: tuple[str, ...] = ()
+    """Proveedores que aportaron comparables (ordenado, sin duplicados)."""

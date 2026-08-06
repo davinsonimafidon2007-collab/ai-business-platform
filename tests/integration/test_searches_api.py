@@ -6,7 +6,7 @@ import pytest
 
 from app.dependencies.auth import get_current_user
 from app.main import app
-from app.db.session import get_db_session
+from app.database import get_db_session
 from app.models.base import Base
 from app.models.user import User
 

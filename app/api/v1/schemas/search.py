@@ -139,6 +139,14 @@ class SearchResultItem(BaseModel):
     opportunity: OpportunityAnalysisSchema | None = Field(
         None, description="Análisis de oportunidad"
     )
+    recommendation_label_es: str = Field(
+        default="",
+        description="Etiqueta legible en español de la recomendación (REC.1)",
+    )
+    risk_label_es: str = Field(
+        default="",
+        description="Etiqueta legible en español del nivel de riesgo (REC.1)",
+    )
     negotiation: NegotiationResultSchema | None = Field(
         None, description="Estrategia de negociación"
     )

@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text, Uuid
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
+
+if TYPE_CHECKING:
+    from app.models.deal import Deal
+    from app.models.vehicle import Vehicle
 
 
 class Opportunity(Base):
@@ -60,6 +64,12 @@ class Opportunity(Base):
         String(20), nullable=True
     )
     """Versión del motor de análisis que generó esta oportunidad (opcional)."""
+
+    vehicle: Mapped["Vehicle"] = relationship("Vehicle", back_populates="opportunities")
+    deals: Mapped[list["Deal"]] = relationship(
+        "Deal",
+        back_populates="opportunity",
+    )
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)

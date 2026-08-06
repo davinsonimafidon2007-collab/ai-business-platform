@@ -19,7 +19,7 @@ from fastapi import APIRouter, Depends, Request
 
 from app.core.config import settings
 from app.core.redis import get_redis
-from app.db.session import db_manager
+from app.database import db_manager
 from app.dependencies.auth import require_admin
 from app.jobs.base import JobContext
 from app.jobs.canary_state import get_last_canary_result

@@ -13,6 +13,7 @@ services:
     environment:
       PYTHONUNBUFFERED: "1"
       DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/ai_business_platform
+      REDIS_URL: redis://redis:6379/0
       JWT_SECRET_KEY: "${JWT_SECRET_KEY}"
       ENVIRONMENT: "${ENVIRONMENT:-development}"
       APP_URL: "${APP_URL:-http://localhost:3000}"
@@ -20,6 +21,8 @@ services:
       FIREBASE_CREDENTIALS_JSON: "${FIREBASE_CREDENTIALS_JSON}"
     depends_on:
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
@@ -46,7 +49,23 @@ services:
       retries: 10
     restart: unless-stopped
 
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
 volumes:
   postgres_data:
     name: ai_platform_postgres_data
+  redis_data:
+    name: ai_platform_redis_data
 

@@ -105,6 +105,8 @@ def test_settings_case_insensitive():
             "environment": "production",
             "database_url": "postgresql+asyncpg://test:test@localhost:5432/test",
             "jwt_secret_key": "test-secret-that-is-at-least-32-characters-long",
+            # production exige CORS_ORIGINS explícito y real (SEC-001)
+            "cors_origins": "https://app.example.com",
         },
     ):
         settings = Settings()

@@ -24,3 +24,16 @@ def test_settings_read_environment_variables(monkeypatch) -> None:
     assert settings.app_name == "Test API"
     assert settings.app_version == "1.2.3"
     assert settings.environment == "test"
+
+
+def test_firebase_required_defaults_to_false(monkeypatch) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "test")
+    settings = Settings()
+    assert settings.firebase_required is False
+
+
+def test_firebase_required_reads_from_env(monkeypatch) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "test")
+    monkeypatch.setenv("FIREBASE_REQUIRED", "true")
+    settings = Settings()
+    assert settings.firebase_required is True

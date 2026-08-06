@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from fastapi.testclient import TestClient
 
-from app.db.session import get_db_session
+from app.database import get_db_session
 from app.dependencies.auth import get_current_user
 from app.main import app
 from app.models.deal import Deal, DealStatus

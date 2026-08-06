@@ -19,8 +19,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Protocol
-
+from typing import Any, ClassVar, Final, Protocol
 
 # =============================================================================
 # Enumeraciones de salida
@@ -92,6 +91,41 @@ class CostBreakdown:
     total_cost: float = 0.0
     """Coste total de la importación (purchase_price + fixed + variable)."""
 
+    # ------------------------------------------------------------------
+    # Explicación por componente (labels legibles, domain en español)
+    # ------------------------------------------------------------------
+    # (key dentro del dataclass, label mostrable, agrupación fija/variable)
+    _COMPONENTS: ClassVar[tuple[tuple[str, str, str], ...]] = (
+        ("purchase_price", "Precio de compra", "fijo"),
+        ("transport_cost", "Transporte", "fixed"),
+        ("registration_cost", "Matriculación", "fixed"),
+        ("inspection_cost", "ITV / inspección", "fixed"),
+        ("miscellaneous_cost", "Gestoría + otros", "fixed"),
+        ("taxes", "Impuestos (sobre compra)", "variable"),
+        ("commission_cost", "Comisión", "variable"),
+        ("repair_estimate", "Reparaciones estimadas", "variable"),
+    )
+
+    def components(self) -> list[dict[str, Any]]:
+        """Devuelve cada componente con clave, label legible, agrupación y
+        amount (EUR). Cada elemento es dict con ``key``, ``label``, ``kind``
+        (``fixed``/``variable``/``fijo``) y ``amount``. Útil para exponer el
+        breakdown en APIs/front sin duplicar nombres técnicos.
+        """
+        return [
+            {
+                "key": key,
+                "label": label,
+                "kind": kind,
+                "amount": float(getattr(self, key)),
+            }
+            for key, label, kind in self._COMPONENTS
+        ]
+
+    def as_dict(self) -> dict[str, Any]:
+        """Serialización plana del breakdown (claves = nombres de campo)."""
+        return {name: getattr(self, name) for name in self.__dataclass_fields__}
+
 
 @dataclass
 class ProfitAnalysis:
@@ -134,6 +168,7 @@ class ProfitAnalysis:
     risk_level: RiskLevel
     recommendation: Recommendation
     cost_breakdown: CostBreakdown = field(repr=False)
+    warnings: list[str] = field(default_factory=list, repr=False)
 
 
 # =============================================================================
@@ -281,6 +316,11 @@ class ProfitAnalyzer:
             profile=profile,
         )
 
+        # --- Avisos (no errores) sobre el análisis ---
+        warnings = self._compute_warnings(
+            breakdown=breakdown, purchase_price=purchase_price
+        )
+
         return ProfitAnalysis(
             purchase_price=purchase_price,
             transport_cost=breakdown.transport_cost,
@@ -299,6 +339,7 @@ class ProfitAnalyzer:
             risk_level=risk_level,
             recommendation=recommendation,
             cost_breakdown=breakdown,
+            warnings=warnings,
         )
 
     # ------------------------------------------------------------------
@@ -437,3 +478,28 @@ class ProfitAnalyzer:
 
         # Caso intermedio → considerar
         return Recommendation.CONSIDER
+
+    # ------------------------------------------------------------------
+    # Avisos (warnings) — enriquecen el breakdown sin ser errores
+    # ------------------------------------------------------------------
+
+    _COST_DISCLAIMER: Final[str] = (
+        "Los valores del perfil son estimaciones de trabajo, no asesoramiento "
+        "fiscal; contrastar con gestoría, ITV, DGT/ISV según el caso."
+    )
+
+    @staticmethod
+    def _compute_warnings(breakdown: CostBreakdown, purchase_price: float) -> list[str]:
+        """Genera avisos (no errores) sobre el análisis económico.
+
+        Incluye un disclaimer de estimación y avisos ante costes anómalos
+        (p. ej. importación que supera el 50% del precio de compra).
+        """
+        warnings: list[str] = [ProfitAnalyzer._COST_DISCLAIMER]
+        import_costs = breakdown.total_cost - purchase_price
+        if import_costs > 0.5 * purchase_price:
+            warnings.append(
+                "Los costes de importación superan el 50% del precio de compra; "
+                "revisa el perfil de costes."
+            )
+        return warnings

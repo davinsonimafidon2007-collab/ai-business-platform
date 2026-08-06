@@ -2,7 +2,7 @@ import asyncio
 
 from sqlalchemy import text
 
-from app.db.session import db_manager
+from app.database import db_manager
 
 
 def test_database_connection() -> None:

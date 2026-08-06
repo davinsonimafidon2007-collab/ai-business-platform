@@ -12,7 +12,7 @@ from fastapi import Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.db.session import get_db_session
+from app.database import get_db_session
 from app.providers.autoscout24 import AutoScout24Provider
 from app.providers.base import VehicleProvider
 from app.providers.http_client import ProviderHttpClient

@@ -4,7 +4,9 @@ from uuid import UUID
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
+from app.core.limits import clamp_limit
 from app.models.deal import Deal, DealStatus
 
 
@@ -91,6 +93,7 @@ class DealRepository:
         Returns:
             A tuple of (list of Deal, total count).
         """
+        limit = clamp_limit(limit)
         base_query = select(Deal).where(Deal.user_id == str(user_id))
 
         if opportunity_id is not None:
@@ -109,7 +112,11 @@ class DealRepository:
         total = total_result.scalar() or 0
 
         items_query = (
-            base_query.order_by(Deal.created_at.desc())
+            base_query.options(
+                selectinload(Deal.vehicle),
+                selectinload(Deal.opportunity),
+            )
+            .order_by(Deal.created_at.desc())
             .offset(offset)
             .limit(limit)
         )

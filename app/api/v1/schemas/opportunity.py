@@ -31,6 +31,8 @@ class OpportunityRead(BaseModel):
     roi_percentage: float | None = None
     recommendation: str | None = None
     risk_level: str | None = None
+    recommendation_label_es: str = ""
+    risk_label_es: str = ""
     created_at: datetime | None = None
     updated_at: datetime | None = None
 

@@ -1,13 +1,20 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text, Uuid
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
+
+if TYPE_CHECKING:
+    from app.models.deal import Deal
+    from app.models.inspection import InspectionSession
+    from app.models.opportunity import Opportunity
+    from app.models.user import User
+    from app.models.vehicle_evaluation import VehicleEvaluation
 
 
 class Vehicle(Base):
@@ -51,6 +58,30 @@ class Vehicle(Base):
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
         nullable=False,
+    )
+
+    user: Mapped["User"] = relationship("User", back_populates="vehicles")
+    evaluations: Mapped[list["VehicleEvaluation"]] = relationship(
+        "VehicleEvaluation",
+        back_populates="vehicle",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+    opportunities: Mapped[list["Opportunity"]] = relationship(
+        "Opportunity",
+        back_populates="vehicle",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+    deals: Mapped[list["Deal"]] = relationship(
+        "Deal",
+        back_populates="vehicle",
+    )
+    inspection_sessions: Mapped[list["InspectionSession"]] = relationship(
+        "InspectionSession",
+        back_populates="vehicle",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
     )
 
     def __init__(self, **kwargs: Any) -> None:

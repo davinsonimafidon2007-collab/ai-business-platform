@@ -944,3 +944,118 @@ def test_analyze_with_spain_profile_determinism() -> None:
     assert a.total_cost == b.total_cost
     assert a.net_profit == b.net_profit
 
+
+# =============================================================================
+# Task ECON-001: regresión de breakdown/ROI (snapshots numéricos)
+# =============================================================================
+
+
+def test_regression_spain_10k_breakdown_snapshot() -> None:
+    """Perfil SPAIN, compra 10.000, venta estimada 14.000.
+
+    Cifras esperadas (fijadas del modelo actual):
+        fijos = 1200 + 450 + 90 + 280 + 200 = 2220
+        variables = 1000 (IVA 10%) + 400 (comisión 4%) + 300 (reparación 3%) = 1700
+        total = 10000 + 2220 + 1700 = 13920
+        net_profit = 14000 - 13920 = 80
+        roi = 80 / 13920 * 100 ≈ 0.57
+    """
+    analyzer = ProfitAnalyzer()
+    a = analyzer.analyze(
+        VehicleStub(price=10000.0), profile_name="SPAIN", estimated_sale_price=14000.0
+    )
+    b = a.cost_breakdown
+
+    assert b.transport_cost == 1200.0
+    assert b.registration_cost == 450.0
+    assert b.inspection_cost == 90.0
+    assert b.taxes == pytest.approx(1000.0)
+    assert b.commission_cost == pytest.approx(400.0)
+    assert b.repair_estimate == pytest.approx(300.0)
+    # miscellaneous = base 200 + gestoría/paperwork 280 = 480
+    assert b.miscellaneous_cost == pytest.approx(480.0)
+
+    assert b.total_fixed_costs == pytest.approx(2220.0)
+    assert b.total_variable_costs == pytest.approx(1700.0)
+    assert b.total_cost == pytest.approx(13920.0)
+
+    assert a.total_cost == pytest.approx(13920.0)
+    assert a.net_profit == pytest.approx(80.0, abs=0.01)
+    assert a.gross_profit == pytest.approx(4000.0)
+    assert a.roi_percentage == pytest.approx(80.0 / 13920.0 * 100.0, abs=0.01)
+    assert a.profit_margin_percentage == pytest.approx(80.0 / 14000.0 * 100.0, abs=0.01)
+
+    # El breakdown expone cada componente con nombre (no faltan campos).
+    assert all(
+        getattr(b, field) is not None
+        for field in (
+            "purchase_price", "transport_cost", "registration_cost", "taxes",
+            "inspection_cost", "repair_estimate", "commission_cost",
+            "miscellaneous_cost", "total_fixed_costs", "total_variable_costs",
+            "total_cost",
+        )
+    )
+
+
+def test_regression_portugal_distinct_from_spain() -> None:
+    """PORTUGAL usa transporte/matriculación distintos a SPAIN."""
+    analyzer = ProfitAnalyzer()
+    pt = analyzer.analyze(
+        VehicleStub(price=10000.0), profile_name="PORTUGAL", estimated_sale_price=15000.0
+    )
+    es = analyzer.analyze(
+        VehicleStub(price=10000.0), profile_name="SPAIN", estimated_sale_price=15000.0
+    )
+    assert pt.cost_breakdown.transport_cost == 1400.0
+    assert pt.cost_breakdown.transport_cost != es.cost_breakdown.transport_cost
+    assert pt.cost_breakdown.registration_cost == 550.0
+    assert pt.cost_breakdown.registration_cost != es.cost_breakdown.registration_cost
+    assert pt.cost_breakdown.taxes != es.cost_breakdown.taxes  # 12% vs 10%
+
+
+def test_regression_alias_es_equals_spain_breakdown() -> None:
+    """Alias ES produce el mismo breakdown que SPAIN."""
+    analyzer = ProfitAnalyzer()
+    es = analyzer.analyze(
+        VehicleStub(price=12000.0), profile_name="ES", estimated_sale_price=16000.0
+    )
+    sp = analyzer.analyze(
+        VehicleStub(price=12000.0), profile_name="SPAIN", estimated_sale_price=16000.0
+    )
+    assert es.cost_breakdown == sp.cost_breakdown
+    assert es.net_profit == sp.net_profit
+    assert es.roi_percentage == sp.roi_percentage
+
+
+def test_regression_negative_roi_is_valid() -> None:
+    """El ROI negativo es información válida (mala oportunidad), no se prohíbe."""
+    analyzer = ProfitAnalyzer()
+    a = analyzer.analyze(
+        VehicleStub(price=10000.0), profile_name="SPAIN", estimated_sale_price=11000.0
+    )
+    assert a.net_profit < 0
+    assert a.roi_percentage < 0
+    assert a.recommendation == Recommendation.REJECT
+
+
+def test_regression_warnings_default_and_high_cost() -> None:
+    """ProfitAnalysis trae warnings: disclaimer + aviso de costes altos."""
+    analyzer = ProfitAnalyzer()
+    normal = analyzer.analyze(
+        VehicleStub(price=20000.0), profile_name="SPAIN", estimated_sale_price=26000.0
+    )
+    assert ProfitAnalyzer._COST_DISCLAIMER in normal.warnings
+
+    # Vehículo barato: costes de importación > 50% del precio de compra
+    high = analyzer.analyze(
+        VehicleStub(price=5000.0), profile_name="SPAIN", estimated_sale_price=9000.0
+    )
+    assert any("superan el 50%" in w for w in high.warnings)
+
+
+def test_regression_zero_price_raises_controlled() -> None:
+    """Precio <= 0 → ValueError controlado (no crash opaco)."""
+    analyzer = ProfitAnalyzer()
+    with pytest.raises(ValueError, match="precio"):
+        analyzer.analyze(VehicleStub(price=0.0), profile_name="SPAIN")
+

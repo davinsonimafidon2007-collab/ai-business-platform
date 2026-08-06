@@ -5,6 +5,8 @@ No real Firebase credentials required: all paths are mocked.
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 
 from app.core import firebase as firebase_mod
@@ -159,3 +161,53 @@ async def test_verify_google_id_token_maps_expired(monkeypatch):
 
     with pytest.raises(ValueError, match="expired"):
         await firebase_mod.verify_google_id_token("old")
+
+
+# ---------------------------------------------------------------------------
+# SEC-001 — Production fail-fast when FIREBASE_REQUIRED=true
+# ---------------------------------------------------------------------------
+
+def _fake_prod_settings(*, required: bool) -> SimpleNamespace:
+    return SimpleNamespace(
+        environment="production",
+        firebase_required=required,
+        firebase_credentials_json="",
+        firebase_credentials_path="",
+    )
+
+
+def _clear_firebase_creds(monkeypatch) -> None:
+    monkeypatch.delenv("FIREBASE_CREDENTIALS_JSON", raising=False)
+    monkeypatch.delenv("FIREBASE_CREDENTIALS_PATH", raising=False)
+    monkeypatch.delenv("GOOGLE_APPLICATION_CREDENTIALS", raising=False)
+
+
+def test_get_firebase_app_fails_fast_prod_required_no_creds(monkeypatch):
+    """production + firebase_required=True without creds -> RuntimeError."""
+    monkeypatch.setattr(firebase_mod, "settings", _fake_prod_settings(required=True))
+    _clear_firebase_creds(monkeypatch)
+    with pytest.raises(RuntimeError, match="required"):
+        firebase_mod.get_firebase_app()
+
+
+def test_get_firebase_app_prod_not_required_returns_none(monkeypatch):
+    """production + firebase_required=False without creds -> None (no raise)."""
+    monkeypatch.setattr(firebase_mod, "settings", _fake_prod_settings(required=False))
+    _clear_firebase_creds(monkeypatch)
+    assert firebase_mod.get_firebase_app() is None
+
+
+def test_get_firebase_app_dev_not_required_returns_none(monkeypatch):
+    """development without creds -> None (warning), regardless of required."""
+    monkeypatch.setattr(
+        firebase_mod,
+        "settings",
+        SimpleNamespace(
+            environment="development",
+            firebase_required=True,  # must be ignored outside production
+            firebase_credentials_json="",
+            firebase_credentials_path="",
+        ),
+    )
+    _clear_firebase_creds(monkeypatch)
+    assert firebase_mod.get_firebase_app() is None
