@@ -45,10 +45,12 @@ Añadir portales ES = trabajo nuevo (provider + estimador + fixtures). No tratar
 > siguen **pendientes** → P.1b+.
 >
 > **P.1a-bis (2026-08-06):** `ProviderRegistry.ensure_default_providers()` registra
-> `mobile_de` y `autoscout24` siempre, y `es_market_fixture` solo si
-> `ENABLE_ES_MARKET_FIXTURE=true`. Se invoca en `get_market_estimator` y en
-> `scheduler_lifespan` (boot), así que `_search_comparables` siempre ve al menos
-> los providers DE en runtime.
+> `mobile_de` y `autoscout24` siempre. Con `DEFAULT_IMPORT_COST_PROFILE=SPAIN` se
+> auto-registran también `es_market_fixture` + `coches_net_fixture` sin flags
+> adicionales. `autoscout24_es` sigue requiriendo `ENABLE_AUTOSCOUT24_ES=true`.
+> Se invoca en `get_market_estimator` y en `scheduler_lifespan` (boot), así que
+> `_search_comparables` ve fuentes ES en runtime cuando el perfil destino es
+> SPAIN/ES.
 
 ---
 

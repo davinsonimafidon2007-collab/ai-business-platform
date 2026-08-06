@@ -233,6 +233,49 @@ export default function AdminStatusPage() {
             )}
           </div>
 
+          <div className="rounded-xl border border-secondary-200 bg-white p-5 dark:border-secondary-700 dark:bg-secondary-900">
+            <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-secondary-500">
+              Providers (comparables)
+            </h2>
+            <p className="text-sm text-secondary-700 dark:text-secondary-300">
+              Perfil importación:{" "}
+              <span className="font-medium text-secondary-900 dark:text-white">
+                {status.providers.default_import_cost_profile ?? "—"}
+              </span>
+            </p>
+            <ul className="mt-3 flex flex-wrap gap-2">
+              {(status.providers.providers ?? []).map((name) => (
+                <li
+                  key={name}
+                  className="rounded-full bg-secondary-100 px-3 py-1 text-xs font-medium text-secondary-800 dark:bg-secondary-700 dark:text-secondary-100"
+                >
+                  {name}
+                </li>
+              ))}
+            </ul>
+            {(status.providers.providers ?? []).length === 0 && (
+              <p className="mt-2 text-sm text-amber-600">
+                Ningún provider en registry
+              </p>
+            )}
+            <div className="mt-3 grid grid-cols-1 gap-1 text-xs text-secondary-600 dark:text-secondary-400 sm:grid-cols-3">
+              <span>
+                ES fixture: {String(status.providers.enable_es_market_fixture)}
+              </span>
+              <span>
+                Coches.net fixture:{" "}
+                {String(status.providers.enable_coches_net_fixture)}
+              </span>
+              <span>
+                AS24 ES: {String(status.providers.enable_autoscout24_es)}
+              </span>
+            </div>
+            <p className="mt-2 text-xs text-secondary-500">
+              Con perfil SPAIN/ES los fixtures offline pueden auto-registrarse
+              aunque el flag esté en false (DEST.1).
+            </p>
+          </div>
+
           <button
             type="button"
             onClick={() => queryClient.invalidateQueries({ queryKey: ["admin-status"] })}

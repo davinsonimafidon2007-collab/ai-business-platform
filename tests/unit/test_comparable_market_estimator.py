@@ -699,6 +699,7 @@ class TestComparableMarketEstimator:
             market_trend="stable",
             comparable_count=8,
             notes='["test note"]',
+            explanation="Explicación de caché",
             expires_at=now + timedelta(hours=24),
             created_at=now,
         )
@@ -713,6 +714,7 @@ class TestComparableMarketEstimator:
         assert result.market_price == 19500.0
         assert result.confidence == 85.0
         assert result.comparable_count == 8
+        assert result.explanation == "Explicación de caché"
         # No debería haber llamado a los providers
         mock_get.assert_not_called()
 

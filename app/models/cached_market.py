@@ -55,6 +55,9 @@ class CachedMarketData(Base):
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     """Notas adicionales sobre la estimación (JSON)."""
 
+    explanation: Mapped[str | None] = mapped_column(Text, nullable=True)
+    """Texto legible (ES) del diferencial de precio vs comparables."""
+
     expires_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

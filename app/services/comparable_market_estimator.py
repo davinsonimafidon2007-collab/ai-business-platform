@@ -547,11 +547,17 @@ class ComparableMarketEstimator:
     ) -> None:
         now = datetime.now(timezone.utc)
         cached = CachedMarketData(
-            external_id=vehicle_id, provider=vehicle_source, market_hash=market_hash,
-            market_price=estimation.market_price, confidence=estimation.confidence,
-            supply_level=estimation.supply_level, demand_level=estimation.demand_level,
-            market_trend=estimation.market_trend, comparable_count=estimation.comparable_count,
-            notes=json.dumps(list(estimation.notes) + [f"explanation={estimation.explanation}"]),
+            external_id=vehicle_id,
+            provider=vehicle_source,
+            market_hash=market_hash,
+            market_price=estimation.market_price,
+            confidence=estimation.confidence,
+            supply_level=estimation.supply_level,
+            demand_level=estimation.demand_level,
+            market_trend=estimation.market_trend,
+            comparable_count=estimation.comparable_count,
+            notes=json.dumps(list(estimation.notes)),
+            explanation=estimation.explanation or None,
             expires_at=now + self._cache_ttl,
         )
         try:
@@ -697,19 +703,15 @@ class ComparableMarketEstimator:
                 notes = json.loads(cached.notes)
             except (json.JSONDecodeError, TypeError):
                 notes = [cached.notes] if cached.notes else []
-        explanation = ""
-        clean_notes: list[str] = []
-        for item in notes:
-            s = str(item)
-            if s.startswith("explanation="):
-                explanation = s[len("explanation="):]
-            else:
-                clean_notes.append(s)
         return MarketEstimation(
-            market_price=cached.market_price or 0.0, confidence=cached.confidence or 0.0,
-            supply_level=cached.supply_level or 50.0, demand_level=cached.demand_level or 50.0,
-            market_trend=cached.market_trend or "stable", comparable_count=cached.comparable_count or 0,
-            notes=clean_notes, explanation=explanation,
+            market_price=cached.market_price or 0.0,
+            confidence=cached.confidence or 0.0,
+            supply_level=cached.supply_level or 50.0,
+            demand_level=cached.demand_level or 50.0,
+            market_trend=cached.market_trend or "stable",
+            comparable_count=cached.comparable_count or 0,
+            notes=notes,
+            explanation=cached.explanation or "",
         )
 
     @staticmethod

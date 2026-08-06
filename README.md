@@ -215,6 +215,24 @@ el código. Salida esperada por provider: `search: OK count=N` y
   `--save-html` para revisar selectores en A.4.
 
 Exit 0 = ambos providers OK; 1 = alguno falló; 2 = error de setup.
+### Smoke mercado ES (SMOKE.ES)
+
+Verifica los providers offline de destino ES y, opcionalmente, un search real
+contra AutoScout24 España **sin tocar** proxy / SMTP / Firebase.
+
+```bash
+# Offline (fixtures; siempre)
+python scripts/smoke_es_providers.py
+
+# Snapshot del registry (flags + perfil)
+python scripts/smoke_es_providers.py --registry
+
+# Live AS24-ES (opcional; requiere ENABLE_AUTOSCOUT24_ES=true)
+python scripts/smoke_es_providers.py --live-as24-es
+```
+
+Exit 0 = OK; 1 = fallo de aserción / error inesperado; 2 = skip de live.
+
 
 ### Runbook — Alertas por email (SMTP) — Task SMTP.1
 

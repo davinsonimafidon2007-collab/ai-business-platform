@@ -178,6 +178,22 @@ def get_autoscout24_provider() -> AutoScout24Provider:
     return AutoScout24Provider(http_client=client, base_url="https://www.autoscout24.de")
 
 
+def get_autoscout24_es_provider() -> AutoScout24EsProvider:
+    """Provider AutoScout24 ES con el mismo HTTP client anti-bot (settings)."""
+    from app.providers.autoscout24_es import AutoScout24EsProvider
+
+    client = ProviderHttpClient(
+        provider_name="autoscout24_es",
+        base_url="https://www.autoscout24.es",
+        timeout=settings.provider_http_timeout,
+        max_retries=settings.provider_http_max_retries,
+    )
+    return AutoScout24EsProvider(
+        http_client=client,
+        base_url="https://www.autoscout24.es",
+    )
+
+
 # =============================================================================
 # Inspection dependencies
 # =============================================================================

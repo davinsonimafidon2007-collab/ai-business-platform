@@ -42,9 +42,27 @@ class ProviderCanaryStatus(BaseModel):
     mobile_status: str | None = None
 
 
+class ProviderInfo(BaseModel):
+    """Resumen de un provider registrado."""
+
+    name: str
+    source: str | None = None
+
+
+class ProvidersStatus(BaseModel):
+    """Snapshot del registry de providers y flags ES relevantes."""
+
+    providers: list[str] = []
+    default_import_cost_profile: str = ""
+    enable_es_market_fixture: bool = False
+    enable_coches_net_fixture: bool = False
+    enable_autoscout24_es: bool = False
+
+
 class AdminSystemStatus(BaseModel):
     """Estado del sistema para admin: Redis + último canary + jobs."""
 
     redis_ok: bool | None = None
     canary: ProviderCanaryStatus
     jobs: list[JobMetricsRead] = []  # nuevo (G.4)
+    providers: ProvidersStatus = ProvidersStatus()  # ADMIN.1

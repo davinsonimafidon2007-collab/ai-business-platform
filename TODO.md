@@ -1,3 +1,13 @@
+# TODO — HYGIENE.1: basura raíz + gitignore ✅
+- [x] Inventario y borrado de `_diag_*`, logs, one-shot `_fix_*`, dumps
+- [x] `.gitignore` actualizado con patrones de higiene
+- [x] `release_check --skip-smoke` verde
+## No reintroducir
+Logs de pytest/debug van a `/tmp` o se borran; no se comitean en la raíz.
+
+
+---
+
 # TODO — MKT.2: explanation en API search + VehicleDrawer ✅
 - [x] MarketEstimationSchema.explanation
 - [x] mapper _build_search_result_item
@@ -169,3 +179,10 @@ python scripts/release_check.py --skip-smoke
 # Con API levantada:
 python scripts/release_check.py --with-api
 ```
+
+---
+
+# TODO — ADMIN.1b: UI providers en admin status ✅
+- [x] Tipos TS alineados al API
+- [x] Sección Providers en admin page
+- [x] Muestra registered + flags + perfil

@@ -37,6 +37,7 @@ class TestCachedMarketRepository:
             market_trend="rising",
             comparable_count=12,
             notes='{"source": "comparable_market"}',
+            explanation="El anuncio está alineado con el mercado.",
             expires_at=datetime.now(timezone.utc) + timedelta(hours=24),
         )
         saved = await cached_market_repo.save(entry)
@@ -46,6 +47,7 @@ class TestCachedMarketRepository:
         assert saved.market_price == 20000.0
         assert saved.confidence == 85.0
         assert saved.market_trend == "rising"
+        assert saved.explanation == "El anuncio está alineado con el mercado."
 
     @pytest.mark.asyncio
     async def test_save_many(

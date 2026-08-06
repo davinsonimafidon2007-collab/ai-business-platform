@@ -143,18 +143,22 @@ async def test_estimate_explanation_non_empty_with_comparables() -> None:
     assert result.explanation != ""
 
 
-def test_from_cached_roundtrip_explanation_in_notes() -> None:
-    """La explanation sobrevive al cache DB sin migración (embebida en notes)."""
+def test_from_cached_roundtrip_explanation_in_column() -> None:
+    """La explanation sobrevive al cache DB en columna propia (sin prefijo en notes)."""
     repo = AsyncMock()
     estimator = ComparableMarketEstimator(
         vehicle_service=AsyncMock(),
         cached_market_repository=repo,
     )
     cached = CachedMarketData(
-        external_id="x", provider="mobile_de", market_hash="h",
-        market_price=9900.0, confidence=70.0,
+        external_id="x",
+        provider="mobile_de",
+        market_hash="h",
+        market_price=9900.0,
+        confidence=70.0,
         comparable_count=3,
-        notes='["mean=10000", "pricing=fair", "explanation=El anuncio está alineado con el mercado."]',
+        notes='["mean=10000", "pricing=fair"]',
+        explanation="El anuncio está alineado con el mercado.",
     )
     estimation = estimator._from_cached(cached)
     assert estimation.explanation == "El anuncio está alineado con el mercado."

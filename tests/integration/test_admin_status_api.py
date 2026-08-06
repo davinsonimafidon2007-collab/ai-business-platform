@@ -241,6 +241,37 @@ class TestAdminSystemStatus:
         assert canary["strict_mobile"] is True
         assert canary["mobile_status"] == "ok"
 
+    def test_admin_status_includes_providers_snapshot(self, client: TestClient) -> None:
+        """ADMIN.1: /admin/status incluye providers + flags ES."""
+        from app.core.config import settings
+        from app.providers.registry import ProviderRegistry
+        from app.schemas.admin_status import ProvidersStatus
+
+        admin = _register(client, role=Role.ADMIN)
+        ProviderRegistry.clear()
+        ProviderRegistry.ensure_default_providers()
+
+        try:
+            r = client.get("/api/v1/admin/status", headers=_auth(admin["token"]))
+            assert r.status_code == 200, r.text
+            data = r.json()
+            providers = data["providers"]
+            assert isinstance(providers, dict)
+            assert "providers" in providers
+            assert "default_import_cost_profile" in providers
+            assert "enable_es_market_fixture" in providers
+            assert "enable_coches_net_fixture" in providers
+            assert "enable_autoscout24_es" in providers
+
+            ps = ProvidersStatus(**providers)
+            assert isinstance(ps.providers, list)
+            assert ps.default_import_cost_profile == settings.default_import_cost_profile
+            assert ps.enable_es_market_fixture == settings.enable_es_market_fixture
+            assert ps.enable_coches_net_fixture == settings.enable_coches_net_fixture
+            assert ps.enable_autoscout24_es == settings.enable_autoscout24_es
+        finally:
+            ProviderRegistry.clear()
+
     def test_admin_with_failed_canary(self, client: TestClient) -> None:
         admin = _register(client, role=Role.ADMIN)
 

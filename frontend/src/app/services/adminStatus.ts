@@ -23,10 +23,19 @@ export type JobMetricsRead = {
   consecutive_failures: number;
 };
 
+export type ProvidersStatus = {
+  providers: string[];
+  default_import_cost_profile: string;
+  enable_es_market_fixture: boolean;
+  enable_coches_net_fixture: boolean;
+  enable_autoscout24_es: boolean;
+};
+
 export type AdminSystemStatus = {
   redis_ok: boolean | null;
   canary: ProviderCanaryStatus;
   jobs: JobMetricsRead[];
+  providers: ProvidersStatus;
 };
 
 export async function fetchAdminStatus(): Promise<AdminSystemStatus> {

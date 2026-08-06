@@ -28,6 +28,13 @@ it("fetchAdminStatus llama GET /admin/status", async () => {
         mobile_status: "skipped",
       },
       jobs: [],
+      providers: {
+        providers: ["mobile_de", "es_market_fixture"],
+        default_import_cost_profile: "SPAIN",
+        enable_es_market_fixture: true,
+        enable_coches_net_fixture: true,
+        enable_autoscout24_es: false,
+      },
     };
     vi.mocked(api.get).mockResolvedValue({ data: payload } as any);
 
@@ -37,6 +44,15 @@ it("fetchAdminStatus llama GET /admin/status", async () => {
     expect(data.redis_ok).toBe(true);
     expect(data.canary.success).toBe(true);
     expect(data.jobs).toEqual([]);
+    expect(data.providers.providers).toEqual([
+      "mobile_de",
+      "es_market_fixture",
+    ]);
+    expect(data.providers.default_import_cost_profile).toBe("SPAIN");
+    expect(data.providers.enable_es_market_fixture).toBe(true);
+    expect(data.providers.enable_coches_net_fixture).toBe(true);
+    expect(data.providers.enable_autoscout24_es).toBe(false);
+
   });
 
   it("fetchAdminStatus devuelve jobs con consecutive_failures", async () => {

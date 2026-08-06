@@ -106,10 +106,30 @@ class Settings(BaseSettings):
     Valores: DEFAULT, SPAIN, PORTUGAL, GERMANY, FRANCE (o alias ES, PT, DE, FR)."""
 
     # =========================================================================
-    # Mercado destino ES (P.1a fixture; sin HTTP)
+    # Mercado destino ES (fixtures offline; sin HTTP)
     # =========================================================================
+    # Si True, registra provider es_market_fixture en ProviderRegistry al arrancar / en DI.
+    # Además, cuando el perfil de costes destino es SPAIN/ES, se auto-registra
+    # sin necesidad de activar este flag.
     enable_es_market_fixture: bool = False
-    """Si True, registra provider es_market_fixture en ProviderRegistry al arrancar / en DI."""
+    disable_es_market_auto: bool = False
+    """Si True, desactiva el auto-registro de fixtures ES por perfil SPAIN."""
+
+    # =========================================================================
+    # AutoScout24 España (comparables destino HTTP)
+    # =========================================================================
+    # Sigue requiriendo flag explícito: no se auto-registra por perfil SPAIN.
+    enable_autoscout24_es: bool = False
+    """Si True, registra provider autoscout24_es en ProviderRegistry."""
+
+    # =========================================================================
+    # Coches.net offline (fixtures JSON)
+    # =========================================================================
+    # Si True, registra provider coches_net_fixture en ProviderRegistry.
+    # Además, cuando el perfil de costes destino es SPAIN/ES, se auto-registra
+    # sin necesidad de activar este flag.
+    enable_coches_net_fixture: bool = False
+    """Si True, registra provider coches_net_fixture (comparables ES offline)."""
 
     # =========================================================================
     # OpenAI Vision provider

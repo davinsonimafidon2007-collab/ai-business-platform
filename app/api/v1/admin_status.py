@@ -25,7 +25,8 @@ from app.jobs.base import JobContext
 from app.jobs.canary_state import get_last_canary_result
 from app.jobs.provider_canary import ProviderCanaryJob
 from app.models.user import User
-from app.schemas.admin_status import AdminSystemStatus, JobMetricsRead, ProviderCanaryStatus
+from app.providers.registry import ProviderRegistry
+from app.schemas.admin_status import AdminSystemStatus, JobMetricsRead, ProviderCanaryStatus, ProvidersStatus
 
 router = APIRouter(prefix="/admin/status", tags=["Admin System Status"])
 
@@ -89,10 +90,19 @@ async def _build_admin_system_status(request: Request) -> AdminSystemStatus:
             mobile_status=data.get("mobile_status"),
         )
 
+    providers = ProvidersStatus(
+        providers=ProviderRegistry.list_providers(),
+        default_import_cost_profile=getattr(settings, "default_import_cost_profile", ""),
+        enable_es_market_fixture=getattr(settings, "enable_es_market_fixture", False),
+        enable_coches_net_fixture=getattr(settings, "enable_coches_net_fixture", False),
+        enable_autoscout24_es=getattr(settings, "enable_autoscout24_es", False),
+    )
+
     return AdminSystemStatus(
         redis_ok=redis_ok,
         canary=canary,
         jobs=_build_jobs(request),
+        providers=providers,
     )
 
 

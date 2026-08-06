@@ -1,3 +1,37 @@
+# --- Hygiene: diagnóstico / one-shot en raíz (HYGIENE.1) ---
+_diag_*
+_apply_category*_fix.py
+_fix_category*.py
+_verify_*.py
+verify_fix.py
+verify_*.txt
+fix-*.patch
+estructura.txt
+docker_logs*.txt
+docker_build*.txt
+pytest_collect.txt
+uv_lock.txt
+project_structure.txt
+archivos.txt
+tmp_diag.log
+test_run_out.txt
+test_failures_current.txt
+*.log
+
+# Python ruido
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+
+# Entornos / secretos
+.venv/
+.env
+.env.*
+!.env.example
+
 # Python
 __pycache__/
 *.py[cod]
