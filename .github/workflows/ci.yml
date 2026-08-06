@@ -1,0 +1,83 @@
+# CI.2 — unit + requirements sync + Postgres 16 + integration crítico (INT.1)
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: backend (Python 3.13)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: ai_business_platform_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d ai_business_platform_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      ENVIRONMENT: test
+      # ≥32 chars; solo para tests (no es secreto de prod)
+      JWT_SECRET_KEY: test_secret_key_that_is_at_least_32_characters_long_ci_only_do_not_use_in_prod
+      # Mismo Postgres del service; alembic usa settings.database_url (env DATABASE_URL)
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/ai_business_platform_test
+      # Evitar que settings/Firebase intenten I/O real
+      FIREBASE_CREDENTIALS_JSON: ""
+      FIREBASE_CREDENTIALS_PATH: ""
+      SMTP_HOST: ""
+      ENABLE_SCHEDULER: "false"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          # pin opcional; dejar latest del action es OK
+
+      - name: Set up Python 3.13
+        run: uv python install 3.13
+
+      - name: Sync dependencies (incl. dev)
+        run: uv sync --locked --group dev
+
+      - name: Check requirements.txt sync (C.1)
+        run: uv run --no-sync python scripts/check_requirements_sync.py
+
+      - name: Alembic upgrade head (Postgres service)
+        # Migraciones contra el service Postgres 16 (DB vacía). Debe correr antes de INT.1.
+        run: uv run --no-sync alembic upgrade head
+
+      - name: Unit tests
+        run: uv run --no-sync python -m pytest tests/unit -q --tb=line
+
+      # INT.1 — mismo subconjunto que release_check --with-integration.
+      # Obligatorio (CI.2): falla el job si integration crítico falla.
+      - name: Integration critical subset (INT.1)
+        run: |
+          uv run --no-sync python -m pytest -q \
+            tests/integration/test_admin_status_api.py \
+            tests/integration/test_api_keys_api.py \
+            tests/integration/test_admin_api_keys_api.py \
+            tests/integration/test_auth_api.py \
+            tests/integration/test_vehicles_api.py \
+            --tb=line

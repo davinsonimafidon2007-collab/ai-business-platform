@@ -364,3 +364,63 @@ def test_verify_with_invalid_token_returns_error(client: TestClient) -> None:
     response_json = verify_response.json()
     assert "error" in response_json
     assert "not found" in response_json["error"]["message"].lower()
+
+
+# --- Google login (Task FIRE.1) ---
+
+def test_google_login_returns_tokens(client, monkeypatch):
+    """Happy path: verify mockeado → 200 + access_token + refresh_token."""
+
+    async def fake_verify(id_token: str) -> dict:
+        assert id_token == "integration-firebase-token"
+        return {
+            "uid": "fb-int-1",
+            "email": "google.int@example.com",
+            "email_verified": True,
+            "name": "Google Int",
+            "picture": "",
+        }
+
+    monkeypatch.setattr(
+        "app.services.auth_service.verify_google_id_token",
+        fake_verify,
+    )
+
+    response = client.post(
+        "/api/v1/auth/google",
+        json={"id_token": "integration-firebase-token"},
+    )
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert "access_token" in data
+    assert "refresh_token" in data
+    assert data.get("token_type", "bearer") == "bearer"
+
+    me = client.get(
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {data['access_token']}"},
+    )
+    assert me.status_code == 200
+    assert me.json()["email"] == "google.int@example.com"
+
+
+def test_google_login_invalid_token_returns_401(client, monkeypatch):
+    async def fake_verify(id_token: str) -> dict:
+        raise ValueError("Invalid Firebase ID token: bad")
+
+    monkeypatch.setattr(
+        "app.services.auth_service.verify_google_id_token",
+        fake_verify,
+    )
+
+    response = client.post(
+        "/api/v1/auth/google",
+        json={"id_token": "bad-token"},
+    )
+    # AuthenticationError → 401 en este proyecto
+    assert response.status_code in (401, 403), response.text
+
+
+def test_google_login_missing_id_token_returns_422(client):
+    response = client.post("/api/v1/auth/google", json={})
+    assert response.status_code == 422

@@ -24,7 +24,9 @@ class MarketEstimation:
         demand_level: Nivel de demanda en el mercado (0-100, mayor = más demanda).
         market_trend: Tendencia del mercado ("rising", "stable", "falling").
         comparable_count: Número de vehículos comparables encontrados.
-        notes: Notas adicionales sobre la estimación.
+        notes: Notas adicionales sobre la estimación (pares clave=valor machine-readable).
+        explanation: Texto legible (ES) del diferencial de precio vs comparables.
+
     """
 
     market_price: float
@@ -46,5 +48,7 @@ class MarketEstimation:
     """Número de comparables encontrados."""
 
     notes: list[str] = field(default_factory=list)
-    """Notas adicionales sobre la estimación."""
+    """Notas adicionales sobre la estimación (pares clave=valor machine-readable)."""
 
+    explanation: str = ""
+    """Texto legible (ES) del diferencial de precio vs comparables."""

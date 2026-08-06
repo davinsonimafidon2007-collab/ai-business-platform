@@ -489,6 +489,15 @@ class ComparableMarketEstimator:
         )
         price_detection = self._detect_pricing(stats, target_price)
         market_price = stats.weighted_mean if stats.count > 0 else (target_price or 0.0)
+        explanation = self.build_market_explanation(
+            target_price=target_price,
+            market_price=round(market_price, 2),
+            stats=stats,
+            pricing=price_detection,
+            provider_sources=provider_sources,
+            confidence=confidence,
+            discarded_ratio=discarded_ratio,
+        )
         estimation = MarketEstimation(
             market_price=round(market_price, 2), confidence=confidence,
             supply_level=50.0, demand_level=50.0, market_trend="stable",
@@ -503,6 +512,7 @@ class ComparableMarketEstimator:
                 f"providers={','.join(sorted(provider_sources))}",
                 f"pricing={price_detection}",
             ],
+            explanation=explanation,
         )
         self._local_cache[market_hash] = estimation
         await self._save_to_redis(market_hash=market_hash, estimation=estimation)
@@ -525,6 +535,7 @@ class ComparableMarketEstimator:
             "market_trend": estimation.market_trend,
             "comparable_count": estimation.comparable_count,
             "notes": estimation.notes,
+            "explanation": estimation.explanation,
         }
         try:
             await cache_set(market_cache_key(market_hash), json.dumps(payload, ensure_ascii=False), int(self._cache_ttl.total_seconds()))
@@ -540,7 +551,8 @@ class ComparableMarketEstimator:
             market_price=estimation.market_price, confidence=estimation.confidence,
             supply_level=estimation.supply_level, demand_level=estimation.demand_level,
             market_trend=estimation.market_trend, comparable_count=estimation.comparable_count,
-            notes=json.dumps(estimation.notes), expires_at=now + self._cache_ttl,
+            notes=json.dumps(list(estimation.notes) + [f"explanation={estimation.explanation}"]),
+            expires_at=now + self._cache_ttl,
         )
         try:
             await self._cached_market_repo.save(cached)
@@ -581,6 +593,84 @@ class ComparableMarketEstimator:
             return "fair"
 
     @staticmethod
+    def build_market_explanation(
+        *,
+        target_price: float | None,
+        market_price: float,
+        stats: MarketStatistics,
+        pricing: str,
+        provider_sources: set[str],
+        confidence: float,
+        discarded_ratio: float,
+    ) -> str:
+        """Genera 2–5 frases en español sobre el diferencial de mercado.
+
+        Sin LLM. Solo usa estadísticas ya calculadas.
+        """
+        if stats.count <= 0:
+            return (
+                "No hay comparables suficientes en los proveedores registrados "
+                "para estimar el diferencial de mercado con fiabilidad."
+            )
+
+        sources = ", ".join(sorted(provider_sources)) or "proveedores registrados"
+        parts: list[str] = []
+
+        if target_price is None:
+            parts.append(
+                f"Precio de mercado estimado {market_price:,.0f} EUR "
+                f"(media ponderada de {stats.count} comparables en {sources})."
+            )
+        else:
+            delta = target_price - market_price
+            pct = (delta / market_price * 100.0) if market_price else 0.0
+            if pricing == "underpriced":
+                parts.append(
+                    f"El anuncio ({target_price:,.0f} EUR) está por debajo del mercado "
+                    f"estimado ({market_price:,.0f} EUR; {pct:+.1f}%)."
+                )
+            elif pricing == "overpriced":
+                parts.append(
+                    f"El anuncio ({target_price:,.0f} EUR) está por encima del mercado "
+                    f"estimado ({market_price:,.0f} EUR; {pct:+.1f}%)."
+                )
+            else:
+                parts.append(
+                    f"El anuncio ({target_price:,.0f} EUR) está alineado con el mercado "
+                    f"estimado ({market_price:,.0f} EUR; {pct:+.1f}%)."
+                )
+
+        parts.append(
+            f"Se usaron {stats.count} comparables (mediana {stats.median:,.0f} EUR, "
+            f"rango {stats.min_price:,.0f}–{stats.max_price:,.0f} EUR; "
+            f"percentil del anuncio {stats.percentile_position:.0f}%)."
+        )
+
+        if stats.coefficient_of_variation >= 0.25:
+            parts.append(
+                "La dispersión de precios es alta; conviene revisar acabado, "
+                "km y días en mercado antes de decidir."
+            )
+        elif stats.coefficient_of_variation <= 0.10 and stats.count >= 5:
+            parts.append(
+                "Los comparables están concentrados en un rango estrecho; "
+                "la señal de precio es más fiable."
+            )
+
+        if confidence < 40:
+            parts.append(
+                f"Confianza baja ({confidence:.0f}/100): pocos comparables, "
+                f"filtros estrictos o mucha basura descartada "
+                f"(ratio descartado {discarded_ratio:.0%})."
+            )
+        elif confidence >= 70:
+            parts.append(f"Confianza alta ({confidence:.0f}/100) en esta estimación.")
+
+        # Máximo ~5 frases
+        return " ".join(parts[:5])
+
+
+    @staticmethod
     def _from_cache_payload(payload: dict[str, Any]) -> MarketEstimation:
         notes = payload.get("notes") or []
         if isinstance(notes, str):
@@ -596,6 +686,7 @@ class ComparableMarketEstimator:
             market_trend=str(payload.get("market_trend") or "stable"),
             comparable_count=int(payload.get("comparable_count", 0) or 0),
             notes=[str(item) for item in notes],
+            explanation=str(payload.get("explanation") or ""),
         )
 
     @staticmethod
@@ -606,11 +697,19 @@ class ComparableMarketEstimator:
                 notes = json.loads(cached.notes)
             except (json.JSONDecodeError, TypeError):
                 notes = [cached.notes] if cached.notes else []
+        explanation = ""
+        clean_notes: list[str] = []
+        for item in notes:
+            s = str(item)
+            if s.startswith("explanation="):
+                explanation = s[len("explanation="):]
+            else:
+                clean_notes.append(s)
         return MarketEstimation(
             market_price=cached.market_price or 0.0, confidence=cached.confidence or 0.0,
             supply_level=cached.supply_level or 50.0, demand_level=cached.demand_level or 50.0,
             market_trend=cached.market_trend or "stable", comparable_count=cached.comparable_count or 0,
-            notes=notes,
+            notes=clean_notes, explanation=explanation,
         )
 
     @staticmethod

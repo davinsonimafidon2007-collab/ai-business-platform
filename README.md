@@ -276,6 +276,64 @@ revisa el email; restaura el umbral después. **No dejes secretos SMTP en el
 repo** (`SMTP_PASSWORD` vive solo en `.env`, que está en `.gitignore`).
 
 
+### Runbook — Firebase / Google login — Task FIRE.1
+
+El login con Google ya está implementado de punta a punta (front + backend):
+
+- **Front** (`frontend/src/app/config/firebase.ts` + `frontend/src/app/services/google-auth.ts`):
+  flujo popup (web) / Capacitor → `POST /api/v1/auth/google` con el `id_token` de
+  Firebase Auth. La configuración web es **pública** (apiKey, projectId, etc.) y no
+  requiere service account.
+- **Backend** (`app/core/firebase.py` → `app/api/v1/auth.py` → `AuthService.authenticate_with_google`):
+  verifica el `id_token` con el **Admin SDK** y, por tanto, **necesita una service
+  account** (`FIREBASE_CREDENTIALS_JSON` o `FIREBASE_CREDENTIALS_PATH`).
+
+> **Sin `FIREBASE_*` → la app arranca igual y no crashea.** `verify_google_id_token`
+> responde un error de autenticación (401) y el resto de flows (register/login email)
+> siguen funcionando. Esto está cubierto por los tests.
+
+#### Variables (`.env`)
+
+```env
+# --- Firebase (Google Login) ---
+# Service account JSON string OR path. Never commit real credentials.
+FIREBASE_CREDENTIALS_JSON=
+FIREBASE_CREDENTIALS_PATH=
+```
+
+Solo necesitas **una** de las dos. El JSON/path se lee desde `settings` (pydantic,
+`.env`) y desde env, por si pruebas manualmente.
+
+#### Smoke
+
+```bash
+# 1) Sin credenciales → exit 2 (setup)
+python scripts/smoke_firebase.py
+
+# 2) Con service account en .env, sin token → exit 0 "Firebase OK (init only)"
+python scripts/smoke_firebase.py
+
+# 3) Con un ID token real → verify + email/uid (exit 0/1)
+python scripts/smoke_firebase.py --id-token "eyJ..."
+
+# 4) + API en marcha: además POST /api/v1/auth/google (espera 200 + tokens)
+python scripts/smoke_firebase.py --id-token "eyJ..." --call-api
+```
+
+Exit codes: **0** init/verify/API OK · **1** error de verify/API · **2** setup sin
+`FIREBASE_*`.
+
+#### Cómo obtener un ID token de prueba
+
+1. Login Google en el **front** → DevTools **Network** → `POST .../auth/google` →
+   copiar el `id_token` del body.
+2. O desde **Firebase Auth emulator / console**: `firebase.auth().currentUser.getIdToken()`.
+3. Usarlo en el smoke: `python scripts/smoke_firebase.py --id-token "<tok>" [--call-api]`.
+
+> **No** comprometas la service account: `FIREBASE_CREDENTIALS_JSON` /
+> `FIREBASE_CREDENTIALS_PATH` viven solo en `.env` (gitignored) y nunca en el repo.
+
+
 ### Dependencias — `requirements.txt` es GENERATED
 
 `requirements.txt` es un **fichero generado** (NO editar a mano). La fuente de
@@ -328,9 +386,38 @@ python scripts/check_requirements_sync.py
 # exit 0 = OK; exit 1 = regenerar con scripts/export_requirements.ps1
 ```
 
-> **CI pendiente:** cuando exista GitHub Actions u otro CI, añadir un workflow que
-> ejecute `python scripts/check_requirements_sync.py` (Task C.1). El script ya
-> existe; solo hay que invocarlo.
+### CI (GitHub Actions) — CI.1 + CI.2
+
+Workflow: `.github/workflows/ci.yml`
+
+En cada push/PR a `main` (y `master` si existe):
+
+1. `uv sync --locked --group dev`
+2. `python scripts/check_requirements_sync.py` (exit 0 = `requirements.txt` alineado con `uv export`)
+3. Service **Postgres 16** (`postgres:16-alpine` + healthcheck) y `alembic upgrade head`
+4. `pytest tests/unit -q`
+5. Integration crítico (INT.1): `test_admin_status_api`, `test_api_keys_api`,
+   `test_admin_api_keys_api`, `test_auth_api`, `test_vehicles_api` — mismo
+   subconjunto que `release_check.py --with-integration`
+
+Local equivalente:
+
+```bash
+python scripts/release_check.py --skip-smoke
+# o con integration crítico:
+python scripts/release_check.py --skip-smoke --with-integration
+```
+
+Verificar migraciones contra un Postgres limpio (como hace CI):
+
+```powershell
+docker run --rm -d --name abp-pg-test -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=ai_business_platform_test -p 5432:5432 postgres:16-alpine
+$env:DATABASE_URL="postgresql+asyncpg://postgres:postgres@localhost:5432/ai_business_platform_test"
+uv run alembic upgrade head
+# docker stop abp-pg-test
+```
+
+No incluye: smoke E2E, providers live, SMTP, Firebase verify real, frontend.
 
 ### Fuera de este bootstrap
 

@@ -106,6 +106,12 @@ class Settings(BaseSettings):
     Valores: DEFAULT, SPAIN, PORTUGAL, GERMANY, FRANCE (o alias ES, PT, DE, FR)."""
 
     # =========================================================================
+    # Mercado destino ES (P.1a fixture; sin HTTP)
+    # =========================================================================
+    enable_es_market_fixture: bool = False
+    """Si True, registra provider es_market_fixture en ProviderRegistry al arrancar / en DI."""
+
+    # =========================================================================
     # OpenAI Vision provider
     # =========================================================================
     openai_api_key: str = ""

@@ -57,6 +57,13 @@ async def scheduler_lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     Creates the DatabaseManager, instantiates the Scheduler with all
     registered jobs, starts it on startup and gracefully stops on shutdown.
     """
+    # Poblar ProviderRegistry con los providers de runtime (DE + ES fixture
+    # si el flag está activo) al boot, para que get_provider/list_providers
+    # y los paths admin/canary/estimador vean el registry poblado (P.1a-bis).
+    from app.providers.registry import ProviderRegistry
+
+    ProviderRegistry.ensure_default_providers()
+
     await init_redis()
     await db_manager.init()
 

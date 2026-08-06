@@ -102,7 +102,7 @@ export function VehicleDrawer({ vehicle, onClose }: VehicleDrawerProps) {
 
           {/* Market Estimation */}
           {me && (
-            <Section title="Market Estimation">
+            <Section title="Estimación de mercado">
               <div className="grid grid-cols-2 gap-3">
                 <InfoItem label="Precio de mercado" value={formatEur(me.market_price)} />
                 <InfoItem label="Confianza" value={`${me.confidence.toFixed(1)}%`} />
@@ -111,13 +111,27 @@ export function VehicleDrawer({ vehicle, onClose }: VehicleDrawerProps) {
                 <InfoItem label="Tendencia" value={me.market_trend} />
                 <InfoItem label="Comparables" value={me.comparable_count.toString()} />
               </div>
-              {me.notes.length > 0 && (
-                <div className="mt-2">
-                  <p className="mb-1 text-sm font-medium text-secondary-700 dark:text-secondary-300">Notas</p>
-                  <ul className="list-inside list-disc text-sm text-secondary-600 dark:text-secondary-400">
-                    {me.notes.map((n, i) => <li key={i}>{n}</li>)}
-                  </ul>
+              {me.explanation ? (
+                <div className="mt-3 rounded-md border border-secondary-200 bg-secondary-50 p-3 dark:border-secondary-600 dark:bg-secondary-900/40">
+                  <p className="mb-1 text-sm font-medium text-secondary-800 dark:text-secondary-200">
+                    Diferencial de mercado
+                  </p>
+                  <p className="text-sm leading-relaxed text-secondary-700 dark:text-secondary-300">
+                    {me.explanation}
+                  </p>
                 </div>
+              ) : null}
+              {me.notes && me.notes.length > 0 && (
+                <details className="mt-2">
+                  <summary className="cursor-pointer text-sm font-medium text-secondary-600 dark:text-secondary-400">
+                    Detalle técnico (notes)
+                  </summary>
+                  <ul className="mt-1 list-inside list-disc text-xs text-secondary-500 dark:text-secondary-500">
+                    {me.notes.map((n, i) => (
+                      <li key={i}>{n}</li>
+                    ))}
+                  </ul>
+                </details>
               )}
             </Section>
           )}

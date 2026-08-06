@@ -41,8 +41,16 @@ def get_firebase_app():
         )
         return None
 
-    creds_json = os.environ.get("FIREBASE_CREDENTIALS_JSON")
-    creds_path = os.environ.get("FIREBASE_CREDENTIALS_PATH")
+    creds_json = os.environ.get("FIREBASE_CREDENTIALS_JSON") or (
+        getattr(settings, "firebase_credentials_json", None) or None
+    )
+    creds_path = os.environ.get("FIREBASE_CREDENTIALS_PATH") or (
+        getattr(settings, "firebase_credentials_path", None) or None
+    )
+    if creds_json == "":
+        creds_json = None
+    if creds_path == "":
+        creds_path = None
 
     try:
         if creds_json:

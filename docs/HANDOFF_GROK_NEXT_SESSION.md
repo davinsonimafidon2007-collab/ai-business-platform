@@ -32,9 +32,23 @@ El “lado España” actual es solo:
 
 - perfiles de coste `SPAIN` / `PORTUGAL` en `app/config/import_costs.py`
 - `estimated_sale_price` en simulación (manual o estimado)
-- `ComparableMarketEstimator` con comparables de providers registrados (**solo** `mobile_de` + `autoscout24`)
+- `ComparableMarketEstimator` con comparables de providers registrados (**solo** `mobile_de` + `autoscout24`) — con `explanation` legible del diferencial ya hecha (MKT.1); search API + drawer ya muestran `explanation` (MKT.2); portales ES siguen sin implementar
+
 
 Añadir portales ES = trabajo nuevo (provider + estimador + fixtures). No tratarlo como hecho.
+
+> **P.1a (2026-08-06):** ya existe un provider **offline** de comparables ES
+> (`EsMarketFixtureProvider`, `source_name="es_market_fixture"`) que carga
+> fixtures JSON (`app/providers/fixtures/es_market_sample.json`) y se registra en
+> `ProviderRegistry` con el flag `ENABLE_ES_MARKET_FIXTURE` (default off). Sin
+> red. Los portales live ES (coches.net / milanuncios / wallapop / AS24-ES)
+> siguen **pendientes** → P.1b+.
+>
+> **P.1a-bis (2026-08-06):** `ProviderRegistry.ensure_default_providers()` registra
+> `mobile_de` y `autoscout24` siempre, y `es_market_fixture` solo si
+> `ENABLE_ES_MARKET_FIXTURE=true`. Se invoca en `get_market_estimator` y en
+> `scheduler_lifespan` (boot), así que `_search_comparables` siempre ve al menos
+> los providers DE en runtime.
 
 ---
 

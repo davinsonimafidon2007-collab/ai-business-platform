@@ -19,6 +19,8 @@ export interface MarketEstimation {
   market_trend: string;
   comparable_count: number;
   notes: string[];
+  /** Texto legible ES del diferencial (MKT.1/MKT.2). Opcional por compat. */
+  explanation?: string;
 }
 
 // =============================================================================

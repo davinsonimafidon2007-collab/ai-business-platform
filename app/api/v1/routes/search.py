@@ -81,6 +81,7 @@ def _build_search_result_item(result: Any) -> SearchResultItem:
             market_trend=getattr(me, "market_trend", "stable") or "stable",
             comparable_count=getattr(me, "comparable_count", 0) or 0,
             notes=notes,
+            explanation=getattr(me, "explanation", "") or "",
         )
 
     # --- ProfitAnalysis ---

@@ -114,6 +114,12 @@ def get_market_estimator(
     por cualquier implementación del protocolo MarketEstimator sin
     modificar los endpoints.
     """
+    from app.providers.registry import ProviderRegistry
+
+    # Registra los providers de comparables DE (mobile_de + autoscout24)
+    # siempre, y el fixture ES si enable_es_market_fixture está activo
+    # (Task P.1a-bis). Idempotente.
+    ProviderRegistry.ensure_default_providers()
     return ComparableMarketEstimator(
         vehicle_service=vehicle_service,
         cached_market_repository=cached_market_repo,

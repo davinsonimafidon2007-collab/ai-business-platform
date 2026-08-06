@@ -42,7 +42,14 @@ class MarketEstimationSchema(BaseModel):
     )
     market_trend: str = Field("stable", description="Tendencia del mercado")
     comparable_count: int = Field(0, description="Número de comparables", ge=0)
-    notes: list[str] = Field(default_factory=list, description="Notas adicionales")
+    notes: list[str] = Field(
+        default_factory=list,
+        description="Notas machine-readable (pares clave=valor)",
+    )
+    explanation: str = Field(
+        "",
+        description="Texto legible (ES) del diferencial de precio vs comparables (MKT.1/MKT.2)",
+    )
 
 
 # =============================================================================
