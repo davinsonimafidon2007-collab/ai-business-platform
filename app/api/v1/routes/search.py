@@ -74,11 +74,25 @@ def _build_search_result_item(result: Any) -> SearchResultItem:
     vs = result.vehicle_score
     vehicle_score_schema: VehicleScoreSchema | None = None
     if vs is not None:
+        from app.services.vehicle_scorer import SCORE_CATEGORY_KEY_FROM_ES, SCORE_CATEGORY_LABELS_ES
+
         strengths: list[str] = getattr(vs, "strengths", []) or []
         weaknesses: list[str] = getattr(vs, "weaknesses", []) or []
+        raw_category = getattr(vs, "category", "") or ""
+        category_key = getattr(vs, "category_key", None) or SCORE_CATEGORY_KEY_FROM_ES.get(
+            raw_category, "poor"
+        )
+        category_label_es = (
+            getattr(vs, "category_label_es", None)
+            or SCORE_CATEGORY_LABELS_ES.get(category_key, raw_category)
+            or raw_category
+        )
+
         vehicle_score_schema = VehicleScoreSchema(
             score=getattr(vs, "score", 0) or 0,
-            category=getattr(vs, "category", "") or "",
+            category=raw_category or category_label_es,
+            category_key=category_key,
+            category_label_es=category_label_es,
             strengths=strengths,
             weaknesses=weaknesses,
         )
@@ -162,6 +176,7 @@ def _build_search_result_item(result: Any) -> SearchResultItem:
             roi_percentage=getattr(pa, "roi_percentage", 0.0) or 0.0,
             profit_margin_percentage=getattr(pa, "profit_margin_percentage", 0.0) or 0.0,
             risk_level=risk_level or "UNKNOWN",
+            recommendation=recommendation or "UNKNOWN",
             recommendation_label_es=recommendation_label_es(recommendation or "UNKNOWN"),
             risk_label_es=risk_label_es(risk_level or "UNKNOWN"),
             coherence_warnings=coherence_warnings,
