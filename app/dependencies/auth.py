@@ -15,6 +15,8 @@ from app.services.auth_service import AuthService
 from app.services.permission_service import PermissionService
 from app.services.user_service import UserService
 
+from app.core.config import settings
+
 security = HTTPBearer(auto_error=False)
 
 permission_service = PermissionService()
@@ -34,6 +36,19 @@ async def get_current_user(
     # Check if user was already authenticated by middleware
     if hasattr(request.state, "user") and request.state.user:
         return request.state.user
+
+    # Modo personal: sin autenticación obligatoria
+    if settings.app_mode == "personal":
+        # Devolver usuario por defecto para uso personal
+        user_service = UserService(UserRepository(session))
+        try:
+            user = await user_service.get_user("personal_user_default")
+            return user
+        except UserNotFoundError:
+            # Si no existe, no se bloquea (modo personal sin login)
+            pass
+        # En modo personal sin usuario real, retornar None permitido por la app
+        return None  # type: ignore
 
     # Fall back to JWT Bearer token authentication
     if credentials is None or not credentials.credentials:

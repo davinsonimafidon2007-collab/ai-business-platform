@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     app_description: str = "API for the AI Business Platform."
     app_version: str = "0.1.0"
     environment: Literal["development", "production", "test"] = "development"
+    app_mode: Literal["personal", "multiuser"] = "personal"
     app_url: str = "http://localhost:3000"
     """Frontend URL for constructing email links and CORS."""
     database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/ai_business_platform"
