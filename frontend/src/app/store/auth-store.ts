@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { User } from "@/app/types/auth";
+import { isAuthDisabled, LOCAL_USER } from "@/app/config/app-mode";
 
 // Claves de localStorage. Centralizadas aquí para que login/register/google/auth
 // client compartan el mismo contrato y no haya strings sueltos.
@@ -66,6 +67,16 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ user: null, isAuthenticated: false, isLoading: false });
   },
   initialize: () => {
+    // Auth desactivada (uso personal): autentica directamente al usuario local
+    // sin token → sin redirección a login y con sesión "activa" para la UI.
+    if (isAuthDisabled()) {
+      set({
+        user: LOCAL_USER,
+        isAuthenticated: true,
+        isLoading: false,
+      });
+      return;
+    }
     try {
       const token = storage.get(TOKEN_KEYS.accessToken);
       const userStr = storage.get(TOKEN_KEYS.user);

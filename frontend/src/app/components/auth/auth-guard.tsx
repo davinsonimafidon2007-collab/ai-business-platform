@@ -3,12 +3,18 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/app/store/auth-store";
+import { isAuthDisabled } from "@/app/config/app-mode";
 
 const IS_PERSONAL_MODE = process.env.NEXT_PUBLIC_APP_MODE === "personal";
 
 export function AuthGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const { isAuthenticated, isLoading } = useAuthStore();
+
+  // Auth desactivada (uso personal): siempre renderiza children, sin login.
+  if (isAuthDisabled()) {
+    return <>{children}</>;
+  }
 
   useEffect(() => {
     if (IS_PERSONAL_MODE) return;

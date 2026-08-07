@@ -4,11 +4,13 @@ import { useAuthStore } from "@/app/store/auth-store";
 import { useThemeStore } from "@/app/store/theme-store";
 import { Button } from "@/app/components/ui/button";
 import { useLogout } from "@/app/hooks/use-logout";
+import { isAuthDisabled } from "@/app/config/app-mode";
 
 export function Navbar() {
   const user = useAuthStore((state) => state.user);
   const { theme, toggleTheme } = useThemeStore();
   const logout = useLogout();
+  const authDisabled = isAuthDisabled();
 
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center justify-end gap-4 border-b border-secondary-200 bg-white/80 px-6 backdrop-blur-sm dark:border-secondary-700 dark:bg-secondary-900/80">
@@ -20,7 +22,7 @@ export function Navbar() {
         {theme === "dark" ? "☀️" : "🌙"}
       </button>
 
-      {user && (
+      {user && !authDisabled && (
         <div className="flex items-center gap-3">
           <span className="text-sm text-secondary-600 dark:text-secondary-400">
             {user.full_name}

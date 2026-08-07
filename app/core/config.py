@@ -1,4 +1,5 @@
 from typing import Literal
+import os
 
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -16,6 +17,14 @@ class Settings(BaseSettings):
     jwt_secret_key: str = ""
     jwt_algorithm: str = "HS256"
 
+    auth_disabled: bool = False
+    """Si True, no exige JWT: inyecta usuario local ADMIN (uso personal).
+
+    Activar solo en máquina local / uso personal (``AUTH_DISABLED=true``).
+    No usar en un despliegue público: cualquiera con acceso al puerto sería
+    ADMIN. En producción real dejar ``false``.
+    """
+
     @model_validator(mode="after")
     def validate_jwt_secret_for_env(self) -> "Settings":
         if self.environment == "test":
@@ -32,6 +41,20 @@ class Settings(BaseSettings):
                 "JWT_SECRET_KEY must be set and at least 32 characters in "
                 f"environment={self.environment!r}"
             )
+        return self
+
+    @model_validator(mode="after")
+    def auth_disabled_safe_for_test(self) -> "Settings":
+        """En test la auth debe seguir ON por defecto (tests de JWT/401).
+
+        El valor ``AUTH_DISABLED=true`` del ``.env`` local (uso personal) no debe
+        filtrarse a la suite de tests: sin él, los tests de auth/middleware
+        fallarían. Solo se desactiva en test si se pide explícitamente vía
+        variable de entorno del OS (p. ej. para un test de integración con flag
+        ON). En development/production se respeta el valor del ``.env``.
+        """
+        if self.environment == "test" and os.environ.get("AUTH_DISABLED", "").strip().lower() not in {"true", "1"}:
+            object.__setattr__(self, "auth_disabled", False)
         return self
 
     @model_validator(mode="after")

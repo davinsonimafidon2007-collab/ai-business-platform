@@ -48,6 +48,12 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
         request: Request,
         call_next: RequestResponseEndpoint,
     ) -> Response:
+        # AUTH_DISABLED=true (uso personal): no hacemos pre-auth JWT/API key ni
+        # devolvemos 401 por falta de Authorization. La capa de dependencias
+        # (get_current_user) inyecta el usuario local ADMIN.
+        if settings.auth_disabled:
+            return await call_next(request)
+
         # Skip authentication for public paths. Admin routes (/api/v1/admin/)
         # are also handled here: they are protected by route-level dependencies
         # (require_manage_api_keys -> get_current_user) which enforce auth and

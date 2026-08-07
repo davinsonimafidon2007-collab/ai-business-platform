@@ -3,6 +3,7 @@ import axios, {
   AxiosInstance,
   InternalAxiosRequestConfig,
 } from "axios";
+import { isAuthDisabled } from "@/app/config/app-mode";
 
 // Detecta el protocolo desde la variable de entorno o desde el contexto del navegador
 // para evitar errores de Mixed Content en Android/WebView
@@ -66,6 +67,12 @@ class ApiClient {
     const originalRequest = error.config as InternalAxiosRequestConfig & {
       _retry?: boolean;
     };
+
+    // Auth desactivada (uso personal): no hay sesión que refrescar ni a la que
+    // redirigir. No entrar en el loop de 401 → logout → login.
+    if (isAuthDisabled()) {
+      return Promise.reject(error);
+    }
 
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;

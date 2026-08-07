@@ -4,6 +4,7 @@ from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.database import get_db_session
 from app.exceptions import AuthenticationError, AuthorizationError, UserNotFoundError
 from app.models.role import Role
@@ -13,6 +14,7 @@ from app.repositories.user_repository import UserRepository
 from app.services.api_key_service import ApiKeyService
 from app.services.auth_service import AuthService
 from app.services.permission_service import PermissionService
+from app.services.personal_user_service import PersonalUserService
 from app.services.user_service import UserService
 
 from app.core.config import settings
@@ -32,7 +34,17 @@ async def get_current_user(
     Supports both JWT Bearer token and API Key authentication.
     Checks request state first (set by AuthenticationMiddleware),
     then falls back to JWT Bearer token.
+
+    Con ``AUTH_DISABLED=true`` se salta por completo JWT/API key y se devuelve
+    el usuario local ADMIN (get-or-create en la tabla ``users``), de modo que
+    el usuario no necesita registrarse ni iniciar sesión.
     """
+    if settings.auth_disabled:
+        user = await PersonalUserService(UserRepository(session)).ensure_local_user()
+        if not user.is_active:
+            raise AuthenticationError("Local user is inactive")
+        return user
+
     # Check if user was already authenticated by middleware
     if hasattr(request.state, "user") and request.state.user:
         return request.state.user

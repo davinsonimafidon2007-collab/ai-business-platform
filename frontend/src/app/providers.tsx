@@ -5,6 +5,7 @@ import { useState, useEffect } from "react";
 import { useAuthStore } from "@/app/store/auth-store";
 import { useThemeStore } from "@/app/store/theme-store";
 import { initGoogleAuth } from "@/app/services/google-auth";
+import { isAuthDisabled } from "@/app/config/app-mode";
 
 function ThemeInitializer({ children }: { children: React.ReactNode }) {
   const initialize = useThemeStore((state) => state.initialize);
@@ -40,7 +41,10 @@ function AuthInitializer({ children }: { children: React.ReactNode }) {
 
 function GoogleAuthInitializer({ children }: { children: React.ReactNode }) {
   useEffect(() => {
-    initGoogleAuth();
+    // Auth desactivada (uso personal): no inicializar Firebase/Google Login.
+    if (!isAuthDisabled()) {
+      initGoogleAuth();
+    }
   }, []);
 
   return <>{children}</>;
