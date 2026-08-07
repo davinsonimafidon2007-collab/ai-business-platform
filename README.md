@@ -312,6 +312,14 @@ python scripts/check_integrations_ready.py --strict   # jwt + db + fixtures
 
 BLOCKED en smtp/firebase/proxy es esperado sin credenciales (app sigue up).
 
+### Uso personal (no es un despliegue SaaS)
+
+Esta plataforma está pensada para correr **en local** (desarrollo / uso individual).
+No requiere VPS ni proxy residencial para el flujo principal con **AutoScout24**.
+mobile.de puede devolver 403 sin proxy; no es bloqueante: el provider está desacoplado.
+SMTP y Firebase son opcionales (`scripts/check_integrations_ready.py` puede mostrarlos BLOCKED).
+Contexto: [docs/CONTEXT_PERSONAL_USE.md](docs/CONTEXT_PERSONAL_USE.md).
+
 ### Ops — Health compuesto / Backups / Observabilidad (DEVOPS-001 / P3-002)
 
 Guía completa en [`docs/ops.md`](docs/ops.md). Resumen:

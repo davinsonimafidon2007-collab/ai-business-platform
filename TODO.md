@@ -1,4 +1,25 @@
 # TODO — ECON.2: fixtures doradas SPAIN/PT ✅
+
+## Contexto uso personal (2026-08-07) — leer primero
+
+- App **personal/local**, no despliegue obligatorio.
+- Doc: `docs/CONTEXT_PERSONAL_USE.md` + HANDOFF actualizado.
+- Fuente DE principal: **AutoScout24**. mobile.de / A.5b: **aparcado**.
+- VPS y proxy residencial: **no** requisitos del MVP personal.
+- SMTP / Firebase: opcionales.
+
+### Cola ops (reordenada)
+
+- [ ] (ops) Pasar E2E_MANUAL_CHECKLIST y anotar fecha
+- [ ] (opcional) SMTP.LIVE — solo si quieres mails
+- [ ] (opcional) FIRE.LIVE — solo si quieres Google login
+- [ ] ~~A.5b-LIVE proxy~~ — **NO prioritario** (uso personal)
+
+### Hecho producto local (1–7 de la cola operable)
+
+- E2E.MANUAL.1, SIM.1, SMOKE.CRIT.1, HANDOFF.2, HEALTH.UI.1, ECON.2, SEARCH.PROVIDERS.1 — ver HANDOFF.
+
+---
 - [x] tests/fixtures/econ_regression_cases.json (números del analyzer actual: SPAIN/ES/PORTUGAL/PT)
 - [x] tests/unit/test_econ_regression_fixtures.py (parametrizado + tolerancia + alias + PT≠SPAIN)
 - [x] ES ≡ SPAIN en caso alias; PT ≠ SPAIN en total_cost

@@ -4,7 +4,15 @@ Documento para la **siguiente sesión / otra cuenta**. No rehacer lo marcado com
 
 Última actualización: 2026-08-07
 
-Incluye: Redis en Compose, health compuesto/backups (DEVOPS-001), SEC.001,
+**Contexto (2026-08-07):** uso **personal y local**, no despliegue SaaS.  
+Documento ampliado: [docs/CONTEXT_PERSONAL_USE.md](CONTEXT_PERSONAL_USE.md).
+
+- Infra: PC local suficiente; VPS opcional solo para 24/7.
+- Datos DE: priorizar **AutoScout24**; mobile.de no prioritario (403 / ToS / sin proxy residencial de pago).
+- SMTP y Firebase: **opcionales**.
+- No gastar en proxy residencial como base del MVP personal.
+
+Incluye:
 labels ES (PROFIT/REC/ROI/SCORE/NEG/OPP), MKT explanation/sources, providers ES
 fixtures + registry, ADMIN providers UI, SIM.1, E2E.MANUAL.1, SMOKE.CRIT.1.
 
@@ -102,6 +110,9 @@ Visión futura (NO implementada como portales live ES): comparables coches.net /
 - No tratar fixtures ES como scrapers live.
 - No meter `smoke_critical_path` en CI sin admin secrets + API estable.
 - Commit solo desde `frontend/` (se dejan fuera `app/`, tests, docs).
+- No asumir que un VPS datacenter (~5 €) desbloquea mobile.de.
+- No priorizar compra de proxy residencial para uso personal del MVP.
+- No tratar A.5b-LIVE como gate de release personal.
 
 ---
 
@@ -138,13 +149,24 @@ Preferir **aplicar texto dado** antes que generar código nuevo.
 
 ---
 
-## 9. Prioridad siguiente
+## 9. Prioridad siguiente (uso personal — 2026-08-07)
 
-1. Ejecutar E2E.MANUAL_CHECKLIST en local y anotar fecha PASS (ops).
-2. Commit/push desde **raíz** si queda working tree sucio.
-3. ECON.2 entregado: fixtures de regresión de costes SPAIN/PT (`tests/fixtures/econ_regression_cases.json` + `tests/unit/test_econ_regression_fixtures.py`). Al cambiar `import_costs_data.json` actualizar los `expected_*` a propósito. HEALTH.UI.1 entregado.
-4. Con credencial: A.5b → SMTP live → FIRE live.
-5. Largo plazo: portales ES live (no fixtures).
+1. Usar el flujo local AS24 → drawer → simulate → opportunities.
+2. Ejecutar una vez `docs/E2E_MANUAL_CHECKLIST.md` y anotar fecha PASS.
+3. (Opcional) SMTP.LIVE — mails a la bandeja personal.
+4. (Opcional) FIRE.LIVE — login Google.
+5. **A.5b mobile.de / proxy residencial: NO prioritario** (aparcado).
+6. Largo plazo: fuente autorizada o fixtures; no “bypass anti-bot” como roadmap.
+
+### Bloqueos por credencial (siguen existiendo, no bloquean el MVP personal)
+
+| ID | Notas |
+|----|--------|
+| A.5b | Proxy/cookies — **no planificado** en uso personal |
+| SMTP | Solo si se quieren alertas email |
+| FIRE | Solo si se quiere Google login |
+
+Sin estos, jwt + database + AS24 + fixtures ES bastan.
 
 ---
 
