@@ -92,12 +92,30 @@ Qué hace:
 **No usar así en un despliegue público**: con el flag ON cualquiera que alcance
 el puerto HTTP sería ADMIN sin contraseña. En un deploy real dejar `false`.
 
-### TODO — PERSONAL.NOAUTH ✅
+**`APP_MODE` no controla la auth.** Existe `APP_MODE=personal|multiuser` como
+documentación de intención de producto, pero el único interruptor del bypass es
+`AUTH_DISABLED`. Poner `APP_MODE=personal` sin `AUTH_DISABLED=true` mantiene el
+login JWT normal.
+
+**Producción bloqueada:** con `ENVIRONMENT=production` + `AUTH_DISABLED=true` la
+app **no arranca** (fail-fast). Si aun así lo quieres (puerto no expuesto), hay
+override explícito: `ALLOW_AUTH_DISABLED_IN_PROD=true`.
+
+### TODO — PERSONAL.NOAUTH ✅ / PERS.CLOSE.1 ✅
 
 - [x] `AUTH_DISABLED` + usuario local ADMIN (get-or-create en DB)
 - [x] `get_current_user` bypass JWT con flag ON + middleware salta pre-auth
 - [x] Front guard off + `NEXT_PUBLIC_AUTH_DISABLED` + store local user
 - [x] Tests flag on/off
+- [x] PERS.CLOSE.1: un solo camino en `get_current_user` (nunca `None`),
+      fail-fast en production, home directa a `/dashboard`, docs alineadas
+
+### Checklist manual (uso personal)
+
+- [ ] Home → dashboard sin login
+- [ ] Search no pide auth
+- [ ] Opportunities lista (vacía o con datos) sin 401
+- [ ] No hay botón de logout (o no rompe la sesión)
 
 HANDOFF: auth opcional; personal → `AUTH_DISABLED=true`.
 

@@ -11,6 +11,13 @@ class Settings(BaseSettings):
     app_version: str = "0.1.0"
     environment: Literal["development", "production", "test"] = "development"
     app_mode: Literal["personal", "multiuser"] = "personal"
+    """Intención de producto (documentación); NO controla la autenticación.
+
+    El bypass de login tiene una única fuente de verdad: ``auth_disabled``.
+    Para uso personal sin registro/login hay que activar ``AUTH_DISABLED=true``
+    (y ``NEXT_PUBLIC_AUTH_DISABLED=true`` en el frontend). Dejar ``app_mode``
+    en ``personal`` sin ``auth_disabled`` mantiene la auth JWT normal.
+    """
     app_url: str = "http://localhost:3000"
     """Frontend URL for constructing email links and CORS."""
     database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/ai_business_platform"
@@ -23,6 +30,14 @@ class Settings(BaseSettings):
     Activar solo en máquina local / uso personal (``AUTH_DISABLED=true``).
     No usar en un despliegue público: cualquiera con acceso al puerto sería
     ADMIN. En producción real dejar ``false``.
+    """
+
+    allow_auth_disabled_in_prod: bool = False
+    """Override explícito para permitir ``AUTH_DISABLED=true`` en production.
+
+    Por defecto la app **no arranca** si ``environment=production`` y
+    ``auth_disabled=true`` (fail-fast, PERS.CLOSE.1). Solo poner a ``true`` si
+    sabes que el puerto no está expuesto públicamente.
     """
 
     @model_validator(mode="after")
@@ -55,6 +70,27 @@ class Settings(BaseSettings):
         """
         if self.environment == "test" and os.environ.get("AUTH_DISABLED", "").strip().lower() not in {"true", "1"}:
             object.__setattr__(self, "auth_disabled", False)
+        return self
+
+    @model_validator(mode="after")
+    def auth_disabled_forbidden_in_production(self) -> "Settings":
+        """production + AUTH_DISABLED=true → no arranca (PERS.CLOSE.1).
+
+        Con la auth desactivada cualquiera con acceso al puerto sería ADMIN.
+        Solo se permite con el override explícito
+        ``ALLOW_AUTH_DISABLED_IN_PROD=true``.
+        """
+        if (
+            self.environment == "production"
+            and self.auth_disabled
+            and not self.allow_auth_disabled_in_prod
+        ):
+            raise ValueError(
+                "AUTH_DISABLED=true no está permitido con ENVIRONMENT=production: "
+                "cualquiera con acceso al puerto sería ADMIN. Usa AUTH_DISABLED=false "
+                "o, si el puerto no es público y lo asumes, "
+                "ALLOW_AUTH_DISABLED_IN_PROD=true."
+            )
         return self
 
     @model_validator(mode="after")

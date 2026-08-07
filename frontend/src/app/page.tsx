@@ -4,20 +4,27 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuthStore } from "@/app/store/auth-store";
+import { isAuthDisabled } from "@/app/config/app-mode";
 
 export default function Home() {
   const router = useRouter();
   const { isAuthenticated, isLoading, initialize } = useAuthStore();
+  // Uso personal (PERS.CLOSE.1): no hay landing de login, directo al dashboard.
+  const authDisabled = isAuthDisabled();
 
   useEffect(() => {
     initialize();
   }, [initialize]);
 
   useEffect(() => {
+    if (authDisabled) {
+      router.replace("/dashboard/");
+      return;
+    }
     if (!isLoading && isAuthenticated) {
       router.push("/dashboard/");
     }
-  }, [isAuthenticated, isLoading, router]);
+  }, [authDisabled, isAuthenticated, isLoading, router]);
 
   if (isLoading) {
     return (

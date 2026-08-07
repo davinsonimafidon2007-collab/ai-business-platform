@@ -17,8 +17,6 @@ from app.services.permission_service import PermissionService
 from app.services.personal_user_service import PersonalUserService
 from app.services.user_service import UserService
 
-from app.core.config import settings
-
 security = HTTPBearer(auto_error=False)
 
 permission_service = PermissionService()
@@ -38,6 +36,12 @@ async def get_current_user(
     Con ``AUTH_DISABLED=true`` se salta por completo JWT/API key y se devuelve
     el usuario local ADMIN (get-or-create en la tabla ``users``), de modo que
     el usuario no necesita registrarse ni iniciar sesión.
+
+    Nota (PERS.CLOSE.1): el bypass de login tiene **una sola** fuente de verdad,
+    ``settings.auth_disabled``. ``settings.app_mode`` es solo documentación de
+    intención de producto y NO altera la autenticación: para uso personal sin
+    login hay que activar ``AUTH_DISABLED=true``. Esta función nunca devuelve
+    ``None``: o devuelve un ``User`` real o lanza ``AuthenticationError``.
     """
     if settings.auth_disabled:
         user = await PersonalUserService(UserRepository(session)).ensure_local_user()
@@ -48,19 +52,6 @@ async def get_current_user(
     # Check if user was already authenticated by middleware
     if hasattr(request.state, "user") and request.state.user:
         return request.state.user
-
-    # Modo personal: sin autenticación obligatoria
-    if settings.app_mode == "personal":
-        # Devolver usuario por defecto para uso personal
-        user_service = UserService(UserRepository(session))
-        try:
-            user = await user_service.get_user("personal_user_default")
-            return user
-        except UserNotFoundError:
-            # Si no existe, no se bloquea (modo personal sin login)
-            pass
-        # En modo personal sin usuario real, retornar None permitido por la app
-        return None  # type: ignore
 
     # Fall back to JWT Bearer token authentication
     if credentials is None or not credentials.credentials:

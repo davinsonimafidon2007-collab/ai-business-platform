@@ -11,10 +11,11 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from pydantic import ValidationError
 
-from app.core.config import settings
+from app.core.config import Settings, settings
 from app.core.local_user import LOCAL_USER_EMAIL, LOCAL_USER_ID_STR
-from app.dependencies.auth import get_current_user
+from app.dependencies.auth import get_current_user, require_role
 from app.exceptions import AuthenticationError
 from app.models.role import Role
 from app.models.user import User
@@ -73,6 +74,112 @@ async def test_auth_enabled_still_requires_jwt_without_credentials(
 
     with pytest.raises(AuthenticationError):
         await get_current_user(_FakeRequest(), credentials=None, session=None)
+
+
+@pytest.mark.asyncio
+async def test_app_mode_personal_alone_does_not_bypass_auth(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """PERS.CLOSE.1: app_mode=personal SIN auth_disabled no salta la auth.
+
+    El bypass tiene una única fuente de verdad (``auth_disabled``). Antes había
+    un branch paralelo que podía devolver ``None`` y romper rutas que exigen
+    un ``User`` real.
+    """
+    monkeypatch.setattr(settings, "auth_disabled", False)
+    monkeypatch.setattr(settings, "app_mode", "personal")
+
+    with pytest.raises(AuthenticationError):
+        await get_current_user(_FakeRequest(), credentials=None, session=None)
+
+
+@pytest.mark.asyncio
+async def test_get_current_user_never_returns_none_when_auth_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Flag ON + app_mode=personal → siempre un User real, nunca None."""
+    monkeypatch.setattr(settings, "auth_disabled", True)
+    monkeypatch.setattr(settings, "app_mode", "personal")
+
+    local_user = _local_admin()
+    fake_service_cls = MagicMock()
+    fake_service_cls.return_value.ensure_local_user = AsyncMock(
+        return_value=local_user
+    )
+    monkeypatch.setattr(
+        "app.dependencies.auth.PersonalUserService", fake_service_cls
+    )
+
+    user = await get_current_user(_FakeRequest(), credentials=None, session=None)
+
+    assert user is not None
+    assert isinstance(user, User)
+    assert user.id == LOCAL_USER_ID_STR
+
+
+@pytest.mark.asyncio
+async def test_auth_disabled_user_passes_admin_role_check(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """El usuario local es ADMIN → require_role(ADMIN) lo acepta."""
+    monkeypatch.setattr(settings, "auth_disabled", True)
+
+    local_user = _local_admin()
+    fake_service_cls = MagicMock()
+    fake_service_cls.return_value.ensure_local_user = AsyncMock(
+        return_value=local_user
+    )
+    monkeypatch.setattr(
+        "app.dependencies.auth.PersonalUserService", fake_service_cls
+    )
+
+    user = await get_current_user(_FakeRequest(), credentials=None, session=None)
+    dependency = require_role(Role.ADMIN)
+
+    assert await dependency(current_user=user) is user
+
+
+@pytest.mark.asyncio
+async def test_auth_disabled_inactive_local_user_raises(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Si la fila local está desactivada, no se inyecta silenciosamente."""
+    monkeypatch.setattr(settings, "auth_disabled", True)
+
+    inactive = _local_admin()
+    inactive.is_active = False
+    fake_service_cls = MagicMock()
+    fake_service_cls.return_value.ensure_local_user = AsyncMock(return_value=inactive)
+    monkeypatch.setattr(
+        "app.dependencies.auth.PersonalUserService", fake_service_cls
+    )
+
+    with pytest.raises(AuthenticationError):
+        await get_current_user(_FakeRequest(), credentials=None, session=None)
+
+
+def test_auth_disabled_forbidden_in_production() -> None:
+    """production + AUTH_DISABLED=true sin override → Settings no carga."""
+    with pytest.raises(ValidationError):
+        Settings(
+            environment="production",
+            auth_disabled=True,
+            jwt_secret_key="x" * 40,
+            cors_origins="https://app.example.com",
+        )
+
+
+def test_auth_disabled_allowed_in_production_with_override() -> None:
+    """Con ALLOW_AUTH_DISABLED_IN_PROD=true sí arranca (asumido por el operador)."""
+    cfg = Settings(
+        environment="production",
+        auth_disabled=True,
+        allow_auth_disabled_in_prod=True,
+        jwt_secret_key="x" * 40,
+        cors_origins="https://app.example.com",
+    )
+
+    assert cfg.auth_disabled is True
 
 
 class FakeUserRepository:

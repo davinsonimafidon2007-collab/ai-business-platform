@@ -320,6 +320,22 @@ mobile.de puede devolver 403 sin proxy; no es bloqueante: el provider está desa
 SMTP y Firebase son opcionales (`scripts/check_integrations_ready.py` puede mostrarlos BLOCKED).
 Contexto: [docs/CONTEXT_PERSONAL_USE.md](docs/CONTEXT_PERSONAL_USE.md).
 
+#### Arranque sin login (PERS.CLOSE.1)
+
+```bash
+echo "AUTH_DISABLED=true"             >> .env            # backend
+echo "NEXT_PUBLIC_AUTH_DISABLED=true" >> frontend/.env   # frontend
+docker compose up --build
+# abrir el frontend → dashboard directo, sin registro ni login
+```
+
+El backend inyecta un usuario local ADMIN persistente (`local@localhost`, UUID
+fijo `00000000-0000-4000-8000-000000000001`), así que los datos se guardan con
+FKs válidas. `APP_MODE` **no** controla esto: el único interruptor es
+`AUTH_DISABLED`. Con `ENVIRONMENT=production` el flag hace que la app **no
+arranque** salvo `ALLOW_AUTH_DISABLED_IN_PROD=true`. No lo expongas en un VPS
+público: cualquiera con acceso al puerto sería ADMIN.
+
 ### Ops — Health compuesto / Backups / Observabilidad (DEVOPS-001 / P3-002)
 
 Guía completa en [`docs/ops.md`](docs/ops.md). Resumen:
