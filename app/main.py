@@ -2,7 +2,7 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, status
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import HTMLResponse
@@ -15,6 +15,7 @@ from app.api.v1.searches import router as searches_router
 from app.api.v1.users import router as users_router
 from app.api.v1.vehicles import router as vehicles_router
 from app.api.v1.router import api_router
+from app.api.v1.routes.health import router as health_router
 from app.core.config import settings
 from app.core.exception_handlers import register_exception_handlers
 from app.core.logging import setup_logging
@@ -131,15 +132,8 @@ app.include_router(searches_router, prefix="/api/v1")
 app.include_router(users_router, prefix="/api/v1")
 app.include_router(vehicles_router, prefix="/api/v1")
 app.include_router(api_router, prefix="/api/v1")
-
-
-@app.get(
-    "/health",
-    tags=["Health"],
-    status_code=status.HTTP_200_OK,
-)
-def get_health() -> dict[str, str]:
-    return {"status": "operational"}
+# Health compuesto (DB + Redis) también en raíz para el healthcheck de Docker.
+app.include_router(health_router)
 
 
 # ---------------------------------------------------------------------------

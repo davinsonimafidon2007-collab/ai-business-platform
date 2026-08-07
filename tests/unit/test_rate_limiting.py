@@ -25,10 +25,11 @@ def test_rate_limit_global_applied():
     """Verifica que el rate limit global está aplicado en la aplicación."""
     client = TestClient(app)
     
-    # Realizar múltiples peticiones al endpoint de health
-    # El límite global es 60 req/min, así que deberíamos poder hacer varias peticiones
+    # Realizar múltiples peticiones a un endpoint sin dependencias de DB/Redis
+    # (/openapi.json). No se usa /health porque DEVOPS-001 hace que devuelva 503
+    # si la DB no está disponible. El límite global es 60 req/min.
     for _ in range(5):
-        response = client.get("/health")
+        response = client.get("/openapi.json")
         assert response.status_code == 200
 
 

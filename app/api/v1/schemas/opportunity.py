@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, computed_field
 
 
 class OpportunityVehicleSummary(BaseModel):
@@ -37,6 +37,18 @@ class OpportunityRead(BaseModel):
     updated_at: datetime | None = None
 
     model_config = ConfigDict(from_attributes=True)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def recommendation_label(self) -> str:
+        """Alias legible de recommendation_label_es (TEST.OPP.LABELS.1)."""
+        return self.recommendation_label_es
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def risk_label(self) -> str:
+        """Alias legible de risk_label_es (TEST.OPP.LABELS.1)."""
+        return self.risk_label_es
 
 
 class OpportunityListResponse(BaseModel):

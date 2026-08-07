@@ -62,6 +62,23 @@ from app.config.scoring import (
 )
 
 # =============================================================================
+# Categorías de score (SCORE.1)
+# =============================================================================
+
+SCORE_CATEGORY_LABELS_ES: dict[str, str] = {
+    "excellent": "Excelente",
+    "very_good": "Muy bueno",
+    "good": "Bueno",
+    "acceptable": "Aceptable",
+    "poor": "Malo",
+}
+
+SCORE_CATEGORY_KEY_FROM_ES: dict[str, str] = {
+    v: k for k, v in SCORE_CATEGORY_LABELS_ES.items()
+}
+
+
+# =============================================================================
 # Modelos de salida
 # =============================================================================
 
@@ -96,7 +113,9 @@ class VehicleScore:
     """
 
     score: int
-    category: str
+    category: str  # legacy ES
+    category_key: str = "poor"
+    category_label_es: str = ""
     reasons: list[ScoreReason] = field(default_factory=list)
     strengths: list[str] = field(default_factory=list)
     weaknesses: list[str] = field(default_factory=list)
@@ -188,7 +207,8 @@ class VehicleScorer:
         final_score = round(total_score)
 
         # Determinar categoría
-        category = self._get_category(final_score)
+        category_key = self._get_category_key(final_score)
+        category_label = SCORE_CATEGORY_LABELS_ES[category_key]
 
         # Separar fortalezas y debilidades
         strengths = [r.reason for r in reasons if r.is_positive and r.impact > 0]
@@ -196,7 +216,9 @@ class VehicleScorer:
 
         return VehicleScore(
             score=final_score,
-            category=category,
+            category=category_label,
+            category_key=category_key,
+            category_label_es=category_label,
             reasons=reasons,
             strengths=strengths,
             weaknesses=weaknesses,
@@ -601,17 +623,22 @@ class VehicleScorer:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _get_category(score: float) -> str:
-        """Convierte una puntuación numérica en categoría textual."""
+    def _get_category_key(score: float) -> str:
+        """Convierte una puntuación numérica en clave estable de categoría."""
         if score >= SCORE_EXCELLENT:
-            return "Excelente"
+            return "excellent"
         if score >= SCORE_VERY_GOOD:
-            return "Muy bueno"
+            return "very_good"
         if score >= SCORE_GOOD:
-            return "Bueno"
+            return "good"
         if score >= SCORE_ACCEPTABLE:
-            return "Aceptable"
-        return "Malo"
+            return "acceptable"
+        return "poor"
+
+    @classmethod
+    def _get_category(cls, score: float) -> str:
+        """Compat: label ES (comportamiento anterior)."""
+        return SCORE_CATEGORY_LABELS_ES[cls._get_category_key(score)]
 
     @staticmethod
     def _count_images(vehicle: VehicleData) -> int:

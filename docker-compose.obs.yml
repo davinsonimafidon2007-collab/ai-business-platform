@@ -1,0 +1,49 @@
+# docker-compose.obs.yml — Observabilidad opcional (fase 2, DEVOPS-001).
+#
+# Prometheus + Grafana para explorar métricas cuando la plataforma esté lista
+# para un stack de observabilidad completo. NO se arrancan con `docker compose up`
+# por defecto: se activan explícitamente con el perfil `obs`.
+#
+#   docker compose --profile obs up -d
+#
+# Después:
+#   - Prometheus scrape target: http://localhost:9090
+#     (requiere que la API exponga /metrics — aún no existe; ver docs/ops.md).
+#   - Grafana: http://localhost:3001  (user: admin / $GRAFANA_ADMIN_PASSWORD)
+#
+# Nota: este proyecto NO añade dependencias opentelemetry-* en este task.
+# El stack queda documentado/opcional y no bloquea CI.
+
+services:
+  prometheus:
+    image: prom/prometheus:latest
+    profiles: ["obs"]
+    container_name: abp_prometheus
+    volumes:
+      - prometheus_data:/prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=15d
+    ports:
+      - "9090:9090"
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    profiles: ["obs"]
+    container_name: abp_grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: "${GRAFANA_ADMIN_PASSWORD:-admin}"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "3001:3000"
+    restart: unless-stopped
+
+volumes:
+  prometheus_data:
+    name: abp_prometheus_data
+  grafana_data:
+    name: abp_grafana_data

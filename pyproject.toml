@@ -45,3 +45,11 @@ pythonpath = ["."]
 [tool.ruff]
 line-length = 100
 target-version = "py313"
+
+[tool.ruff.lint]
+# CODE-001: reglas base de higiene. B008 (FastAPI `Depends()` en defaults) y
+# E501 (line length) se ignoran repo-wide: B008 es el idioma idiomático de
+# FastAPI y E501 está acotado por Ruff formatter. El baseline heredado de UP/F/I
+# se gestiona de forma incremental (ver TODO CODE-001).
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["E501", "B008"]

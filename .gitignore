@@ -23,8 +23,10 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 .ruff_cache/
+.mypy_cache/
 htmlcov/
 .coverage
+*.egg-info/
 
 # Entornos / secretos
 .venv/
@@ -53,6 +55,13 @@ npm-debug.log*
 # Build
 build/
 dist/
+
+# Artefactos binarios/accedidales (CODE-001)
+*.zip
+!**/fixtures/**/*.zip
+
+# Backups Postgres (DEVOPS-001 / P3-002) — nunca versionar dumps con datos
+backups/
 
 # IDE
 .vscode/

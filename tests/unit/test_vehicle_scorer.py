@@ -199,6 +199,19 @@ class TestCategoryMapping:
         assert SCORE_ACCEPTABLE <= result.score < SCORE_GOOD
         assert result.category == "Aceptable"
 
+    def test_category_key_and_label_alignment(self) -> None:
+        from app.services.vehicle_scorer import SCORE_CATEGORY_LABELS_ES
+
+        assert VehicleScorer._get_category_key(95) == "excellent"
+        assert VehicleScorer._get_category(95) == "Excelente"
+        assert SCORE_CATEGORY_LABELS_ES["poor"] == "Malo"
+
+    def test_score_populates_category_key_and_label(self, scorer: VehicleScorer, perfect_vehicle: VehicleStub) -> None:
+        result = scorer.score(perfect_vehicle)
+        assert result.category == "Excelente"
+        assert result.category_key == "excellent"
+        assert result.category_label_es == "Excelente"
+
 
 # =============================================================================
 # Tests de precio

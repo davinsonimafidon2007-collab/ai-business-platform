@@ -25,14 +25,11 @@ from bs4 import BeautifulSoup
 
 from app.providers.base import VehicleProvider
 from app.providers.dto import VehicleDetail, VehicleSearchResult
+from app.providers.parsers import autoscout24_parser
 
 logger = logging.getLogger(__name__)
 
 BASE_URL = "https://www.autoscout24.de"
-
-# Precio de coche razonable en el dominio de importación (EUR)
-_MIN_PLAUSIBLE_PRICE = 500.0
-_MAX_PLAUSIBLE_PRICE = 500_000.0
 
 
 class AutoScout24Provider(VehicleProvider):
@@ -90,115 +87,27 @@ class AutoScout24Provider(VehicleProvider):
         return super()._parse_search_results(html, search_url)
 
     def _parse_listings_from_next_data(self, html: str) -> list[VehicleSearchResult]:
-        """Extrae listings desde el JSON embebido de Next.js."""
-        match = re.search(
-            r'<script[^>]+id="__NEXT_DATA__"[^>]*>(.*?)</script>',
+        """Extrae listings desde el JSON embebido de Next.js.
+
+        Delega en ``autoscout24_parser.parse_listings_from_next_data``.
+        """
+        base = (self._base_url or BASE_URL).rstrip("/")
+        return autoscout24_parser.parse_listings_from_next_data(
             html,
-            re.DOTALL,
+            base_url=base,
+            source_name=self.source_name,
         )
-        if not match:
-            return []
-
-        try:
-            payload = json.loads(match.group(1))
-        except json.JSONDecodeError as exc:
-            logger.warning("autoscout24: __NEXT_DATA__ no es JSON válido: %s", exc)
-            return []
-
-        listings = (
-            payload.get("props", {})
-            .get("pageProps", {})
-            .get("listings")
-        )
-        if not isinstance(listings, list) or not listings:
-            return []
-
-        results: list[VehicleSearchResult] = []
-        for item in listings:
-            if not isinstance(item, dict):
-                continue
-            parsed = self._listing_dict_to_result(item)
-            if parsed is not None:
-                results.append(parsed)
-        return results
 
     def _listing_dict_to_result(self, item: dict[str, Any]) -> VehicleSearchResult | None:
-        """Mapea un objeto listing de pageProps a VehicleSearchResult."""
-        external_id = str(
-            item.get("id")
-            or (item.get("identifier") or {}).get("crossReferenceId")
-            or item.get("crossReferenceId")
-            or ""
-        ).strip()
-        if not external_id:
-            return None
+        """Mapea un objeto listing de pageProps a VehicleSearchResult.
 
-        relative_url = item.get("url") or ""
-        url = urljoin(f"{self._base_url}/", relative_url.lstrip("/")) if relative_url else None
-
-        vehicle = item.get("vehicle") if isinstance(item.get("vehicle"), dict) else {}
-        price_obj = item.get("price") if isinstance(item.get("price"), dict) else {}
-        location_obj = item.get("location") if isinstance(item.get("location"), dict) else {}
-        tracking = item.get("tracking") if isinstance(item.get("tracking"), dict) else {}
-        seller = item.get("seller") if isinstance(item.get("seller"), dict) else {}
-
-        brand = vehicle.get("make")
-        model = vehicle.get("model")
-        version = vehicle.get("modelVersionInput") or vehicle.get("variant")
-
-        price_raw = price_obj.get("priceRaw")
-        price: float | None
-        try:
-            price = float(price_raw) if price_raw is not None else None
-        except (TypeError, ValueError):
-            price = self._parse_price_text(str(price_obj.get("priceFormatted") or ""))
-
-        mileage = self._parse_intish(
-            tracking.get("mileage") or vehicle.get("mileageInKm")
-        )
-        year = self._year_from_registration(
-            tracking.get("firstRegistration") or item.get("firstRegistration")
-        )
-        first_registration = tracking.get("firstRegistration")
-
-        fuel_raw = vehicle.get("fuel") or tracking.get("fuelType")
-        fuel_type = self._normalize_fuel(str(fuel_raw)) if fuel_raw else None
-
-        transmission = vehicle.get("transmission")
-        power_hp = self._parse_intish(vehicle.get("powerInHp") or vehicle.get("power"))
-        displacement_cc = self._parse_intish(vehicle.get("engineDisplacementInCCM"))
-
-        city = location_obj.get("city")
-        zip_code = location_obj.get("zip")
-        country = location_obj.get("countryCode")
-        location_parts = [p for p in (zip_code, city, country) if p]
-        location = " ".join(location_parts) if location_parts else None
-
-        seller_type = seller.get("type")
-        images = item.get("images") if isinstance(item.get("images"), list) else []
-        images = [str(u) for u in images if u]
-
-        return VehicleSearchResult(
-            source=self.source_name,
-            external_id=external_id,
-            url=url,
-            brand=brand,
-            model=model,
-            version=version,
-            year=year,
-            mileage=mileage,
-            fuel_type=fuel_type,
-            transmission=transmission,
-            power_hp=power_hp,
-            displacement_cc=displacement_cc,
-            location=location,
-            seller_type=seller_type,
-            first_registration=first_registration,
-            price=price,
-            currency="EUR",
-            images=images,
-            description=vehicle.get("subtitle"),
-            raw_data=item,
+        Delega en ``autoscout24_parser.listing_dict_to_result``.
+        """
+        base = (self._base_url or BASE_URL).rstrip("/")
+        return autoscout24_parser.listing_dict_to_result(
+            item,
+            base_url=base,
+            source_name=self.source_name,
         )
 
     def _find_listing_nodes(self, soup: BeautifulSoup) -> list[Any]:
@@ -303,50 +212,18 @@ class AutoScout24Provider(VehicleProvider):
         )
 
     def _normalize_fuel(self, raw: str) -> str | None:
-        text = (raw or "").strip()
-        if not text:
-            return None
-        code_map = {
-            "b": "Gasolina",
-            "d": "Diesel",
-            "e": "Eléctrico",
-            "h": "Híbrido",
-            "l": "Gas",
-            "c": "Gas",
-        }
-        if len(text) == 1 and text.lower() in code_map:
-            return code_map[text.lower()]
-        for pattern, label in self._fuel_patterns:
-            if pattern.search(text):
-                return label
-        return text
+        """Normaliza el tipo de combustible (delega en el parser)."""
+        return autoscout24_parser.normalize_fuel(raw)
 
     @staticmethod
     def _parse_intish(value: Any) -> int | None:
-        if value is None:
-            return None
-        if isinstance(value, int):
-            return value
-        if isinstance(value, float):
-            return int(value)
-        text = str(value)
-        digits = re.sub(r"[^\d]", "", text)
-        if not digits:
-            return None
-        try:
-            return int(digits)
-        except ValueError:
-            return None
+        """Convierte un valor a entero (delega en el parser)."""
+        return autoscout24_parser.parse_intish(value)
 
     @staticmethod
     def _year_from_registration(value: Any) -> int | None:
-        if value is None:
-            return None
-        text = str(value)
-        match = re.search(r"(20\d{2}|19\d{2})", text)
-        if match:
-            return int(match.group(1))
-        return None
+        """Extrae el año de matriculación (delega en el parser)."""
+        return autoscout24_parser.year_from_registration(value)
 
     # ------------------------------------------------------------------
     # Detail overrides — extractores específicos del HTML de ficha AS24
@@ -466,56 +343,18 @@ class AutoScout24Provider(VehicleProvider):
 
     @staticmethod
     def _coerce_price_number(value: Any) -> float | None:
-        if value is None:
-            return None
-        if isinstance(value, (int, float)):
-            return float(value)
-        text = str(value).strip()
-        if not text:
-            return None
-        # "9000.00" or "9000"
-        if re.fullmatch(r"\d+(?:\.\d+)?", text):
-            try:
-                return float(text)
-            except ValueError:
-                return None
-        return AutoScout24Provider._parse_price_text_static(text)
+        """Coerciona un valor de precio a float (delega en el parser)."""
+        return autoscout24_parser.coerce_price_number(value)
 
     @staticmethod
     def _is_plausible_price(value: float) -> bool:
-        return _MIN_PLAUSIBLE_PRICE <= value <= _MAX_PLAUSIBLE_PRICE
+        """Indica si un precio está en el rango plausible (delega en el parser)."""
+        return autoscout24_parser.is_plausible_price(value)
 
     @staticmethod
     def _parse_price_text_static(text: str) -> float | None:
-        if not text:
-            return None
-        match = re.search(
-            r"(?<!\d)(\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?|\d{4,}(?:,\d{1,2})?|\d{1,3},\d{2})\s*(?:€|EUR|eur)?",
-            text,
-        )
-        if not match:
-            # "9.000,-"
-            match = re.search(r"(?<!\d)(\d{1,3}(?:\.\d{3})+)\s*,-", text)
-        if not match:
-            return None
-        raw = match.group(1)
-        if "," in raw and "." in raw:
-            # 9.000,50 → european
-            raw = raw.replace(".", "").replace(",", ".")
-        elif "," in raw:
-            parts = raw.split(",")
-            if len(parts[-1]) == 2:
-                raw = raw.replace(".", "").replace(",", ".")
-            else:
-                raw = raw.replace(",", "")
-        else:
-            # 9.000 miles or 9000.50 US — si hay más de un punto o patrón miles DE
-            if re.fullmatch(r"\d{1,3}(\.\d{3})+", raw):
-                raw = raw.replace(".", "")
-        try:
-            return float(raw)
-        except ValueError:
-            return None
+        """Parsea un texto de precio DE/EU a float (delega en el parser)."""
+        return autoscout24_parser.parse_price_text_static(text)
 
     def _parse_price_text(self, text: str) -> float | None:
         return self._parse_price_text_static(text)

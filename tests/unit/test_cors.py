@@ -93,9 +93,11 @@ def test_cors_headers_present():
     """Verifica que los headers CORS están presentes en las respuestas."""
     client = TestClient(app)
     
-    # Realizar una petición con Origin
+    # Realizar una petición con Origin. Se usa /openapi.json (sin dependencias
+    # de DB/Redis) para que CORS no dependa del estado de /health (DEVOPS-001:
+    # /health devuelve 503 si la DB está caída).
     response = client.get(
-        "/health",
+        "/openapi.json",
         headers={"Origin": "http://localhost:3000"},
     )
     
@@ -108,16 +110,16 @@ def test_cors_allows_multiple_origins():
     """Verifica que CORS permite múltiples origins configurados."""
     client = TestClient(app)
     
-    # Test con primer origen
+    # Test con primer origen (endpoint sin dependencias de DB/Redis)
     response1 = client.get(
-        "/health",
+        "/openapi.json",
         headers={"Origin": "http://localhost:3000"},
     )
     assert response1.headers.get("access-control-allow-origin") == "http://localhost:3000"
     
     # Test con segundo origen
     response2 = client.get(
-        "/health",
+        "/openapi.json",
         headers={"Origin": "http://localhost:5173"},
     )
     assert response2.headers.get("access-control-allow-origin") == "http://localhost:5173"
@@ -128,7 +130,7 @@ def test_cors_rejects_unconfigured_origin():
     client = TestClient(app)
     
     response = client.get(
-        "/health",
+        "/openapi.json",
         headers={"Origin": "http://malicious-site.com"},
     )
     
@@ -143,7 +145,7 @@ def test_cors_allows_credentials():
     client = TestClient(app)
     
     response = client.get(
-        "/health",
+        "/openapi.json",
         headers={"Origin": "http://localhost:3000"},
     )
     
@@ -157,7 +159,7 @@ def test_cors_allows_standard_methods():
     
     # Hacer una petición OPTIONS (preflight)
     response = client.options(
-        "/health",
+        "/openapi.json",
         headers={
             "Origin": "http://localhost:3000",
             "Access-Control-Request-Method": "POST",

@@ -7,6 +7,44 @@ import { VehicleDrawer } from "@/app/features/vehicle/VehicleDrawer";
 import { useSearchVehicles, formatFiltersForApi } from "@/app/hooks/use-search";
 import type { SearchFilters as SearchFiltersType, SearchResultItem } from "@/app/types/vehicle";
 
+function searchErrorMessage(err: unknown): { title: string; detail: string; hint?: string } {
+  const raw = err instanceof Error ? err.message : String(err ?? "");
+  const lower = raw.toLowerCase();
+
+  if (lower.includes("401") || lower.includes("unauthorized") || lower.includes("not authenticated")) {
+    return {
+      title: "Sesión no válida",
+      detail: "No estás autenticado o el token caducó.",
+      hint: "Vuelve a iniciar sesión e intenta la búsqueda otra vez.",
+    };
+  }
+  if (lower.includes("403") || lower.includes("forbidden")) {
+    return {
+      title: "Sin permiso",
+      detail: "Tu usuario no tiene permiso para buscar.",
+      hint: "Si crees que es un error, contacta a un administrador.",
+    };
+  }
+  if (lower.includes("network") || lower.includes("fetch") || lower.includes("failed to fetch")) {
+    return {
+      title: "Error de red",
+      detail: "No se pudo contactar con el servidor.",
+      hint: "Comprueba que la API está en marcha y tu conexión.",
+    };
+  }
+  if (lower.includes("500") || lower.includes("internal")) {
+    return {
+      title: "Error del servidor",
+      detail: raw || "Error interno al buscar.",
+      hint: "Revisa logs del backend o el estado en Admin.",
+    };
+  }
+  return {
+    title: "Error al buscar",
+    detail: raw || "No se pudo completar la búsqueda.",
+  };
+}
+
 export default function SearchPage() {
   const searchMutation = useSearchVehicles();
   const [selectedVehicle, setSelectedVehicle] = useState<SearchResultItem | null>(null);
@@ -40,24 +78,40 @@ export default function SearchPage() {
       )}
 
       {/* Error State */}
-      {searchMutation.isError && (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-6 text-center dark:border-red-800 dark:bg-red-900/20">
-          <p className="text-red-600 dark:text-red-400">
-            Error al realizar la búsqueda: {searchMutation.error.message}
-          </p>
-        </div>
-      )}
+      {searchMutation.isError && (() => {
+        const copy = searchErrorMessage(searchMutation.error);
+        return (
+          <div className="rounded-lg border border-red-200 bg-red-50 p-6 text-center dark:border-red-800 dark:bg-red-900/20">
+            <h3 className="text-lg font-semibold text-red-700 dark:text-red-300">{copy.title}</h3>
+            <p className="mt-2 text-sm text-red-600 dark:text-red-400">{copy.detail}</p>
+            {copy.hint && (
+              <p className="mt-3 text-xs text-red-500/90 dark:text-red-400/80">{copy.hint}</p>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Empty State */}
       {searchMutation.isSuccess && searchMutation.data.results.length === 0 && (
         <div className="rounded-lg border border-secondary-200 p-12 text-center dark:border-secondary-700">
-          <p className="text-4xl">🔍</p>
+          <p className="text-4xl" aria-hidden>🔍</p>
           <h3 className="mt-4 text-lg font-semibold text-secondary-900 dark:text-secondary-100">
             Sin resultados
           </h3>
           <p className="mt-2 text-sm text-secondary-500 dark:text-secondary-400">
-            No se encontraron vehículos con los filtros especificados. Intenta con una búsqueda diferente.
+            No se encontraron vehículos con esos filtros.
           </p>
+          <ul className="mx-auto mt-4 max-w-md list-inside list-disc text-left text-sm text-secondary-500 dark:text-secondary-400">
+            <li>Prueba otra marca, modelo o rango de precio.</li>
+            <li>Amplía el presupuesto o quita filtros estrictos.</li>
+            <li>
+              Si siempre sale vacío, revisa el estado de los providers en{" "}
+              <a href="/admin" className="font-medium text-primary-600 underline dark:text-primary-400">
+                Admin
+              </a>{" "}
+              (mobile.de puede estar bloqueado sin proxy; AutoScout24 debería responder).
+            </li>
+          </ul>
         </div>
       )}
 

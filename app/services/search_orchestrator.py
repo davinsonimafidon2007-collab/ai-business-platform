@@ -3,6 +3,10 @@
 Este servicio NO contiene lógica de scoring, beneficio o mercado.
 Únicamente COORDINA los servicios existentes mediante inyección de dependencias.
 
+La lógica de análisis de cada vehículo (scoring → mercado → rentabilidad →
+oportunidad → negociación) vive en ``SearchResultAnalyzer``; el orquestador
+delega en él a través de ``_analyze_vehicle``.
+
 Flujo:
     Providers
         │
@@ -13,16 +17,10 @@ Flujo:
     Resultados normalizados
         │
         ▼
-    VehicleScorer.score()
+    SearchResultAnalyzer.analyze()   (scoring / mercado / profit / opportunity / negotiation)
         │
         ▼
-    MarketEstimator.estimate()
-        │
-        ▼
-    ProfitAnalyzer.analyze()
-        │
-        ▼
-    OpportunityFinder.analyze()
+    filter / sort / summarize
         │
         ▼
     Lista ordenada de oportunidades
@@ -30,31 +28,22 @@ Flujo:
 
 from __future__ import annotations
 
-import inspect
 from typing import Any
 
 from app.core.config import settings
 from app.core.logging import get_logger
-from app.models.negotiation import (
-    DefectItem,
-    InspectionResult,
-    NegotiationInput,
-    NegotiationResult,
-    RepairEstimate,
-)
 from app.models.search import SearchRequest, SearchResult, SearchSummary
-from app.models.market import MarketEstimation
+from app.providers.registry import ProviderRegistry
 from app.services.negotiation_engine import NegotiationEngine
 from app.services.opportunity_finder import (
     OpportunityAnalysis,
     OpportunityFinder,
     OpportunityLevel,
-    Recommendation,
 )
-from app.providers.registry import ProviderRegistry
-from app.services.vehicle_service import VehicleService
+from app.services.profit_analyzer import ProfitAnalyzer
+from app.services.search_result_analyzer import SearchResultAnalyzer
 from app.services.vehicle_scorer import VehicleScorer
-from app.services.profit_analyzer import ProfitAnalyzer, RiskLevel
+from app.services.vehicle_service import VehicleService
 
 logger = get_logger(__name__)
 
@@ -69,6 +58,9 @@ class SearchOrchestrator:
         - ProfitAnalyzer: para analizar rentabilidad.
         - OpportunityFinder: para detectar oportunidades.
         - ProviderRegistry: para resolver providers por nombre.
+
+    El análisis por vehículo se delega en un :class:`SearchResultAnalyzer`,
+    que se construye con las mismas dependencias inyectadas.
     """
 
     def __init__(
@@ -92,6 +84,7 @@ class SearchOrchestrator:
             opportunity_finder: Detector de oportunidades.
             negotiation_engine: Motor de estrategia de negociación (opcional).
             provider_registry: Registro de providers (clase, no instancia).
+            import_cost_profile: Perfil de costes de importación (default SPAIN).
         """
         self._vehicle_service = vehicle_service
         self._vehicle_scorer = vehicle_scorer
@@ -104,6 +97,14 @@ class SearchOrchestrator:
             import_cost_profile
             or getattr(settings, "default_import_cost_profile", None)
             or "SPAIN"
+        )
+        self._analyzer = SearchResultAnalyzer(
+            vehicle_scorer=vehicle_scorer,
+            market_estimator=market_estimator,
+            profit_analyzer=profit_analyzer,
+            opportunity_finder=opportunity_finder,
+            negotiation_engine=self._negotiation_engine,
+            import_cost_profile=self._import_cost_profile,
         )
 
     # ------------------------------------------------------------------
@@ -136,7 +137,7 @@ class SearchOrchestrator:
             if request.budget_max is not None:
                 kwargs["budget_max"] = request.budget_max
 
-# Buscar vehículos
+            # Buscar vehículos
             try:
                 vehicle_dtos = await self._vehicle_service.search_from_provider(
                     provider, request.query, **kwargs
@@ -147,28 +148,7 @@ class SearchOrchestrator:
 
             # Analizar cada vehículo
             for dto in vehicle_dtos:
-                # Aplicar filtro de presupuesto explícito
-                if request.budget_min is not None and (dto.price is None or dto.price < request.budget_min):
-                    continue
-                if request.budget_max is not None and (dto.price is None or dto.price > request.budget_max):
-                    continue
-
-                # Aplicar filtros adicionales (marca, modelo, año, km, combustible, transmisión)
-                if request.brand is not None and (dto.brand is None or dto.brand.lower() != request.brand.lower()):
-                    continue
-                if request.model is not None and (dto.model is None or request.model.lower() not in dto.model.lower()):
-                    continue
-                if request.min_year is not None and (dto.year is None or dto.year < request.min_year):
-                    continue
-                if request.max_year is not None and (dto.year is None or dto.year > request.max_year):
-                    continue
-                if request.min_mileage is not None and (dto.mileage is None or dto.mileage < request.min_mileage):
-                    continue
-                if request.max_mileage is not None and (dto.mileage is None or dto.mileage > request.max_mileage):
-                    continue
-                if request.fuel_type is not None and (dto.fuel_type is None or dto.fuel_type.lower() != request.fuel_type.lower()):
-                    continue
-                if request.transmission is not None and (dto.transmission is None or dto.transmission.lower() != request.transmission.lower()):
+                if not self._matches_filters(dto, request):
                     continue
 
                 try:
@@ -356,8 +336,45 @@ class SearchOrchestrator:
     # Métodos internos
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _matches_filters(dto: Any, request: SearchRequest) -> bool:
+        """Indica si un DTO cumple todos los filtros de la solicitud (CODE-001).
+
+        Comportamiento idéntico al filtrado inline previo: si un filtro aplica
+        y el DTO no lo cumple, se descarta. Si el filtro no aplica (None),
+        no restringe.
+        """
+        # Presupuesto
+        if request.budget_min is not None and (dto.price is None or dto.price < request.budget_min):
+            return False
+        if request.budget_max is not None and (dto.price is None or dto.price > request.budget_max):
+            return False
+
+        # Marca / modelo / año / km / combustible / transmisión
+        if request.brand is not None and (dto.brand is None or dto.brand.lower() != request.brand.lower()):
+            return False
+        if request.model is not None and (dto.model is None or request.model.lower() not in dto.model.lower()):
+            return False
+        if request.min_year is not None and (dto.year is None or dto.year < request.min_year):
+            return False
+        if request.max_year is not None and (dto.year is None or dto.year > request.max_year):
+            return False
+        if request.min_mileage is not None and (dto.mileage is None or dto.mileage < request.min_mileage):
+            return False
+        if request.max_mileage is not None and (dto.mileage is None or dto.mileage > request.max_mileage):
+            return False
+        if request.fuel_type is not None and (dto.fuel_type is None or dto.fuel_type.lower() != request.fuel_type.lower()):
+            return False
+        if request.transmission is not None and (dto.transmission is None or dto.transmission.lower() != request.transmission.lower()):
+            return False
+
+        return True
+
     async def _analyze_vehicle(self, vehicle: Any) -> SearchResult:
         """Ejecuta el pipeline completo de análisis sobre un vehículo.
+
+        Wrapper fino: delega en ``SearchResultAnalyzer`` (donde vive la
+        lógica de scoring/mercado/rentabilidad/oportunidad/negociación).
 
         Args:
             vehicle: DTO del vehículo (VehicleSearchResult).
@@ -365,141 +382,5 @@ class SearchOrchestrator:
         Returns:
             SearchResult con todos los análisis.
         """
-        # 1. Scoring
-        vehicle_score = self._vehicle_scorer.score(vehicle)
+        return await self._analyzer.analyze(vehicle)
 
-# 2. Mercado — prefiere estimate_async si existe, fallback a estimate
-        estimate_method = getattr(self._market_estimator, "estimate_async", None)
-        if estimate_method is not None:
-            market_estimation = await estimate_method(vehicle)
-        else:
-            result = self._market_estimator.estimate(vehicle)
-            if inspect.iscoroutine(result):
-                market_estimation = await result
-            else:
-                market_estimation = result
-
-        # 3. Rentabilidad (usando el precio de reventa real estimado por el
-        #    motor de mercado, en vez del multiplicador fijo por defecto)
-        estimated_sale_price = (
-            market_estimation.market_price
-            if market_estimation and market_estimation.market_price > 0
-            else None
-        )
-        profit_analysis = self._profit_analyzer.analyze(
-            vehicle,
-            profile_name=self._import_cost_profile,
-            estimated_sale_price=estimated_sale_price,
-        )
-
-        # 4. Oportunidad
-        opportunity = self._opportunity_finder.analyze(
-            vehicle_score,
-            profit_analysis,
-            market_estimation,
-        )
-
-        # 5. Estrategia de negociación
-        negotiation_result = self._run_negotiation(
-            vehicle=vehicle,
-            vehicle_score=vehicle_score,
-            market_estimation=market_estimation,
-            profit_analysis=profit_analysis,
-        )
-
-        return SearchResult(
-            vehicle=vehicle,
-            vehicle_score=vehicle_score,
-            market_estimation=market_estimation,
-            profit_analysis=profit_analysis,
-            opportunity=opportunity,
-            negotiation=negotiation_result,
-        )
-
-    def _build_negotiation_input(
-        self,
-        vehicle: Any,
-        vehicle_score: Any,
-        market_estimation: Any,
-        profit_analysis: Any,
-    ) -> NegotiationInput:
-        """Construye el NegotiationInput a partir de los análisis existentes.
-
-        Reutiliza los modelos existentes (MarketEstimation, ProfitAnalysis,
-        VehicleScore) sin duplicar lógica.
-        """
-        # Construir RepairEstimate a partir de profit_analysis
-        repair_cost = getattr(profit_analysis, "repair_estimate", 0.0) or 0.0
-
-        repair_estimate = RepairEstimate(
-            total_repair_cost=repair_cost,
-            parts_cost=0.0,
-            labor_cost=0.0,
-            paint_and_body_cost=0.0,
-            diagnostic_cost=0.0,
-        )
-
-        # Construir Inspección simple (sin datos reales de inspección)
-        # Se usa asking_price + mileage como heurística para detectar defectos
-        inspection_result = InspectionResult(
-            defects=[],
-            overall_condition=10,
-            has_accident_history=False,
-            accident_notes="",
-            inspection_notes=[],
-        )
-
-        # Extraer datos de ProfitAnalysis como dict
-        profit_data = {}
-        if profit_analysis is not None:
-            profit_data["net_profit"] = getattr(profit_analysis, "net_profit", 0.0) or 0.0
-            profit_data["roi_percentage"] = getattr(profit_analysis, "roi_percentage", 0.0) or 0.0
-            profit_data["roi"] = profit_data["roi_percentage"]
-            profit_data["profit_margin_percentage"] = getattr(profit_analysis, "profit_margin_percentage", 0.0) or 0.0
-            profit_data["estimated_sale_price"] = getattr(profit_analysis, "estimated_sale_price", 0.0) or 0.0
-            profit_data["total_cost"] = getattr(profit_analysis, "total_cost", 0.0) or 0.0
-            profit_data["purchase_price"] = getattr(profit_analysis, "purchase_price", 0.0) or 0.0
-            risk = getattr(profit_analysis, "risk_level", None)
-            profit_data["risk_level"] = risk.value if hasattr(risk, "value") else str(risk or "")
-
-        # Extraer datos de VehicleScore como dict
-        vehicle_data = {}
-        if vehicle_score is not None:
-            vehicle_data["score"] = getattr(vehicle_score, "score", 50) or 50
-            strengths = getattr(vehicle_score, "strengths", []) or []
-            weaknesses = getattr(vehicle_score, "weaknesses", []) or []
-            vehicle_data["strengths"] = strengths
-            vehicle_data["weaknesses"] = weaknesses
-
-        asking_price = getattr(vehicle, "price", 0.0) or 0.0
-
-        return NegotiationInput(
-            inspection_result=inspection_result,
-            repair_estimate=repair_estimate,
-            market_estimation=market_estimation,
-            asking_price=asking_price,
-            minimum_desired_profit=profit_data.get("net_profit", 0.0) * 0.5,
-            target_margin=15.0,
-            profit_analysis_data=profit_data,
-            vehicle_score_data=vehicle_data,
-        )
-
-    def _run_negotiation(
-        self,
-        vehicle: Any,
-        vehicle_score: Any,
-        market_estimation: Any,
-        profit_analysis: Any,
-    ) -> NegotiationResult | None:
-        """Ejecuta el motor de negociación si hay datos suficientes."""
-        try:
-            negotiation_input = self._build_negotiation_input(
-                vehicle=vehicle,
-                vehicle_score=vehicle_score,
-                market_estimation=market_estimation,
-                profit_analysis=profit_analysis,
-            )
-            return self._negotiation_engine.analyze(negotiation_input)
-        except Exception:
-            logger.exception("Error al ejecutar la negociación para el vehículo")
-            return None

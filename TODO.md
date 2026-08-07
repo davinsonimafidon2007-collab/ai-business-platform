@@ -1,3 +1,60 @@
+## Hecho (2026-08) — no rehacer
+
+- CODE-001 — higiene: dead code quitado (paquetes vacíos `app/agents`, `app/orchestrator`, `app/tasks`, `app/telemetry`, `app/workers`; `app/__pycache__.zip`), `.gitignore` endurecido, config `ruff` (`[tool.ruff.lint]`), `scripts/lint.ps1`, refactor `_matches_filters` en `search_orchestrator.py`. Ver `TODO.CODE-001.steps.md`.
+- ROI.1 — coherence_warnings (profit_coherence + search mapper)
+- REC.1 — recommendation_labels / risk labels ES
+- OPP.LIST.1 — labels ES en listado opportunities
+- SCORE.1 — category_key + category_label_es
+- SEARCH.EMPTY.1 — empty/error search ES + hint Admin
+- NEG.1 — script negociación UI en ES
+- Providers 1b / MKT.1-2 / PROFIT.1 cost_lines — ver HANDOFF
+
+Ver: `docs/HANDOFF_GROK_NEXT_SESSION.md`
+
+## Siguiente
+
+1. Commit/push desde raíz si hay cambios locales sin subir
+2. E2E manual: search → drawer (labels + warnings)
+3. Ops con credencial: proxy mobile.de (A.5b), SMTP, Firebase
+4. Portales ES live (largo plazo)
+
+---
+
+# TODO — DEVOPS-001 (P3-002): Health compuesto + backups + observabilidad mínima ✅
+
+## Entregado
+- [x] `GET /health` (y `/api/v1/health`) compuesto: `checks.api/database/redis`.
+      `ok`→200, `degraded` (Redis down/disabled)→200, `error` (DB down)→**503**.
+      DB nunca dice `ok` si está caída. Checks async con timeout corto.
+- [x] `scripts/backup_postgres.sh` — `pg_dump -Fc` → `backups/` + retención N=7,
+      normaliza `DATABASE_URL` async a `postgres://`. Documentado (cron).
+- [x] `scripts/restore_postgres.sh` — `pg_restore` (confirmación o `--force`).
+- [x] `backups/` en `.gitignore`.
+- [x] Access log ya incluye `request_id` + `duration_ms` (PERF-001); sin SaaS.
+- [x] `JobFailureAlertService` documentado + vars `JOB_FAILURE_ALERT_*` en
+      `.env.example` (sin SMTP → solo log). No se reescribió el servicio.
+- [x] `docs/ops.md` — health contract, runbook backup/restore, logging/corr.,
+      job failure alerts, observabilidad phase 2.
+- [x] `docker-compose.obs.yml` — Prometheus + Grafana con `profiles: [obs]`
+      (NO arrancan con `docker compose up` por defecto ni en CI).
+- [x] `app/telemetry/__init__.py` placeholder (phase 2). Sin `opentelemetry-*`.
+- [x] `.env.example` — `BACKUP_DIR` / `BACKUP_RETENTION`.
+- [x] Tests: `tests/unit/test_health.py` (matriz ok/degraded/error/disabled) +
+      `tests/integration/api/test_health_api.py` real.
+- [x] README — sección "Ops — Health compuesto / Backups / Observabilidad" + link.
+
+## Siguiente / fase 2 (no bloqueante)
+- Exponer `/metrics` Prometheus desde la API y activar perfil `obs`.
+- Ops reales: SMTP live, credencial Firebase, proxy mobile.de.
+
+## Verificación
+```bash
+uv run pytest tests/unit/test_health.py tests/unit/test_logging_middleware.py -q
+uv run pytest tests/unit -q
+```
+
+---
+
 # TODO — REC.1: labels ES recommendation/risk ✅
 
 ## Entregado

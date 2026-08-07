@@ -4,6 +4,8 @@
 export interface VehicleScore {
   score: number;
   category: string;
+  category_key?: string;
+  category_label_es?: string;
   strengths: string[];
   weaknesses: string[];
 }

@@ -17,13 +17,20 @@ class VehicleProvider(ABC):
 
     Incluye toda la lógica de parsing común: extracción de URL, precio,
     kilometraje, año, combustible, transmisión, potencia, ubicación,
-    imágenes y descripción.
+imágenes y descripción.
 
     Las subclases solo deben definir:
       - ``source_name`` (property)
       - ``_find_listing_nodes(self, soup)``  ← específico del HTML
       - Opcionalmente, las configuraciones de clase para personalizar
         selectores CSS y patrones de texto.
+
+    Separación de responsabilidades (SOLID ligero):
+      - HTTP cross-cutting (proxy / UA / circuit / retries) → ``ProviderHttpClient``.
+      - Parsing específico del provider → vía subclase o módulo parser puro
+        (p. ej. ``app.providers.parsers.autoscout24_parser``).
+      El provider delega en estos colaboradores pero conserva su API pública
+      estable (``search``, ``get_vehicle``) y sus métodos de parsing privados.
     """
 
     # --------------------------------------------------------------

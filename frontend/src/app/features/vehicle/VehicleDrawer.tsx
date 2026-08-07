@@ -74,12 +74,14 @@ export function VehicleDrawer({ vehicle, onClose }: VehicleDrawerProps) {
             <InfoItem label="Potencia" value={vehicle.power_hp ? `${vehicle.power_hp} HP` : "-"} />
           </div>
 
-          {/* Vehicle Score */}
+{/* Vehicle Score */}
           {vs && (
-            <Section title="Vehicle Score">
+            <Section title="Puntuación del vehículo">
               <div className="flex items-center gap-3">
                 <ScoreBadge score={vs.score} label="Score" size="md" />
-                <span className="text-sm text-secondary-600 dark:text-secondary-400">{vs.category}</span>
+                <span className="text-sm text-secondary-600 dark:text-secondary-400">
+                  {vs.category_label_es || vs.category}
+                </span>
               </div>
               {vs.strengths.length > 0 && (
                 <div>

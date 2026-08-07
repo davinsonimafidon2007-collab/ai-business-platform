@@ -297,6 +297,42 @@ python scripts/check_integrations_ready.py --strict   # jwt + db + fixtures
 
 BLOCKED en smtp/firebase/proxy es esperado sin credenciales (app sigue up).
 
+### Ops — Health compuesto / Backups / Observabilidad (DEVOPS-001 / P3-002)
+
+Guía completa en [`docs/ops.md`](docs/ops.md). Resumen:
+
+- **Health compuesto**: `GET /health` (y `GET /api/v1/health`) reporta
+  `checks.api / database / redis`. `ok`→200, `degraded` (Redis down/disabled)→200,
+  `error` (DB down)→**503**. DB nunca puede decir `ok` si está caída.
+
+```json
+{
+  "status": "ok",
+  "version": "0.1.0",
+  "providers": ["..."],
+  "checks": {"api": "ok", "database": "ok", "redis": "ok"}
+}
+```
+
+- **Backups Postgres**: `scripts/backup_postgres.sh` (`pg_dump -Fc` +
+  retención, default 7) y `scripts/restore_postgres.sh` (pide confirmación).
+
+```bash
+chmod +x scripts/backup_postgres.sh scripts/restore_postgres.sh
+./scripts/backup_postgres.sh
+# cron: 0 3 * * * cd /app && ./scripts/backup_postgres.sh
+```
+
+  `backups/` está en `.gitignore` — no se commitean dumps con datos reales.
+
+- **Logging**: access log ya incluye `request_id`, `correlation_id`, `method`,
+  `path`, `status` y `duration_ms` (PERF-001). Sin proveedor SaaS obligatorio.
+- **Alertas de jobs**: `JobFailureAlertService` documentado con vars
+  `JOB_FAILURE_ALERT_*` (ver `.env.example`). Sin SMTP/to_email → solo log.
+- **Observabilidad fase 2 (opcional)**: `docker compose --profile obs up -d`
+  activa Prometheus (9090) + Grafana (3001) sin forzarlo el `docker compose up`
+  normal ni CI. No se añade dependencia `opentelemetry-*` en este task.
+
 ### Runbook — Alertas por email (SMTP) — Task SMTP.1
 
 El backend ya incorpora dos servicios de alerta por email que reutilizan el

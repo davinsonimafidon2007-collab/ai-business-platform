@@ -17,7 +17,15 @@ class VehicleScoreSchema(BaseModel):
     """Puntuación del vehículo. Equivalente público de VehicleScore."""
 
     score: int = Field(..., description="Puntuación final 0-100", ge=0, le=100)
-    category: str = Field(..., description="Categoría textual")
+    category: str = Field(..., description="Categoría textual (legacy ES)")
+    category_key: str = Field(
+        "poor",
+        description="excellent|very_good|good|acceptable|poor",
+    )
+    category_label_es: str = Field(
+        "",
+        description="Etiqueta ES (Excelente, Muy bueno, …)",
+    )
     strengths: list[str] = Field(default_factory=list, description="Fortalezas")
     weaknesses: list[str] = Field(default_factory=list, description="Debilidades")
 
