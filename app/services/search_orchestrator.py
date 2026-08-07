@@ -152,7 +152,12 @@ class SearchOrchestrator:
                     continue
 
                 try:
-                    result = await self._analyze_vehicle(dto)
+                    result = await self._analyze_vehicle(
+                        dto,
+                        comparable_providers=getattr(
+                            request, "comparable_providers", None
+                        ),
+                    )
                     all_results.append(result)
                 except Exception:
                     logger.exception("Error al analizar vehículo %s", getattr(dto, "external_id", "unknown"))
@@ -370,7 +375,12 @@ class SearchOrchestrator:
 
         return True
 
-    async def _analyze_vehicle(self, vehicle: Any) -> SearchResult:
+    async def _analyze_vehicle(
+        self,
+        vehicle: Any,
+        *,
+        comparable_providers: list[str] | None = None,
+    ) -> SearchResult:
         """Ejecuta el pipeline completo de análisis sobre un vehículo.
 
         Wrapper fino: delega en ``SearchResultAnalyzer`` (donde vive la
@@ -378,9 +388,13 @@ class SearchOrchestrator:
 
         Args:
             vehicle: DTO del vehículo (VehicleSearchResult).
+            comparable_providers: Allowlist opcional de sources para el
+                estimador de mercado (comparables).
 
         Returns:
             SearchResult con todos los análisis.
         """
-        return await self._analyzer.analyze(vehicle)
-
+        return await self._analyzer.analyze(
+            vehicle,
+            comparable_providers=comparable_providers,
+        )

@@ -81,6 +81,14 @@ class SearchRequest(BaseModel):
     max_mileage: int | None = Field(default=None, ge=0, description="Km máximos")
     fuel_type: str | None = Field(default=None, description="Tipo de combustible")
     transmission: str | None = Field(default=None, description="Tipo de transmisión")
+    comparable_providers: list[str] | None = Field(
+        default=None,
+        description=(
+            "Sources para la estimación de mercado (comparables). "
+            "None = registry (o COMPARABLE_PROVIDERS en settings). "
+            "No confundir con 'providers' (listado de anuncios)."
+        ),
+    )
 
 
 class SearchResult(BaseModel):

@@ -57,11 +57,20 @@ class SearchResultAnalyzer:
         self._negotiation_engine = negotiation_engine or NegotiationEngine()
         self._import_cost_profile = import_cost_profile
 
-    async def analyze(self, vehicle: Any) -> SearchResult:
+    async def analyze(
+        self,
+        vehicle: Any,
+        *,
+        comparable_providers: list[str] | None = None,
+    ) -> SearchResult:
         """Ejecuta el pipeline completo de análisis sobre un vehículo.
 
         Args:
             vehicle: DTO del vehículo (VehicleSearchResult).
+            comparable_providers: Allowlist opcional de sources para el
+                estimador de mercado (comparables). ``None``/omitido = registry
+                (o ``COMPARABLE_PROVIDERS`` de settings). No confundir con
+                ``providers`` (listado de anuncios).
 
         Returns:
             SearchResult con todos los análisis.
@@ -69,16 +78,33 @@ class SearchResultAnalyzer:
         # 1. Scoring
         vehicle_score = self._vehicle_scorer.score(vehicle)
 
-        # 2. Mercado — prefiere estimate_async si existe, fallback a estimate
+        # 2. Mercado — prefiere estimate_async si existe, fallback a estimate.
+        #    Solo se propaga comparable_providers cuando no es None, para
+        #    mantener compatibilidad total con los callers/mocks existentes
+        #    (default = registry o COMPARABLE_PROVIDERS de settings).
         estimate_method = getattr(self._market_estimator, "estimate_async", None)
-        if estimate_method is not None:
-            market_estimation = await estimate_method(vehicle)
-        else:
-            result = self._market_estimator.estimate(vehicle)
-            if inspect.iscoroutine(result):
-                market_estimation = await result
+        if comparable_providers:
+            if estimate_method is not None:
+                market_estimation = await estimate_method(
+                    vehicle, comparable_providers=comparable_providers
+                )
             else:
-                market_estimation = result
+                result = self._market_estimator.estimate(
+                    vehicle, comparable_providers=comparable_providers
+                )
+                if inspect.iscoroutine(result):
+                    market_estimation = await result
+                else:
+                    market_estimation = result
+        else:
+            if estimate_method is not None:
+                market_estimation = await estimate_method(vehicle)
+            else:
+                result = self._market_estimator.estimate(vehicle)
+                if inspect.iscoroutine(result):
+                    market_estimation = await result
+                else:
+                    market_estimation = result
 
         # 3. Rentabilidad (usando el precio de reventa real estimado por el
         #    motor de mercado, en vez del multiplicador fijo por defecto)
@@ -210,4 +236,3 @@ class SearchResultAnalyzer:
         except Exception:
             logger.exception("Error al ejecutar la negociación para el vehículo")
             return None
-

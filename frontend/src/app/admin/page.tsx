@@ -6,6 +6,22 @@ import {
   runProviderCanary,
 } from "@/app/services/adminStatus";
 import type { AdminSystemStatus } from "@/app/services/adminStatus";
+import { fetchHealth } from "@/app/services/health";
+
+function checkTone(value?: string) {
+  switch (value) {
+    case "ok":
+      return "bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300";
+    case "degraded":
+    case "disabled":
+      return "bg-amber-100 text-amber-900 dark:bg-amber-900/40 dark:text-amber-200";
+    case "error":
+      return "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300";
+    default:
+      return "bg-secondary-100 text-secondary-700 dark:bg-secondary-700 dark:text-secondary-200";
+  }
+}
+
 
 function Badge({
   ok,
@@ -48,6 +64,13 @@ export default function AdminStatusPage() {
     onSuccess: (data: AdminSystemStatus) => {
       queryClient.setQueryData(["admin-status"], data);
     },
+  });
+
+    const healthQuery = useQuery({
+    queryKey: ["health-composite"],
+    queryFn: fetchHealth,
+    refetchInterval: 30_000,
+    retry: 1,
   });
 
   const running = canaryMutation.isPending;
@@ -114,7 +137,67 @@ export default function AdminStatusPage() {
                 }
               />
             </div>
-          </div>
+                    </div>
+
+          <section className="rounded-xl border border-secondary-200 bg-white p-5 dark:border-secondary-700 dark:bg-secondary-900">
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="text-lg font-semibold text-secondary-900 dark:text-secondary-100">
+                Health
+              </h2>
+              <button
+                type="button"
+                className="text-xs text-primary-600 hover:underline"
+                onClick={() => healthQuery.refetch()}
+              >
+                Refrescar
+              </button>
+            </div>
+
+            {healthQuery.isLoading && (
+              <p className="mt-2 text-sm text-secondary-500">Comprobando...</p>
+            )}
+            {healthQuery.isError && (
+              <p className="mt-2 text-sm text-red-600">No se pudo obtener /health</p>
+            )}
+            {healthQuery.data && (
+              <>
+                <p className="mt-2 text-sm">
+                  Global: {" "}
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-xs font-medium ${checkTone(
+                      healthQuery.data.status === "ok"
+                        ? "ok"
+                        : healthQuery.data.status === "degraded"
+                          ? "degraded"
+                          : "error"
+                    )}`}
+                  >
+                    {healthQuery.data.status}
+                  </span>
+                  <span className="ml-2 text-xs text-secondary-500">
+                    v{healthQuery.data.version}
+                  </span>
+                </p>
+                <ul className="mt-3 flex flex-wrap gap-2">
+                  {(["api", "database", "redis"] as const).map((key) => (
+                    <li
+                      key={key}
+                      className={`rounded-full px-3 py-1 text-xs font-medium ${checkTone(
+                        healthQuery.data.checks?.[key]
+                      )}`}
+                    >
+                      {key}: {healthQuery.data.checks?.[key] ?? "—"}
+                    </li>
+                  ))}
+                </ul>
+                {(healthQuery.data.providers?.length ?? 0) > 0 && (
+                  <p className="mt-2 text-xs text-secondary-500">
+                    Providers en health: {healthQuery.data.providers.join(", ")}
+                  </p>
+                )}
+              </>
+            )}
+          </section>
 
           <div className="rounded-xl border border-secondary-200 bg-white p-5 dark:border-secondary-700 dark:bg-secondary-900">
             <div className="mb-3 flex items-center justify-between">
@@ -278,7 +361,10 @@ export default function AdminStatusPage() {
 
           <button
             type="button"
-            onClick={() => queryClient.invalidateQueries({ queryKey: ["admin-status"] })}
+                                    onClick={() => {
+              queryClient.invalidateQueries({ queryKey: ["admin-status"] });
+              queryClient.invalidateQueries({ queryKey: ["health-composite"] });
+            }}
             className="text-sm text-primary-600 hover:underline"
           >
             Refrescar snapshot

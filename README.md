@@ -120,29 +120,38 @@ curl -s http://localhost:8000/api/v1/health
 
 Ambos deben responder 200.
 
-### Smoke camino crítico
-```bash
-# API en marcha en :8000
+### Release local (orden recomendado) — SMOKE.CRIT.1
+
+```powershell
+$env:ENVIRONMENT="test"
+$env:JWT_SECRET_KEY="test_secret_key_that_is_at_least_32_characters_long_1234567890"
+
+# 1) Integraciones (informe; smtp/firebase/proxy pueden BLOCKED)
+python scripts/check_integrations_ready.py
+
+# 2) Unit + sync deps (sin HTTP)
+python scripts/release_check.py --skip-smoke
+
+# 3) API arriba (compose o uvicorn)
+
+# 4) Smoke HTTP camino crítico
+$env:BASE_URL="http://localhost:8000"
 python scripts/smoke_critical_path.py
-# BASE_URL=http://127.0.0.1:8000 python scripts/smoke_critical_path.py
-```
-Exit 0 = flujo register→vehicle→deal→simulation→OFFER OK.
-Exit 1 = fallo de aserción/HTTP; Exit 2 = API caída o setup.
-
-Variantes opcionales (Task E2E.2):
-
-```bash
-python scripts/smoke_critical_path.py --with-opportunities   # GET /opportunities?limit=5 → 200
-python scripts/smoke_critical_path.py --with-admin           # requiere user ADMIN
+python scripts/smoke_critical_path.py --with-opportunities
+# Admin + bloque providers (credenciales ADMIN):
+python scripts/smoke_critical_path.py --with-admin
 ```
 
-- `--with-opportunities`: además del camino crítico, valida el listado de
-  oportunidades (puede estar vacío en una DB limpia).
-- `--with-admin`: además del camino crítico, hace login como ADMIN y llama
-  `GET /api/v1/admin/status` (imprime `redis_ok`, `jobs` count y
-  `canary.success`). Sin credenciales sale con exit 1.
+| Exit | Significado |
+|------|-------------|
+| 0 | OK |
+| 1 | Aserción / HTTP inesperado |
+| 2 | Setup (API caída) |
+
+**E2E manual (UI):** [docs/E2E_MANUAL_CHECKLIST.md](docs/E2E_MANUAL_CHECKLIST.md) — drawer labels, cost_lines, warnings. El smoke HTTP **no** sustituye esa pasada visual.
 
 #### Usuario ADMIN para smoke
+
 Para `--with-admin` necesitas un user con rol `ADMIN`. Puedes crearlo (o
 promover uno existente) con el script idempotente ya incluido:
 
@@ -165,6 +174,12 @@ Alternativa manual en DB:
 ```sql
 UPDATE users SET role = 'ADMIN' WHERE email = 'ops@example.com';
 ```
+
+### E2E manual (camino crítico)
+
+Checklist: [docs/E2E_MANUAL_CHECKLIST.md](docs/E2E_MANUAL_CHECKLIST.md) (Task E2E.MANUAL.1).
+
+Antes: `check_integrations_ready`, `smoke_es_providers`, API + front up.
 
 ### 6. Registro de prueba
 

@@ -1,5 +1,11 @@
 import { api } from "@/app/services/api/client";
 
+export type CostLine = {
+  key: string;
+  label_es: string;
+  amount: number;
+};
+
 export type SimulateProfitRequest = {
   profile_name?: string; // "SPAIN" | "ES" | "PORTUGAL" | "PT" | ...
   purchase_price?: number;
@@ -22,6 +28,10 @@ export type SimulateProfitResponse = {
   commission_cost: number;
   repair_estimate: number;
   miscellaneous_cost: number;
+  cost_lines?: CostLine[];
+  coherence_warnings?: string[];
+  recommendation_label_es?: string;
+  risk_label_es?: string;
 };
 
 export async function simulateProfit(

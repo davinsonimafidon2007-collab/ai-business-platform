@@ -33,6 +33,13 @@ describe("simulateProfit", () => {
         commission_cost: 720,
         repair_estimate: 540,
         miscellaneous_cost: 480,
+        cost_lines: [
+          { key: "purchase_price", label_es: "Precio de compra", amount: 18000 },
+          { key: "transport_cost", label_es: "Transporte", amount: 1200 },
+        ],
+        coherence_warnings: [],
+        recommendation_label_es: "Considerar",
+        risk_label_es: "Medio",
       },
     };
     vi.mocked(api.post).mockResolvedValue(mockResponse as any);

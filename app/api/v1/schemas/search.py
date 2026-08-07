@@ -56,6 +56,14 @@ class SearchAPIRequest(BaseModel):
     max_mileage: int | None = Field(default=None, ge=0, description="Km máximos")
     fuel_type: str | None = Field(default=None, description="Tipo de combustible")
     transmission: str | None = Field(default=None, description="Tipo de transmisión")
+    comparable_providers: list[str] | None = Field(
+        default=None,
+        description=(
+            "Sources para estimación de mercado (comparables). "
+            "None/omitido = registry (o COMPARABLE_PROVIDERS en settings). "
+            "No confundir con 'providers' (listado de anuncios)."
+        ),
+    )
 
     def to_search_request(self) -> SearchRequest:
         """Convierte esta petición API al modelo interno SearchRequest.
@@ -76,6 +84,7 @@ class SearchAPIRequest(BaseModel):
             max_mileage=self.max_mileage,
             fuel_type=self.fuel_type,
             transmission=self.transmission,
+            comparable_providers=self.comparable_providers,
         )
 
     @model_validator(mode="after")

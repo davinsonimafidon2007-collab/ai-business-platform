@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.dependencies import get_evaluation_engine, get_profit_analyzer
+from app.api.v1.schemas.common import CostLineSchema
 from app.api.v1.schemas.vehicle import SimulateProfitRequest, SimulateProfitResponse
 from app.database import get_db_session
 from app.dependencies.auth import get_current_user
@@ -15,8 +17,11 @@ from app.repositories.vehicle_evaluation_repository import VehicleEvaluationRepo
 from app.repositories.vehicle_repository import VehicleRepository
 from app.schemas.vehicle import VehicleCreate, VehicleRead, VehicleUpdate
 from app.schemas.vehicle_evaluation import VehicleEvaluationRead, VehicleEvaluationUpdate
+from app.services.cost_breakdown_labels import build_cost_lines
 from app.services.evaluation_engine import EvaluationEngine
 from app.services.profit_analyzer import ProfitAnalyzer
+from app.services.profit_coherence import build_coherence_warnings
+from app.services.recommendation_labels import recommendation_label_es, risk_label_es
 from app.services.vehicle_evaluation_service import VehicleEvaluationService
 from app.services.vehicle_service import VehicleService
 
@@ -213,6 +218,14 @@ async def simulate_vehicle_profit(
         estimated_sale_price=body.estimated_sale_price,
     )
     costs = analysis.cost_breakdown
+    cost_lines_raw = build_cost_lines(costs)
+    warnings = build_coherence_warnings(
+        purchase_price=float(purchase),
+        total_cost=float(analysis.total_cost),
+        estimated_profit=float(analysis.net_profit),
+        roi=float(analysis.roi_percentage),
+        market_price=body.estimated_sale_price,
+    )
     return SimulateProfitResponse(
         profile_name=(
             body.profile_name.upper()
@@ -235,4 +248,8 @@ async def simulate_vehicle_profit(
         commission_cost=costs.commission_cost,
         repair_estimate=costs.repair_estimate,
         miscellaneous_cost=costs.miscellaneous_cost,
+        cost_lines=[CostLineSchema(**line) for line in cost_lines_raw],
+        coherence_warnings=warnings,
+        recommendation_label_es=recommendation_label_es(analysis.recommendation),
+        risk_label_es=risk_label_es(analysis.risk_level),
     )

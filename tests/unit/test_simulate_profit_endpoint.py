@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -19,6 +20,26 @@ client = TestClient(app)
 
 
 def _make_analysis() -> ProfitAnalysis:
+    cost_breakdown = SimpleNamespace(
+        purchase_price=18000.0,
+        transport_cost=1200.0,
+        registration_cost=450.0,
+        taxes=1800.0,
+        inspection_cost=90.0,
+        repair_estimate=540.0,
+        commission_cost=720.0,
+        miscellaneous_cost=480.0,
+        _COMPONENTS=(
+            ("purchase_price", "Precio de compra", "fixed"),
+            ("transport_cost", "Transporte", "fixed"),
+            ("registration_cost", "Matriculación", "fixed"),
+            ("inspection_cost", "ITV / inspección", "fixed"),
+            ("miscellaneous_cost", "Gestoría + otros", "fixed"),
+            ("taxes", "Impuestos (sobre compra)", "variable"),
+            ("commission_cost", "Comisión", "variable"),
+            ("repair_estimate", "Reparaciones estimadas", "variable"),
+        ),
+    )
     return ProfitAnalysis(
         purchase_price=18000.0,
         transport_cost=1200.0,
@@ -36,15 +57,7 @@ def _make_analysis() -> ProfitAnalysis:
         profit_margin_percentage=3.0,
         risk_level=RiskLevel.MEDIUM,
         recommendation=Recommendation.CONSIDER,
-        cost_breakdown=MagicMock(
-            transport_cost=1200.0,
-            registration_cost=450.0,
-            taxes=1800.0,
-            inspection_cost=90.0,
-            commission_cost=720.0,
-            repair_estimate=540.0,
-            miscellaneous_cost=480.0,
-        ),
+        cost_breakdown=cost_breakdown,
     )
 
 
@@ -113,3 +126,42 @@ def test_simulate_profit_es_equals_spain(override_deps: None) -> None:
     spain = get_profile("SPAIN")
     assert es.transport_cost == spain.transport_cost
     assert es.registration_cost == spain.registration_cost
+
+
+def test_simulate_profit_includes_sim1_fields(override_deps: None) -> None:
+    response = client.post(
+        "/api/v1/vehicles/vehicle-1/simulate-profit",
+        json={"profile_name": "ES", "purchase_price": 18000, "estimated_sale_price": 24000},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert "cost_lines" in data
+    assert isinstance(data["cost_lines"], list)
+    assert len(data["cost_lines"]) >= 1
+    assert "label_es" in data["cost_lines"][0]
+    assert "coherence_warnings" in data
+    assert isinstance(data["coherence_warnings"], list)
+    assert data.get("recommendation_label_es")
+    assert data.get("risk_label_es")
+
+
+def test_simulate_profit_coherence_warnings_extreme_roi(override_deps: None) -> None:
+    analysis = _make_analysis()
+    analysis.roi_percentage = 300.0
+    analysis.net_profit = 54000.0
+    analysis.total_cost = 18000.0
+
+    analyzer = MagicMock(spec=ProfitAnalyzer)
+    analyzer.analyze = MagicMock(return_value=analysis)
+
+    app.dependency_overrides[get_profit_analyzer] = lambda: analyzer
+    try:
+        response = client.post(
+            "/api/v1/vehicles/vehicle-1/simulate-profit",
+            json={"profile_name": "ES", "purchase_price": 18000, "estimated_sale_price": 24000},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["coherence_warnings"]) >= 1
+    finally:
+        app.dependency_overrides.pop(get_profit_analyzer, None)

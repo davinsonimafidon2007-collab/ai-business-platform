@@ -18,6 +18,10 @@ const baseSim: SimulateProfitResponse = {
   commission_cost: 300,
   repair_estimate: 0,
   miscellaneous_cost: 0,
+  cost_lines: [],
+  coherence_warnings: [],
+  recommendation_label_es: "Comprar ya",
+  risk_label_es: "Bajo",
 };
 
 describe("mapSimToDealUpdate", () => {

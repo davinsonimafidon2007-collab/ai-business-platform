@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.api.v1.schemas.common import CostLineSchema
 from pydantic import BaseModel, Field
 
 
@@ -77,4 +78,15 @@ class SimulateProfitResponse(BaseModel):
     commission_cost: float
     repair_estimate: float
     miscellaneous_cost: float
+    # --- SIM.1 ---
+    cost_lines: list[CostLineSchema] = Field(default_factory=list)
+    coherence_warnings: list[str] = Field(default_factory=list)
+    recommendation_label_es: str = Field(
+        default="",
+        description="Etiqueta legible en español de la recomendación (REC.1)",
+    )
+    risk_label_es: str = Field(
+        default="",
+        description="Etiqueta legible en español del nivel de riesgo (REC.1)",
+    )
 

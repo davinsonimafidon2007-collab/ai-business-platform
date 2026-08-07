@@ -119,6 +119,14 @@ class Settings(BaseSettings):
     max_concurrent_jobs: int = 4
     """Maximum number of jobs that can run concurrently."""
 
+    comparable_providers: str = ""
+    """Allowlist de sources para comparables (ej. "mobile_de,autoscout24,es_market_fixture").
+
+    Lista separada por comas. Vacía = usar todos los del ProviderRegistry
+    (comportamiento actual). Se usa como fallback cuando el request no trae
+    ``comparable_providers`` explícito.
+    """
+
     enable_scheduler: bool = True
     """Master toggle to enable/disable the background scheduler."""
 

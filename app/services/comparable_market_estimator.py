@@ -58,6 +58,39 @@ from app.services.vehicle_service import VehicleService
 logger = get_logger(__name__)
 
 
+def resolve_comparable_provider_names(
+    registry_names: list[str],
+    *,
+    request_names: list[str] | None = None,
+    settings_csv: str = "",
+) -> list[str]:
+    """Resuelve qué sources usar para los comparables del estimador de mercado.
+
+    Prioridad: ``request_names`` si no está vacía → ``settings_csv`` si no está
+    vacía → ``registry_names`` (comportamiento actual: todo el registry).
+
+    Siempre se intersecta con ``registry_names``: los nombres desconocidos se
+    ignoran (no falla ni produce 500).
+
+    Args:
+        registry_names: Nombres de providers registrados (fuente canónica).
+        request_names: Allowlist explícita del request (opcional). Tiene prioridad.
+        settings_csv: CSV de settings (``COMPARABLE_PROVIDERS``). Fallback.
+
+    Returns:
+        Lista de nombres de providers a usar, en orden estable.
+    """
+    available = list(registry_names)
+    if request_names:
+        wanted = [str(n).strip() for n in request_names if n is not None and str(n).strip()]
+    elif settings_csv and settings_csv.strip():
+        wanted = [n.strip() for n in settings_csv.split(",") if n.strip()]
+    else:
+        return available
+    allowed = set(available)
+    return [n for n in wanted if n in allowed]
+
+
 # =============================================================================
 # Data classes internos
 # =============================================================================
@@ -391,11 +424,20 @@ class ComparableMarketEstimator:
         self._cache_ttl = timedelta(seconds=cache_ttl_seconds)
         self._local_cache: dict[str, MarketEstimation] = {}
 
-    async def estimate(self, vehicle: object) -> MarketEstimation:
+    async def estimate(
+        self,
+        vehicle: object,
+        *,
+        comparable_providers: list[str] | None = None,
+    ) -> MarketEstimation:
         """Estima las condiciones de mercado para un vehículo (corutina).
 
         Args:
             vehicle: Objeto con atributos VehicleData (brand, model, year, etc.).
+            comparable_providers: Allowlist opcional de sources para los
+                comparables. ``None``/omitido = registry (o ``COMPARABLE_PROVIDERS``
+                de settings si está definido). No confundir con ``providers``
+                (listado de anuncios).
 
         Returns:
             ``MarketEstimation`` con la estimación de mercado.
@@ -425,7 +467,9 @@ class ComparableMarketEstimator:
                 estimation = self._from_cached(cached)
                 self._local_cache[market_hash] = estimation
                 return estimation
-        comparables, candidates_count, provider_sources = await self._search_comparables(vehicle)
+        comparables, candidates_count, provider_sources = await self._search_comparables(
+            vehicle, comparable_providers=comparable_providers,
+        )
         return await self._compute_and_cache(
             vehicle=vehicle, market_hash=market_hash,
             comparables=comparables, candidates_count=candidates_count,
@@ -436,10 +480,21 @@ class ComparableMarketEstimator:
     # Búsqueda de comparables
     # ------------------------------------------------------------------
 
-    async def _search_comparables(self, vehicle: Any) -> tuple[list[ComparableVehicle], int, set[str]]:
+    async def _search_comparables(
+        self,
+        vehicle: Any,
+        comparable_providers: list[str] | None = None,
+    ) -> tuple[list[ComparableVehicle], int, set[str]]:
+        from app.core.config import settings
+
         all_candidates: list[VehicleSearchResult] = []
         provider_sources: set[str] = set()
-        provider_names = self._provider_registry.list_providers()
+        registry_names = self._provider_registry.list_providers()
+        provider_names = resolve_comparable_provider_names(
+            registry_names,
+            request_names=comparable_providers,
+            settings_csv=getattr(settings, "comparable_providers", "") or "",
+        )
         for provider_name in provider_names:
             try:
                 provider = self._provider_registry.get(provider_name)
@@ -683,7 +738,6 @@ class ComparableMarketEstimator:
         # Máximo ~5 frases
         return " ".join(parts[:5])
 
-
     @staticmethod
     def _from_cache_payload(payload: dict[str, Any]) -> MarketEstimation:
         notes = payload.get("notes") or []
@@ -752,4 +806,3 @@ class ComparableMarketEstimator:
     def _get_price(vehicle: Any) -> float | None:
         price = ComparableMarketEstimator._get_attr(vehicle, "price")
         return float(price) if price is not None else None
-

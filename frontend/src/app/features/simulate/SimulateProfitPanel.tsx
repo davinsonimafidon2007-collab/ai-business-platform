@@ -255,38 +255,63 @@ const saveSim = useMutation({
                 </div>
                 <div className="flex items-center gap-3">
                   <RecommendationBadge
-                    recommendation={simulate.data.recommendation}
+                    recommendation={
+                      simulate.data.recommendation_label_es ||
+                      simulate.data.recommendation
+                    }
                   />
                   <span
                     className={`text-sm font-medium ${riskColor(
                       simulate.data.risk_level
                     )}`}
                   >
-                    Riesgo: {simulate.data.risk_level}
+                    Riesgo: {simulate.data.risk_label_es || simulate.data.risk_level}
                   </span>
                 </div>
               </div>
 
-<div>
+              {(simulate.data.coherence_warnings?.length ?? 0) > 0 && (
+                <ul className="mt-3 list-disc space-y-1 pl-4 text-xs text-amber-700 dark:text-amber-400">
+                  {simulate.data.coherence_warnings!.map((msg, i) => (
+                    <li key={i}>{msg}</li>
+                  ))}
+                </ul>
+              )}
+
+              <div>
                 <p className="mb-2 text-xs font-medium text-secondary-500 dark:text-secondary-400">
                   Desglose de costes
                 </p>
                 <div className="overflow-hidden rounded-lg border border-secondary-200 dark:border-secondary-700">
                   <table className="w-full text-left text-sm">
                     <tbody>
-                      {costRows.map((row) => (
-                        <tr
-                          key={row.key}
-                          className="odd:bg-white even:bg-secondary-50 dark:odd:bg-secondary-800 dark:even:bg-secondary-900/40"
-                        >
-                          <td className="px-3 py-2 text-secondary-600 dark:text-secondary-300">
-                            {row.label}
-                          </td>
-                          <td className="px-3 py-2 text-right font-medium text-secondary-900 dark:text-secondary-100">
-                            {eur(simulate.data[row.key])}
-                          </td>
-                        </tr>
-                      ))}
+                      {(simulate.data.cost_lines?.length ?? 0) > 0
+                        ? simulate.data.cost_lines!.map((line) => (
+                            <tr
+                              key={line.key}
+                              className="odd:bg-white even:bg-secondary-50 dark:odd:bg-secondary-800 dark:even:bg-secondary-900/40"
+                            >
+                              <td className="px-3 py-2 text-secondary-600 dark:text-secondary-300">
+                                {line.label_es}
+                              </td>
+                              <td className="px-3 py-2 text-right font-medium text-secondary-900 dark:text-secondary-100">
+                                {eur(line.amount)}
+                              </td>
+                            </tr>
+                          ))
+                        : costRows.map((row) => (
+                            <tr
+                              key={row.key}
+                              className="odd:bg-white even:bg-secondary-50 dark:odd:bg-secondary-800 dark:even:bg-secondary-900/40"
+                            >
+                              <td className="px-3 py-2 text-secondary-600 dark:text-secondary-300">
+                                {row.label}
+                              </td>
+                              <td className="px-3 py-2 text-right font-medium text-secondary-900 dark:text-secondary-100">
+                                {eur(simulate.data[row.key])}
+                              </td>
+                            </tr>
+                          ))}
                     </tbody>
                   </table>
                 </div>

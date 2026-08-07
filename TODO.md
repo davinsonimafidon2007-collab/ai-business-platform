@@ -1,3 +1,24 @@
+# TODO — ECON.2: fixtures doradas SPAIN/PT ✅
+- [x] tests/fixtures/econ_regression_cases.json (números del analyzer actual: SPAIN/ES/PORTUGAL/PT)
+- [x] tests/unit/test_econ_regression_fixtures.py (parametrizado + tolerancia + alias + PT≠SPAIN)
+- [x] ES ≡ SPAIN en caso alias; PT ≠ SPAIN en total_cost
+- [x] release_check --skip-smoke verde
+
+## Nota
+Números generados con el snippet FIX 0 del analyzer actual (no inventados):
+`spain_10k_14k` 13920/80/0.57; `spain_18k_24k` 23280/720/3.09;
+`es_alias_18k_24k` ≡ spain; `portugal_10k_15k` 14470/530/3.66; `pt_alias_12k_16k` 16850/-850/-5.04.
+Al cambiar `import_costs_data.json` (tasas/fijos) hay que regenerar/actualizar los expected a propósito.
+
+# TODO — HEALTH.UI.1: health compuesto en admin UI ✅
+- [x] fetchHealth → GET /api/v1/health (tolera 503)
+- [x] Sección Health en /admin (api/db/redis chips)
+- [x] Vitest servicio (3 tests: map, 503, no-503)
+- [x] Refrescar snapshot invalida ["health-composite"]
+- [x] E2E checklist §5.2 + HANDOFF bajo admin/ops
+
+# HANDOFF.2 — docs/HANDOFF_GROK_NEXT_SESSION.md actualizado 2026-08-07 ✅
+
 ## Hecho (2026-08) — no rehacer
 
 - CODE-001 — higiene: dead code quitado (paquetes vacíos `app/agents`, `app/orchestrator`, `app/tasks`, `app/telemetry`, `app/workers`; `app/__pycache__.zip`), `.gitignore` endurecido, config `ruff` (`[tool.ruff.lint]`), `scripts/lint.ps1`, refactor `_matches_filters` en `search_orchestrator.py`. Ver `TODO.CODE-001.steps.md`.
@@ -14,9 +35,22 @@ Ver: `docs/HANDOFF_GROK_NEXT_SESSION.md`
 ## Siguiente
 
 1. Commit/push desde raíz si hay cambios locales sin subir
-2. E2E manual: search → drawer (labels + warnings)
-3. Ops con credencial: proxy mobile.de (A.5b), SMTP, Firebase
-4. Portales ES live (largo plazo)
+2. Ops con credencial: proxy mobile.de (A.5b), SMTP, Firebase
+3. Portales ES live (largo plazo)
+
+---
+
+# TODO — SMOKE.CRIT.1: smoke crítico + providers admin + docs release ✅
+- [x] check_admin exige bloque providers
+- [x] README orden release local
+- [x] Distinción smoke HTTP vs E2E.MANUAL.1
+
+---
+
+# TODO — E2E.MANUAL.1: Checklist e2e manual camino crítico ✅
+- [x] docs/E2E_MANUAL_CHECKLIST.md
+- [x] Enlace README + HANDOFF
+- [ ] (ops) Ejecutar checklist en local y archivar fecha PASS
 
 ---
 

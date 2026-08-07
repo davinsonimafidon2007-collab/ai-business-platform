@@ -2,7 +2,11 @@
 
 Documento para la **siguiente sesión / otra cuenta**. No rehacer lo marcado como hecho.
 
-Última actualización: 2026-08-06 (SCORE.1 + SEARCH.EMPTY.1 cerrados en local; commit desde raíz pendiente si el working tree aún tiene cambios).
+Última actualización: 2026-08-07
+
+Incluye: Redis en Compose, health compuesto/backups (DEVOPS-001), SEC.001,
+labels ES (PROFIT/REC/ROI/SCORE/NEG/OPP), MKT explanation/sources, providers ES
+fixtures + registry, ADMIN providers UI, SIM.1, E2E.MANUAL.1, SMOKE.CRIT.1.
 
 ---
 
@@ -32,33 +36,42 @@ Visión futura (NO implementada como portales live ES): comparables coches.net /
 
 ---
 
-## 3. Estado general (~75–80% local)
+## 3. Estado general (~80% local usable)
 
-| Ámbito | Notas |
+| Ámbito | Estado |
 |--------|--------|
-| Backend core | Search pipeline, profit, score, negotiation, opportunities |
-| Providers DE | AS24 live OK (parser `__NEXT_DATA__`); mobile.de 403 sin proxy |
-| Labels ES | ROI coherence, REC labels, OPP labels, SCORE category_key, cost_lines |
-| Frontend | Search empty/error ES, drawer labels, admin |
-| Ops / prod | Proxy, SMTP real, Firebase SA, deploy — pendientes de credencial |
+| Backend core | Search, profit, score, negotiation, opportunities, simulate-profit |
+| Labels / UX ES | cost_lines, recommendation/risk, score category, coherence_warnings, empty search |
+| Market | explanation + provider_sources + cache column |
+| Providers DE | AS24 OK; mobile.de 403 sin proxy |
+| Providers ES | fixtures offline + AS24-ES flag; no scrapers live ES |
+| Admin / ops scripts | providers snapshot, health compuesto, smoke crítico, integrations ready |
+| Infra local | Postgres + **Redis** en docker-compose |
+| CI | unit + Postgres service + alembic + INT.1 subset |
+| Prod / credencial | proxy, SMTP real, Firebase SA — pendientes |
+
+% orientativo: **~80% local usable**; **ops live** sigue bajo sin credenciales.
 
 ---
 
 ## 4. Tasks completadas (NO rehacer)
 
-| Task | Resumen |
-|------|---------|
-| Providers 1b | `VehicleProvider`; AS24 `__NEXT_DATA__`; mobile.de anti-bot 403 |
-| MKT.1 / MKT.2 | `explanation` en market estimation + UI |
-| PROFIT.1 | `cost_lines` + `cost_breakdown_labels.py` |
-| ROI.1 | `app/services/profit_coherence.py` → `coherence_warnings` en mapper search |
-| REC.1 | `app/services/recommendation_labels.py` (risk + recommendation ES) |
-| OPP.LIST.1 | `OpportunityRead` + `opportunities.py` con `*_label_es` |
-| SCORE.1 | `category_key` + `category_label_es` (category legacy sigue en ES) |
-| SEARCH.EMPTY.1 | Empty/error search en ES + hint Admin/providers |
-| NEG.1 | Drawer: Apertura / defectos / mercado / Cierre |
-| E2E.1 / SMOKE | `scripts/smoke_critical_path.py` + README |
-| H.1–H.2, E.3–E.4, G.3–G.4, N.1, J.1, T.1, INT.1, etc. | Ver historial git / releases anteriores |
+| Task | Nota breve |
+|------|------------|
+| CI.1 / CI.2 | Actions + Postgres + INT.1 |
+| MKT.1–3 / MKT.1b | explanation, API, provider_sources, columna cache |
+| P.1a–d / DEST.1 | fixtures ES, registry boot, AS24-ES, HTML coches |
+| ADMIN.1 / 1b | API + UI providers |
+| SMOKE.ES / OPS.READY / SMOKE.CRIT.1 | scripts + admin providers en smoke |
+| E2E.MANUAL.1 | `docs/E2E_MANUAL_CHECKLIST.md` |
+| PROFIT.1 / REC.1 / ROI.1 / SCORE.1 / NEG.1 / OPP.LIST.1 | labels y warnings |
+| SIM.1 | simulate-profit alineado search |
+| HYGIENE / TEST.WIN.1 / CODE-001 | basura raíz, sqlite skip, dead code |
+| INFRA Redis Compose | servicio redis en compose |
+| DEVOPS-001 | health compuesto, backup scripts, docs/ops.md |
+| HEALTH.UI.1 | health compuesto en admin UI (chips api/db/redis) |
+| SEC.001 | CORS prod + firebase_required |
+| ARCH-002 / PERF-001 / ECON-001 / FE-001 | según TODO ✅ del repo |
 
 ### Dónde vive cada cosa
 
@@ -66,26 +79,28 @@ Visión futura (NO implementada como portales live ES): comparables coches.net /
 - Labels rec/risk: `app/services/recommendation_labels.py`.
 - Score keys: `app/services/vehicle_scorer.py` (`SCORE_CATEGORY_LABELS_ES`, `category_key`).
 - Schema API: `app/api/v1/schemas/common.py`, `opportunity.py`.
+- simulate-profit: `app/api/v1/vehicles.py` (`simulate-profit`), `frontend/src/app/services/simulateProfit.ts`.
 
 ---
 
-## 5. Bloqueos por credencial (no son bugs de código)
+## 5. Bloqueados por credencial (código listo)
 
-| ID | Qué falta |
-|----|-----------|
-| A.5b | `PROVIDER_HTTP_PROXY` o cookies reales para mobile.de (403) |
-| SMTP | Credenciales SMTP reales (código de alertas listo) |
-| FIRE | Service account / config Firebase |
-| AS24-ES live | Flag + red; fixture offline ≠ live |
+| ID | Falta |
+|----|-------|
+| A.5b | `PROVIDER_HTTP_PROXY` / sesión mobile.de |
+| SMTP.1 live | cuenta SMTP |
+| FIRE.1 live | service account |
+| AS24-ES live | flag + red estable |
 
 ---
 
 ## 6. No hacer
 
-- Regenerar todas las migraciones Alembic “por estética”.
-- Reimplementar `profit_coherence` o `recommendation_labels` desde cero.
-- Cambiar fórmulas de ROI / umbrales SCORE sin task explícito.
-- Editar `requirements.txt` a mano (usar uv export).
+- No regenerar todas las migraciones Alembic “por estética”.
+- No reimplementar `profit_coherence` / `recommendation_labels` / `cost_breakdown_labels`.
+- No editar `requirements.txt` a mano (uv).
+- No tratar fixtures ES como scrapers live.
+- No meter `smoke_critical_path` en CI sin admin secrets + API estable.
 - Commit solo desde `frontend/` (se dejan fuera `app/`, tests, docs).
 
 ---
@@ -93,13 +108,14 @@ Visión futura (NO implementada como portales live ES): comparables coches.net /
 ## 7. Comandos útiles
 
 ```powershell
-$env:ENVIRONMENT="test"
-$env:JWT_SECRET_KEY="test_secret_key_that_is_at_least_32_characters_long_1234567890"
-
-pytest tests/unit/test_vehicle_scorer.py tests/unit/test_profit_coherence.py tests/unit/test_recommendation_labels.py -q
-cd frontend; npx tsc --noEmit; cd ..
-python scripts/smoke_critical_path.py
+python scripts/check_integrations_ready.py
+python scripts/smoke_es_providers.py
 python scripts/release_check.py --skip-smoke
+
+# API up:
+python scripts/smoke_critical_path.py
+python scripts/smoke_critical_path.py --with-opportunities
+python scripts/smoke_critical_path.py --with-admin
 ```
 
 Commit desde **raíz del repo**:
@@ -124,10 +140,11 @@ Preferir **aplicar texto dado** antes que generar código nuevo.
 
 ## 9. Prioridad siguiente
 
-1. **Operador:** asegurar commit/push en `main` de SCORE.1 + SEARCH.EMPTY.1 (+ este HANDOFF/TODO) desde la raíz.
-2. **Producto ligero:** e2e manual search → drawer (ver labels ES y coherence_warnings).
-3. **Ops con credencial:** A.5b proxy mobile.de → SMTP → Firebase.
-4. **Largo plazo:** portales ES live (P.1b+); no tratar fixtures como scrapers live.
+1. Ejecutar E2E.MANUAL_CHECKLIST en local y anotar fecha PASS (ops).
+2. Commit/push desde **raíz** si queda working tree sucio.
+3. ECON.2 entregado: fixtures de regresión de costes SPAIN/PT (`tests/fixtures/econ_regression_cases.json` + `tests/unit/test_econ_regression_fixtures.py`). Al cambiar `import_costs_data.json` actualizar los `expected_*` a propósito. HEALTH.UI.1 entregado.
+4. Con credencial: A.5b → SMTP live → FIRE live.
+5. Largo plazo: portales ES live (no fixtures).
 
 ---
 

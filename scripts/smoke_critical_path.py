@@ -6,7 +6,7 @@ Uso:
   python scripts/smoke_critical_path.py
   python scripts/smoke_critical_path.py --with-opportunities
   python scripts/smoke_critical_path.py --with-admin
-  # --with-admin requiere credenciales ADMIN:
+  # --with-admin requiere credenciales ADMIN y valida también el bloque providers:
   #   SMOKE_ADMIN_EMAIL / SMOKE_ADMIN_PASSWORD  o  --admin-email/--admin-password
 
 Exit 0 = OK; 1 = fallo de aserción/HTTP; 2 = setup (API caída).
@@ -64,7 +64,7 @@ def check_opportunities(c: httpx.Client) -> None:
 
 
 def check_admin(c: httpx.Client, args: argparse.Namespace) -> None:
-    """Login como ADMIN y GET /admin/status — 200 con claves redis_ok/canary/jobs."""
+    """Login como ADMIN y GET /admin/status — 200 con claves redis_ok/canary/jobs/providers."""
     admin_email = args.admin_email
     admin_password = args.admin_password
     if not admin_email or not admin_password:
@@ -90,15 +90,37 @@ def check_admin(c: httpx.Client, args: argparse.Namespace) -> None:
         if status.status_code != 200:
             die(1, f"GET /admin/status → {status.status_code} {status.text[:300]}")
         body = status.json()
-        for key in ("redis_ok", "canary", "jobs"):
-            if key not in body:
-                die(1, f"admin/status sin clave '{key}'")
+        try:
+            assert_admin_status_body(body)
+        except AssertionError as exc:
+            die(1, str(exc))
         jobs = body.get("jobs") or []
         canary = body.get("canary") or {}
+        providers = body.get("providers") or {}
+        registered = providers.get("providers") or providers.get("registered") or []
+        profile = providers.get("default_import_cost_profile")
         print(
             f"OK: admin/status → 200 (redis_ok={body.get('redis_ok')}, "
-            f"jobs={len(jobs)}, canary.success={canary.get('success')})"
+            f"jobs={len(jobs)}, canary.success={canary.get('success')}, "
+            f"providers.registered={registered!r}, providers.profile={profile!r})"
         )
+
+
+def assert_admin_status_body(body: dict) -> None:
+    """Validate /admin/status response body (pure, raises AssertionError).
+
+    Asegura que el body contiene las claves requeridas por el smoke y que
+    el bloque `providers` cumple el schema `ProvidersStatus` del admin.
+    """
+    for key in ("redis_ok", "canary", "jobs", "providers"):
+        if key not in body:
+            raise AssertionError(f"admin/status sin clave '{key}'")
+    providers = body.get("providers") or {}
+    if not isinstance(providers, dict):
+        raise AssertionError("admin/status providers no es objeto")
+    registered = providers.get("providers") or providers.get("registered")
+    if registered is not None and not isinstance(registered, list):
+        raise AssertionError("admin/status providers.list no es lista")
 
 
 def main() -> None:
