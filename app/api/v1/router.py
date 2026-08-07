@@ -11,6 +11,7 @@ from fastapi import APIRouter
 from app.api.v1.dashboard import router as dashboard_router
 from app.api.v1.deals import router as deals_router
 from app.api.v1.opportunities import router as opportunities_router
+from app.api.v1.budget_search import router as budget_search_router
 from app.api.v1.routes.health import router as health_router
 from app.api.v1.routes.inspection import router as inspection_router
 from app.api.v1.routes.search import router as search_router
@@ -26,6 +27,7 @@ api_router.include_router(vehicles_router)
 api_router.include_router(dashboard_router)
 api_router.include_router(opportunities_router)
 api_router.include_router(deals_router)
+api_router.include_router(budget_search_router)
 
 __all__ = ["api_router"]
 
