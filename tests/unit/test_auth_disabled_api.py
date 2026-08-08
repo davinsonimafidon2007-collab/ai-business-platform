@@ -36,7 +36,7 @@ def _local_admin() -> User:
 
 @pytest.fixture
 def _no_db(monkeypatch: pytest.MonkeyPatch):
-    """Evita tocar Postgres: sesión y repositorios falsos."""
+    """Evita tocar Postgres: sesi��n y repositorios falsos."""
     from app.api.v1 import opportunities as opportunities_module
     from app.database import get_db_session
 
@@ -62,7 +62,10 @@ def _no_db(monkeypatch: pytest.MonkeyPatch):
     )
 
     yield
-    app.dependency_overrides.clear()
+    # Remover solo el override agregado; NO usar clear() para no borrar
+    # overrides de otros tests (p. ej. mocks de get_current_user).
+    if get_db_session in app.dependency_overrides:
+        del app.dependency_overrides[get_db_session]
 
 
 def test_business_route_no_401_when_auth_disabled(

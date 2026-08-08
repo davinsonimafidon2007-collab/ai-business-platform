@@ -17,7 +17,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -34,6 +34,16 @@ from app.services.comparable_market_estimator import (
 # =============================================================================
 # Stubs
 # =============================================================================
+
+
+@dataclass
+class ProviderStub:
+    """Provider mínimo que no interfiere con el filtro de comparables."""
+    name: str = "mobile_de"
+    source: str = "mobile_de"
+
+    def search_from_provider(self, *args: Any, **kwargs: Any) -> Any:
+        raise NotImplementedError("mock vehicle_service to avoid real network calls")
 
 
 @dataclass
@@ -486,7 +496,7 @@ class TestComparableMarketEstimator:
         vehicle = make_vehicle(brand="RareBrand")
 
         with patch.object(estimator._provider_registry, "list_providers", return_value=["mobile_de"]):
-            with patch.object(estimator._provider_registry, "get", return_value=MagicMock()):
+            with patch.object(estimator._provider_registry, "get", return_value=ProviderStub()):
                 result = await estimator.estimate(vehicle)
 
         assert isinstance(result, MarketEstimation)
@@ -503,7 +513,7 @@ class TestComparableMarketEstimator:
         vehicle = make_vehicle(price=20000.0)
 
         with patch.object(estimator._provider_registry, "list_providers", return_value=["mobile_de"]):
-            with patch.object(estimator._provider_registry, "get", return_value=MagicMock()):
+            with patch.object(estimator._provider_registry, "get", return_value=ProviderStub()):
                 result = await estimator.estimate(vehicle)
 
         assert isinstance(result, MarketEstimation)
@@ -523,7 +533,7 @@ class TestComparableMarketEstimator:
         vehicle = make_vehicle(price=20000.0)
 
         with patch.object(estimator._provider_registry, "list_providers", return_value=["mobile_de"]):
-            with patch.object(estimator._provider_registry, "get", return_value=MagicMock()):
+            with patch.object(estimator._provider_registry, "get", return_value=ProviderStub()):
                 result = await estimator.estimate(vehicle)
 
         assert result.comparable_count == 8
@@ -554,7 +564,7 @@ class TestComparableMarketEstimator:
         vehicle = make_vehicle(price=20000.0)
 
         with patch.object(estimator._provider_registry, "list_providers", return_value=["mobile_de"]):
-            with patch.object(estimator._provider_registry, "get", return_value=MagicMock()):
+            with patch.object(estimator._provider_registry, "get", return_value=ProviderStub()):
                 high_result = await estimator.estimate(vehicle)
 
         # Baja varianza — usar un vehículo con distinto hash para evitar caché
@@ -567,7 +577,7 @@ class TestComparableMarketEstimator:
         vehicle_service.search_from_provider = AsyncMock(return_value=low_var_comparables)
 
         with patch.object(estimator._provider_registry, "list_providers", return_value=["mobile_de"]):
-            with patch.object(estimator._provider_registry, "get", return_value=MagicMock()):
+            with patch.object(estimator._provider_registry, "get", return_value=ProviderStub()):
                 low_result = await estimator.estimate(vehicle)
 
         assert high_result.comparable_count == low_result.comparable_count
@@ -587,7 +597,7 @@ class TestComparableMarketEstimator:
         vehicle = make_vehicle(price=50000.0)
 
         with patch.object(estimator._provider_registry, "list_providers", return_value=["mobile_de"]):
-            with patch.object(estimator._provider_registry, "get", return_value=MagicMock()):
+            with patch.object(estimator._provider_registry, "get", return_value=ProviderStub()):
                 result = await estimator.estimate(vehicle)
 
         assert result.market_price > 0
@@ -606,7 +616,7 @@ class TestComparableMarketEstimator:
         vehicle = make_vehicle(price=10000.0)
 
         with patch.object(estimator._provider_registry, "list_providers", return_value=["mobile_de"]):
-            with patch.object(estimator._provider_registry, "get", return_value=MagicMock()):
+            with patch.object(estimator._provider_registry, "get", return_value=ProviderStub()):
                 result = await estimator.estimate(vehicle)
 
         assert any("pricing=underpriced" in n for n in result.notes)
@@ -624,7 +634,7 @@ class TestComparableMarketEstimator:
         vehicle = make_vehicle(price=20000.0)
 
         with patch.object(estimator._provider_registry, "list_providers", return_value=["mobile_de"]):
-            with patch.object(estimator._provider_registry, "get", return_value=MagicMock()):
+            with patch.object(estimator._provider_registry, "get", return_value=ProviderStub()):
                 result = await estimator.estimate(vehicle)
 
         assert any("pricing=fair" in n for n in result.notes)
@@ -639,12 +649,12 @@ class TestComparableMarketEstimator:
 
         # Un provider
         with patch.object(estimator._provider_registry, "list_providers", return_value=["mobile_de"]):
-            with patch.object(estimator._provider_registry, "get", return_value=MagicMock()):
+            with patch.object(estimator._provider_registry, "get", return_value=ProviderStub()):
                 result_one = await estimator.estimate(vehicle)
 
         # Dos providers
         with patch.object(estimator._provider_registry, "list_providers", return_value=["mobile_de", "autoscout24"]):
-            with patch.object(estimator._provider_registry, "get", return_value=MagicMock()):
+            with patch.object(estimator._provider_registry, "get", return_value=ProviderStub()):
                 result_two = await estimator.estimate(vehicle)
 
         # La confianza no necesariamente sube porque los providers adicionales
@@ -665,7 +675,7 @@ class TestComparableMarketEstimator:
         vehicle = make_vehicle(price=20000.0)
 
         with patch.object(estimator._provider_registry, "list_providers", return_value=["mobile_de"]):
-            with patch.object(estimator._provider_registry, "get", return_value=MagicMock()):
+            with patch.object(estimator._provider_registry, "get", return_value=ProviderStub()):
                 result1 = await estimator.estimate(vehicle)
                 result2 = await estimator.estimate(vehicle)
 
@@ -728,7 +738,7 @@ class TestComparableMarketEstimator:
         }
 
         with patch.object(estimator._provider_registry, "list_providers", return_value=["mobile_de"]):
-            with patch.object(estimator._provider_registry, "get", return_value=MagicMock()):
+            with patch.object(estimator._provider_registry, "get", return_value=ProviderStub()):
                 result = await estimator.estimate(vehicle_dict)
 
         assert isinstance(result, MarketEstimation)
@@ -784,7 +794,7 @@ class TestComparableMarketEstimator:
             vehicle = make_vehicle(price=20000.0)
 
             with patch.object(estimator._provider_registry, "list_providers", return_value=["mobile_de"]):
-                with patch.object(estimator._provider_registry, "get", return_value=MagicMock()):
+                with patch.object(estimator._provider_registry, "get", return_value=ProviderStub()):
                     result = await estimator.estimate(vehicle)
 
             assert 0.0 <= result.confidence <= 100.0, f"Confidence {result.confidence} fuera de rango"
@@ -801,7 +811,7 @@ class TestComparableMarketEstimator:
         vehicle = make_vehicle(price=20000.0)
 
         with patch.object(estimator._provider_registry, "list_providers", return_value=["mobile_de"]):
-            with patch.object(estimator._provider_registry, "get", return_value=MagicMock()):
+            with patch.object(estimator._provider_registry, "get", return_value=ProviderStub()):
                 result = await estimator.estimate(vehicle)
 
         # El weighted_mean debe estar entre min y max de los comparables
