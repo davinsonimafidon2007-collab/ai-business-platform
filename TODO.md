@@ -36,6 +36,42 @@ es poner `AUTH_DISABLED=false`.
 
 ---
 
+# SMOKE.AS24.LIVE.1 — Canary AS24-first + smoke live ✅
+
+- [x] `provider_canary`: `data.policy = "as24_first"` + `status` por provider
+      (`ok|fail|error` / `ok|warn_antibot|fail|error`). mobile.de sin proxy →
+      `warn_antibot` con log WARN (antes ERROR aunque no contribuyera al FAIL).
+      `mobile_status` y `strict_mobile` se mantienen (los usa admin/status).
+- [x] `scripts/smoke_as24_live.py`: exit 0 con ≥1 listing, 1 en 0 listings o
+      error. `--json`, `--url`, `--timeout`. Hint según el fallo, sin traceback.
+- [x] `admin_status` expone `canary.policy`.
+- [x] Tests: +4 canary (AS24 0 listings, AS24 error, mobile warn no tumba,
+      error genérico de mobile) y +7 del script con mocks.
+- [x] README + CONTEXT: sección "Providers (uso personal) — AS24-first".
+- [x] Live verificado: 20 listings. Suite 1139 passed.
+
+El smoke live **no** es gate de CI (red flaky); en CI corren solo los mocks.
+
+---
+
+# CI.FE.1 — Job frontend en GitHub Actions ✅
+
+- [x] Job `frontend` (Node 22, `npm ci`, `npm run test:run`), paralelo al backend
+      (sin `needs:`), `timeout-minutes: 15`, caché npm por `package-lock.json`.
+- [x] `NEXT_PUBLIC_AUTH_DISABLED=false` en el step de tests.
+- [x] Job `backend` sin cambios (9 steps intactos).
+- [x] Arreglados 2 tests obsoletos en `use-search.test.tsx`: esperaban filtros
+      concatenados en `query` (`"BMW BMW 320d"`, `"year_from:2015"`), pero
+      `formatFiltersForApi` los manda como campos tipados. Eran los 2 fallos
+      pre-existentes que arrastraba P2-001.
+- [x] Local: **66 passed (15 archivos)**.
+- [ ] Pendiente: primer run verde en GitHub tras el push.
+
+Lint queda para **CI.LINT.1** (step comentado en el workflow); `next build` para
+CI.FE.BUILD.1.
+
+---
+
 # E2E.MANUAL.PASS.1 — Camino crítico ejecutado ✅
 
 **2026-08-08 · PASS con SKIP** · evidencia en `docs/e2e_runs/2026-08-08_PASS.md`

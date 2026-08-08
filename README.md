@@ -558,9 +558,19 @@ python scripts/check_requirements_sync.py
 # exit 0 = OK; exit 1 = regenerar con scripts/export_requirements.ps1
 ```
 
-### CI (GitHub Actions) — CI.1 + CI.2
+### CI (GitHub Actions) — CI.1 + CI.2 + CI.FE.1
 
-Workflow: `.github/workflows/ci.yml`
+Workflow: `.github/workflows/ci.yml`. Dos jobs **en paralelo**: `backend`
+(Python 3.13) y `frontend` (Node 22, Vitest).
+
+#### Job `frontend` (CI.FE.1)
+
+`npm ci` + `npm run test:run` sobre `frontend/`, con caché de npm vía
+`setup-node` y `NEXT_PUBLIC_AUTH_DISABLED=false` (la auth sigue ON en CI: con el
+flag de uso personal los tests de `AuthGuard`/store dejarían de validar el camino
+multiusuario). Sin Playwright ni `next build` todavía.
+
+#### Job `backend`
 
 En cada push/PR a `main` (y `master` si existe):
 

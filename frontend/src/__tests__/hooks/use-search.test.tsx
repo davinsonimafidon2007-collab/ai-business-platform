@@ -86,9 +86,18 @@ describe("formatFiltersForApi", () => {
   });
 
   it("formats filters with brand and model", () => {
+    // brand/model viajan como campos propios del SearchAPIRequest, no
+    // concatenados en `query` (el backend los mapea a la URL del provider).
     const filters: SearchFilters = { query: "BMW", brand: "BMW", model: "320d" };
     const result = formatFiltersForApi(filters);
-    expect(result.query).toBe("BMW BMW 320d");
+    expect(result.query).toBe("BMW");
+    expect(result.brand).toBe("BMW");
+    expect(result.model).toBe("320d");
+  });
+
+  it("falls back to brand when there is no free-text query", () => {
+    const result = formatFiltersForApi({ brand: "Audi" } as SearchFilters);
+    expect(result.query).toBe("Audi");
   });
 
   it("formats price filters", () => {
@@ -99,9 +108,11 @@ describe("formatFiltersForApi", () => {
   });
 
   it("formats year filters", () => {
+    // Igual que brand/model: campos tipados, no sufijos "year_from:" en query.
     const filters: SearchFilters = { query: "BMW", min_year: 2015, max_year: 2023 };
     const result = formatFiltersForApi(filters);
-    expect(result.query).toContain("year_from:2015");
-    expect(result.query).toContain("year_to:2023");
+    expect(result.query).toBe("BMW");
+    expect(result.min_year).toBe(2015);
+    expect(result.max_year).toBe(2023);
   });
 });
