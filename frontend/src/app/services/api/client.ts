@@ -56,7 +56,8 @@ class ApiClient {
   ): InternalAxiosRequestConfig {
     if (typeof window !== "undefined") {
       const token = localStorage.getItem("access_token");
-      if (token) {
+      // Protección básica: solo enviar si el token existe y parece válido
+      if (token && token.trim().length > 10) {
         config.headers.Authorization = `Bearer ${token}`;
       }
     }

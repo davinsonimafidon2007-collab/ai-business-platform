@@ -80,7 +80,8 @@ export const useAuthStore = create<AuthState>((set) => ({
     try {
       const token = storage.get(TOKEN_KEYS.accessToken);
       const userStr = storage.get(TOKEN_KEYS.user);
-      if (token && userStr) {
+      // Protección básica: no aceptar tokens vacíos o corruptos
+      if (token && token.trim().length > 0 && userStr) {
         const user = JSON.parse(userStr) as User;
         set({ user, isAuthenticated: true, isLoading: false });
       } else {
