@@ -24,7 +24,7 @@ from app.core.config import settings
 from app.database import get_db_session
 from app.models.role import Role
 from app.repositories.user_repository import UserRepository
-from app.services.auth_service import AuthService, password_hasher
+from app.services.auth_service import password_hasher
 from app.services.user_service import UserService
 
 
@@ -61,7 +61,6 @@ async def create_admin_user(email: str, password: str, session=None) -> None:
 
 async def _create_admin_with_repository(email: str, password: str, repository: UserRepository) -> None:
     """Lógica interna para crear admin con un repositorio dado."""
-    auth_service = AuthService(repository)
     user_service = UserService(repository)
 
     # Verificar si el usuario ya existe (idempotente)

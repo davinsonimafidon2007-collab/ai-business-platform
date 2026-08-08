@@ -477,7 +477,7 @@ class TestSearchEngineSearch:
             result2 = await search_engine.search(request)
         assert result1.summary.total_results == result2.summary.total_results
         assert len(result1.results) == len(result2.results)
-        for r1, r2 in zip(result1.results, result2.results):
+        for r1, r2 in zip(result1.results, result2.results, strict=True):
             assert r1.opportunity.overall_score == r2.opportunity.overall_score
             assert r1.opportunity.opportunity_level == r2.opportunity.opportunity_level
 

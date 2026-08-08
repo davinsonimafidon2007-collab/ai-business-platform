@@ -56,7 +56,9 @@ class RefreshTokenService:
         return await self.repository.create(refresh_token)
 
     async def validate_refresh_token(self, token: str) -> RefreshToken:
-        payload = self.decode_refresh_token(token)
+        # Valida firma/exp/type y lanza AuthenticationError si no cuadra.
+        # El payload no se usa aquí: la fuente de verdad es la fila en DB.
+        self.decode_refresh_token(token)
         refresh_token = await self.repository.get_by_token(_hash_token(token))
         
         if refresh_token is None:

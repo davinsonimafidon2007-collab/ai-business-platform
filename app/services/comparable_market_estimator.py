@@ -299,7 +299,9 @@ class MarketStatisticsCalculator:
             percentile_pos = (count_below / len(prices)) * 100.0
         weighted_mean = 0.0
         if total_weight > 0:
-            weighted_mean = sum(p * w for p, w in zip(prices, weights)) / total_weight
+            weighted_mean = (
+                sum(p * w for p, w in zip(prices, weights, strict=True)) / total_weight
+            )
         return MarketStatistics(
             count=len(prices), mean=mean, median=median, std_dev=std_dev,
             min_price=min_price, max_price=max_price, q1=q1, q3=q3, iqr=iqr,

@@ -35,7 +35,7 @@ async def search_by_budget(request: BudgetSearchRequest) -> Any:
     try:
         profile = get_profile(profile_name)
     except KeyError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
     agent = BudgetSearchAgent(profile_name=profile_name)
     max_price = agent.calculate_max_purchase_price(request.total_budget)

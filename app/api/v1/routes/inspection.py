@@ -128,7 +128,7 @@ async def update_item(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
-        )
+        ) from e
     return ObservationResponse(**observation.to_dict())
 
 
@@ -173,7 +173,9 @@ async def analyze_photos(
     try:
         result = await service.analyze_photos(session_id, data.photo_ids)
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
+        ) from exc
     return VisionAnalysisResponse(**result)
 
 
@@ -195,7 +197,7 @@ async def finalize_session(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
-        )
+        ) from e
     return InspectionSessionResponse(**session.to_dict())
 
 

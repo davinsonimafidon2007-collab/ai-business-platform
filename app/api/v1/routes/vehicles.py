@@ -95,7 +95,7 @@ async def get_vehicle_detail(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error fetching vehicle from provider '{provider}': {str(e)}",
-        )
+        ) from e
 
     if detail is None:
         raise HTTPException(

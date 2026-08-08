@@ -26,7 +26,12 @@ __pycache__/
 .mypy_cache/
 htmlcov/
 .coverage
+.coverage.*
+coverage.xml
 *.egg-info/
+# COV.GATE.1: reportes de coverage del frontend (v8/istanbul), generados por
+# `npm run test:coverage`. Son artefactos, no fuente.
+frontend/coverage/
 
 # Entornos / secretos
 .venv/

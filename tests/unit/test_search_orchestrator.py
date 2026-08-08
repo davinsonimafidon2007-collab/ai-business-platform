@@ -20,6 +20,7 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from pydantic import ValidationError
 
 from app.models.market import MarketEstimation
 from app.models.search import SearchRequest, SearchResult, SearchSummary
@@ -282,7 +283,9 @@ class TestModelStructure:
         assert request.budget_max == 30000
 
     def test_search_request_validation(self) -> None:
-        with pytest.raises(Exception):
+        # ValidationError concreto en vez de Exception a secas: si el modelo
+        # dejara de validar, un TypeError cualquiera haría pasar el test.
+        with pytest.raises(ValidationError):
             SearchRequest(query="", max_results=0)
 
     def test_search_result_creation(self) -> None:
@@ -1032,7 +1035,7 @@ class TestDeterminism:
             results2 = await orchestrator.search(request)
 
         assert len(results1) == len(results2)
-        for r1, r2 in zip(results1, results2):
+        for r1, r2 in zip(results1, results2, strict=True):
             assert r1.opportunity.overall_score == r2.opportunity.overall_score
             assert r1.opportunity.opportunity_level == r2.opportunity.opportunity_level
 

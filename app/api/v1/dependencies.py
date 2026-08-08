@@ -6,7 +6,17 @@ resolved through this module, making them easily testable and swappable.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    # Import diferido: estos módulos se importan dentro de las factories para
+    # evitar ciclos, pero las anotaciones de retorno necesitan el símbolo
+    # (ruff F821). Con `from __future__ import annotations` no hay coste en
+    # runtime.
+    from app.providers.autoscout24_es import AutoScout24EsProvider
+    from app.repositories.vehicle_evaluation_repository import (
+        VehicleEvaluationRepository,
+    )
 
 from fastapi import Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -344,10 +354,10 @@ def get_provider(provider_name: str) -> VehicleProvider:
     """
     try:
         return ProviderRegistry.get(provider_name)
-    except KeyError:
+    except KeyError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Provider '{provider_name}' not found. "
             f"Available: {ProviderRegistry.list_providers()}",
-        )
+        ) from exc
 

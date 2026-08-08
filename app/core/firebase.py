@@ -139,9 +139,9 @@ async def verify_google_id_token(id_token: str) -> dict:
             "name": decoded.get("name", ""),
             "picture": decoded.get("picture", ""),
         }
-    except firebase_auth.ExpiredIdTokenError:
-        raise ValueError("Firebase ID token has expired")
-    except firebase_auth.RevokedIdTokenError:
-        raise ValueError("Firebase ID token has been revoked")
+    except firebase_auth.ExpiredIdTokenError as exc:
+        raise ValueError("Firebase ID token has expired") from exc
+    except firebase_auth.RevokedIdTokenError as exc:
+        raise ValueError("Firebase ID token has been revoked") from exc
     except firebase_auth.InvalidIdTokenError as exc:
-        raise ValueError(f"Invalid Firebase ID token: {exc}")
+        raise ValueError(f"Invalid Firebase ID token: {exc}") from exc

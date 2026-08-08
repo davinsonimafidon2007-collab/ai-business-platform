@@ -563,12 +563,35 @@ python scripts/check_requirements_sync.py
 Workflow: `.github/workflows/ci.yml`. Dos jobs **en paralelo**: `backend`
 (Python 3.13) y `frontend` (Node 22, Vitest).
 
-#### Job `frontend` (CI.FE.1)
+#### Job `frontend` (CI.FE.1 + COV.GATE.1)
 
-`npm ci` + `npm run test:run` sobre `frontend/`, con caché de npm vía
+`npm ci` + `npm run test:coverage` sobre `frontend/`, con caché de npm vía
 `setup-node` y `NEXT_PUBLIC_AUTH_DISABLED=false` (la auth sigue ON en CI: con el
 flag de uso personal los tests de `AuthGuard`/store dejarían de validar el camino
 multiusuario). Sin Playwright ni `next build` todavía.
+
+#### Lint y coverage
+
+```bash
+# Lint backend (CI.LINT.1) — mismo comando que CI
+uv run ruff check app tests
+uv run ruff check app tests --fix     # autofix seguro
+
+# Coverage backend, solo módulos críticos (COV.GATE.1) — gate: 70 %
+uv run python -m pytest tests/unit -q \
+  --cov=app.services.profit_analyzer \
+  --cov=app.services.opportunity_finder \
+  --cov=app.services.auth_service \
+  --cov=app.dependencies.auth \
+  --cov-report=term-missing --cov-fail-under=70
+
+# Coverage frontend (store/** + services/**) — thresholds en vitest.config.ts
+cd frontend && npm run test:coverage
+```
+
+Los gates son **piso de disciplina**, no meta: hoy el backend crítico está en
+~97 % y el frontend acotado en ~57 %. Los scrapers/providers HTML quedan fuera
+del gate a propósito (dependen de DOM externo).
 
 #### Job `backend`
 

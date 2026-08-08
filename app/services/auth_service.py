@@ -57,7 +57,7 @@ class AuthService:
         try:
             token_info = await verify_google_id_token(id_token)
         except ValueError as exc:
-            raise AuthenticationError(str(exc))
+            raise AuthenticationError(str(exc)) from exc
 
         email = token_info.get("email")
         if not email:

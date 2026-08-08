@@ -36,6 +36,62 @@ es poner `AUTH_DISABLED=false`.
 
 ---
 
+# CI.LINT.1 — Ruff como gate en CI ✅
+
+- [x] Step `Ruff check` en el job backend, **antes** de pytest (falla rápido).
+- [x] Baseline 438 → **0**. `ruff check app tests` exit 0.
+- [x] 507 + 33 arreglos automáticos (`--fix`) + fixes manuales:
+      F821 (3, anotaciones sin símbolo → `TYPE_CHECKING`), B904 (10, `raise
+      ... from`), F841 en producción (2), B007, B905 (3, `strict=True`),
+      B017 (`pytest.raises(Exception)` → `ValidationError`).
+- [x] `per-file-ignores` justificados en `pyproject.toml`:
+      - **E712** en `app/repositories/*`: en SQLAlchemy `Column == True` NO se
+        puede sustituir por `if col:` — el truthiness del objeto `Column` es
+        siempre verdadero y generaría un WHERE incorrecto. Falso positivo.
+      - **E402** en scripts con `sys.path.insert` previo a los imports.
+      - **F841** en 5 ficheros de test (residual heredado, CODE-001).
+- [x] **UP042** ignorado repo-wide con motivo: migrar los 14 enums de
+      `(str, Enum)` a `StrEnum` cambia `str(x)`/f-strings (`"Role.ADMIN"` →
+      `"admin"`) y afectaría a payloads de API y logs. Es cambio de
+      comportamiento, no higiene → task propio.
+- [x] Suite verde tras los autofixes.
+
+---
+
+# COV.GATE.1 — Gates de coverage ✅
+
+**Backend** (gate 70 % sobre módulos críticos, actual **97.43 %**):
+
+| Módulo | Cobertura |
+|---|---|
+| `app/services/profit_analyzer.py` | 100 % |
+| `app/services/opportunity_finder.py` | 98 % |
+| `app/services/auth_service.py` | 88 % |
+| `app/dependencies/auth.py` | 64 % → **100 %** |
+
+- [x] `pytest-cov` en dev deps + `[tool.coverage.*]` en `pyproject.toml`.
+- [x] Gate por paths en CI (no `fail_under` global: evita premiar módulos
+      triviales y no exige 80 % del monorepo).
+- [x] +7 tests en `test_dependencies_auth_paths.py`: el gate destapó que solo
+      se cubría el bypass `auth_disabled`, no el camino JWT ni las denegaciones
+      de rol/permiso (o sea, la lógica de seguridad).
+
+**Frontend** (thresholds lines/stmts/funcs 30 %, branches 20 %; actual
+**57.4 % / 60.9 % / 69.6 %**):
+
+- [x] `@vitest/coverage-v8` añadido: **faltaba**, el job habría fallado con
+      `MISSING DEPENDENCY`.
+- [x] `coverage.include` acotado a `src/app/store/**` y `src/app/services/**`.
+- [x] `services/api/client.ts` excluido (wrapper axios con interceptores y
+      refresh: necesita harness de red, se cubrirá aparte). Documentado.
+- [x] +2 ficheros de test: `search.ts` 0 → 100 %, `theme-store.ts` 0 → 100 %.
+- [x] Gate verificado: baja el umbral y `vitest` sale con exit 1.
+
+Pendiente: `google-auth.ts` e `inspection.ts` siguen a 0 %; subir umbrales
+cuando se cubran.
+
+---
+
 # SMOKE.AS24.LIVE.1 — Canary AS24-first + smoke live ✅
 
 - [x] `provider_canary`: `data.policy = "as24_first"` + `status` por provider

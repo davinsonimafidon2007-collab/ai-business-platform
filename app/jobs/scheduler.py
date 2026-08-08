@@ -188,7 +188,7 @@ class Scheduler:
         self._running = False
 
         # Signal cancellation to all periodic jobs
-        for name, entry in self._jobs.items():
+        for entry in self._jobs.values():
             if entry.cancel_event is not None:
                 entry.cancel_event.set()
 
