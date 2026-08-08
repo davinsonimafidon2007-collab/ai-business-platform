@@ -149,11 +149,16 @@ class SearchResultAnalyzer:
         vehicle_score: Any,
         market_estimation: Any,
         profit_analysis: Any,
+        inspection_result: InspectionResult | None = None,
     ) -> NegotiationInput:
         """Construye el NegotiationInput a partir de los análisis existentes.
 
         Reutiliza los modelos existentes (MarketEstimation, ProfitAnalysis,
         VehicleScore) sin duplicar lógica.
+
+        ``inspection_result`` (opcional) permite conectar datos de inspección
+        reales (p. ej. los generados por InspectionService) al motor de
+        negociación. Si se omite, se usa un resultado vacío como fallback.
         """
         # Construir RepairEstimate a partir de profit_analysis
         repair_cost = getattr(profit_analysis, "repair_estimate", 0.0) or 0.0
@@ -166,9 +171,9 @@ class SearchResultAnalyzer:
             diagnostic_cost=0.0,
         )
 
-        # Construir Inspección simple (sin datos reales de inspección)
-        # Se usa asking_price + mileage como heurística para detectar defectos
-        inspection_result = InspectionResult(
+        # Inspección real (si se inyecta) o fallback vacío.
+        # Conectar InspectionService → NegotiationEngine sin hardcodear defectos.
+        inspection_result = inspection_result or InspectionResult(
             defects=[],
             overall_condition=10,
             has_accident_history=False,
@@ -223,6 +228,7 @@ class SearchResultAnalyzer:
         vehicle_score: Any,
         market_estimation: Any,
         profit_analysis: Any,
+        inspection_result: InspectionResult | None = None,
     ) -> NegotiationResult | None:
         """Ejecuta el motor de negociación si hay datos suficientes."""
         try:
@@ -231,6 +237,7 @@ class SearchResultAnalyzer:
                 vehicle_score=vehicle_score,
                 market_estimation=market_estimation,
                 profit_analysis=profit_analysis,
+                inspection_result=inspection_result,
             )
             return self._negotiation_engine.analyze(negotiation_input)
         except Exception:
