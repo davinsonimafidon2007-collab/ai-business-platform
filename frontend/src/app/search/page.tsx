@@ -67,6 +67,23 @@ export default function SearchPage() {
 
       <SearchFilters onSearch={handleSearch} isLoading={searchMutation.isPending} />
 
+      {/* Provider Issues Warning (SEARCH.DIAG.1) */}
+      {searchMutation.isSuccess && (searchMutation.data.provider_issues?.length ?? 0) > 0 && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-900/20">
+          <h3 className="text-sm font-semibold text-amber-700 dark:text-amber-300">
+            Algunos providers no respondieron
+          </h3>
+          <ul className="mt-2 space-y-1 text-sm text-amber-600 dark:text-amber-400">
+            {searchMutation.data.provider_issues?.map((issue, idx) => (
+              <li key={`${issue.provider}-${idx}`}>
+                <span className="font-medium">{issue.provider}</span>:{" "}
+                {issue.message_es || issue.message}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {/* Loading State */}
       {searchMutation.isPending && (
         <div className="flex flex-col items-center justify-center py-12">

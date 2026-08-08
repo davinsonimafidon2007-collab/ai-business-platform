@@ -5,7 +5,7 @@ const config: CapacitorConfig = {
   appName: 'AI Business Platform',
   webDir: 'out',
   server: {
-    androidScheme: 'http',
+    androidScheme: 'https',
   },
   plugins: {
     Camera: {

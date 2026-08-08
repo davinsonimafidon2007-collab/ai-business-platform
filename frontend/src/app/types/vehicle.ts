@@ -206,9 +206,19 @@ export interface SearchSummary {
 // =============================================================================
 // Search API Response
 // =============================================================================
+export interface ProviderIssue {
+  provider: string;
+  stage: "registry" | "search" | "analyze";
+  error_type: string;
+  message: string;
+  message_es: string;
+  external_id?: string | null;
+}
+
 export interface SearchAPIResponse {
   summary: SearchSummary;
   results: SearchResultItem[];
+  provider_issues?: ProviderIssue[];
 }
 
 // =============================================================================

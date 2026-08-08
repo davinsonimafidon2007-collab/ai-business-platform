@@ -44,6 +44,11 @@ if len(settings.jwt_secret_key) < 32:
         "It must be at least 32 characters long."
     )
 
+# PERS.CLOSE.1 — AUTH_DISABLED fail-fast: in production with auth disabled the
+# app refuses to boot (anyone reaching the port would be ADMIN). Only an
+# explicit ALLOW_AUTH_DISABLED_IN_PROD=true overrides this.
+settings.auth_disabled_forbidden_in_production()
+
 # SEC-001 — Firebase fail-fast: in production with FIREBASE_REQUIRED=true the
 # app must not boot without Firebase credentials (Google Login would be dead).
 if settings.environment == "production" and settings.firebase_required:

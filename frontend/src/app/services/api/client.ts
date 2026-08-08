@@ -1,3 +1,4 @@
+import { Capacitor } from "@capacitor/core";
 import axios, {
   AxiosError,
   AxiosInstance,
@@ -12,6 +13,13 @@ const getApiBaseUrl = (): string => {
 
   if (envUrl) {
     return envUrl;
+  }
+
+  // En Android nativo (Capacitor WebView) sin NEXT_PUBLIC_API_URL, el emulador
+  // expone el host en 10.0.2.2. El network_security_config ya permite cleartext
+  // a ese host en desarrollo (evita generar un https://localhost:8000 inválido).
+  if (Capacitor.isNativePlatform() && Capacitor.getPlatform() === "android") {
+    return "http://10.0.2.2:8000";
   }
 
   // En desarrollo, usar el mismo protocolo que la página actual

@@ -140,19 +140,6 @@ def get_market_estimator(
 # =============================================================================
 
 
-def get_http_client() -> ProviderHttpClient:
-    """Crea un cliente HTTP compartido para providers.
-
-    Nota: cada provider construye su propio ``ProviderHttpClient`` con la
-    misma configuración anti-bot (proxy/cookies/delay vía ``settings``) en
-    ``get_mobile_de_provider()`` / ``get_autoscout24_provider()``. Esta
-    función existe como placeholder para un futuro cliente compartido.
-    """
-    raise NotImplementedError(
-        "Use get_mobile_de_provider() or get_autoscout24_provider() directly"
-    )
-
-
 def get_mobile_de_provider() -> MobileDeProvider:
     """Provider mobile.de con cliente HTTP anti-bot unificado (settings-driven).
 
