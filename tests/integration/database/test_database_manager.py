@@ -41,7 +41,7 @@ class TestDatabaseManager:
         await manager.init()
         # Las tablas se crean explícitamente (Alembic gestiona prod; aquí no hay migraciones)
         async with manager.engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
+            # Alembic manages tables; create_all removed per audit
 
         # Verify tables exist by executing a raw query
         async with manager.engine.connect() as conn:
@@ -132,7 +132,7 @@ class TestDatabaseManager:
         manager = DatabaseManager("sqlite+aiosqlite://")
         await manager.init()
         async with manager.engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
+            # Alembic manages tables; create_all removed per audit
 
         async with manager.engine.connect() as conn:
             # Check search_history columns

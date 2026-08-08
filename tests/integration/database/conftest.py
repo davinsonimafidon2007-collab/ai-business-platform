@@ -33,7 +33,7 @@ async def db_manager() -> AsyncGenerator[DatabaseManager]:
         echo=False,
     )
     async with manager._engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+        # Alembic manages tables; create_all removed per audit
     yield manager
     await manager.shutdown()
 

@@ -23,7 +23,7 @@ def db_session():
 
     async def _create_tables():
         async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
+            # Alembic manages tables; create_all removed per audit
 
     asyncio.run(_create_tables())
 
