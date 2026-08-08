@@ -49,6 +49,7 @@ class SearchResultAnalyzer:
         opportunity_finder: Any,
         negotiation_engine: NegotiationEngine | None = None,
         import_cost_profile: str = "SPAIN",
+        inspection_service: Any = None,
     ) -> None:
         self._vehicle_scorer = vehicle_scorer
         self._market_estimator = market_estimator
@@ -56,6 +57,7 @@ class SearchResultAnalyzer:
         self._opportunity_finder = opportunity_finder
         self._negotiation_engine = negotiation_engine or NegotiationEngine()
         self._import_cost_profile = import_cost_profile
+        self._inspection_service = inspection_service
 
     async def analyze(
         self,
@@ -126,12 +128,18 @@ class SearchResultAnalyzer:
             market_estimation,
         )
 
-        # 5. Estrategia de negociación
+        # 5. Estrategia de negociación — conecta datos de inspección reales si
+        #    hay un InspectionService inyectado (flujo Search → Inspection).
+        inspection_result = None
+        if self._inspection_service is not None:
+            inspection_result = await self._load_inspection_result(vehicle)
+
         negotiation_result = self.run_negotiation(
             vehicle=vehicle,
             vehicle_score=vehicle_score,
             market_estimation=market_estimation,
             profit_analysis=profit_analysis,
+            inspection_result=inspection_result,
         )
 
         return SearchResult(
@@ -242,4 +250,35 @@ class SearchResultAnalyzer:
             return self._negotiation_engine.analyze(negotiation_input)
         except Exception:
             logger.exception("Error al ejecutar la negociación para el vehículo")
+            return None
+
+    async def _load_inspection_result(
+        self, vehicle: Any
+    ) -> InspectionResult | None:
+        """Intenta obtener el InspectionResult real de un vehículo.
+
+        Conecta el flujo Search → Inspection cuando hay un InspectionService
+        inyectado. Si no hay sesión u observaciones, devuelve None (fallback
+        a heurística en build_negotiation_input).
+        """
+        if self._inspection_service is None:
+            return None
+        try:
+            session = await self._inspection_service.get_latest_session_for_vehicle(
+                getattr(vehicle, "id", None)
+            )
+            if session is None:
+                return None
+            observations = await self._inspection_service.get_session_observations(
+                session.id
+            )
+            if not observations:
+                return None
+            return self._inspection_service.build_inspection_result(observations)
+        except Exception:
+            logger.warning(
+                "No se pudo cargar la inspección real del vehículo; "
+                "usando heurística",
+                exc_info=False,
+            )
             return None
