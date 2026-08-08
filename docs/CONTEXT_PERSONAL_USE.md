@@ -92,6 +92,17 @@ Qué hace:
 **No usar así en un despliegue público**: con el flag ON cualquiera que alcance
 el puerto HTTP sería ADMIN sin contraseña. En un deploy real dejar `false`.
 
+### Providers (uso personal) — AS24-first
+
+- **AutoScout24 DE**: fuente principal — `python scripts/smoke_as24_live.py`
+- **mobile.de**: opcional; 403 sin proxy es esperado (WARN, no bloquea)
+- **ES**: fixtures offline (`smoke_es_providers.py`)
+
+El canary refleja la política en `data.policy = "as24_first"`: AS24 con 0
+listings tumba el job; mobile.de bloqueado sin proxy solo genera `warn_antibot`.
+
+---
+
 **`APP_MODE` no controla la auth.** Existe `APP_MODE=personal|multiuser` como
 documentación de intención de producto, pero el único interruptor del bypass es
 `AUTH_DISABLED`. Poner `APP_MODE=personal` sin `AUTH_DISABLED=true` mantiene el

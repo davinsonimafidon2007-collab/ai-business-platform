@@ -84,6 +84,7 @@ async def _build_admin_system_status(request: Request) -> AdminSystemStatus:
             success=raw.get("success"),
             message=raw.get("message"),
             finished_at=raw.get("finished_at"),
+            policy=data.get("policy"),
             autoscout24=data.get("autoscout24"),
             mobile_de=data.get("mobile_de"),
             strict_mobile=data.get("strict_mobile"),

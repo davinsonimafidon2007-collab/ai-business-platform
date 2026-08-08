@@ -202,6 +202,115 @@ async def test_with_proxy_zero_listings_fails():
     assert result.data["strict_mobile"] is True
 
 
+@pytest.mark.asyncio
+async def test_as24_zero_listings_fails_job():
+    """SMOKE.AS24.LIVE.1: AS24 con 0 listings tumba el job aunque mobile vaya bien."""
+    as24_provider_cls = MagicMock()
+    as24_provider_cls.return_value.search = AsyncMock(return_value=[])
+    as24_provider_cls.return_value.close = AsyncMock()
+
+    mobile_provider_cls = MagicMock()
+    mobile_provider_cls.return_value.search = AsyncMock(
+        return_value=_mobile_result(5)
+    )
+    mobile_provider_cls.return_value.close = AsyncMock()
+
+    with (
+        patch("app.jobs.provider_canary.AutoScout24Provider", as24_provider_cls),
+        patch("app.jobs.provider_canary.MobileDeProvider", mobile_provider_cls),
+        patch("app.jobs.provider_canary.settings.provider_http_proxy", ""),
+        patch("app.jobs.provider_canary.settings.provider_http_cookies", ""),
+    ):
+        result = await ProviderCanaryJob().execute(_make_context())
+
+    assert result.success is False
+    assert result.data["autoscout24"]["status"] == "fail"
+    assert result.data["autoscout24"]["count"] == 0
+    assert "AutoScout24" in result.message
+
+
+@pytest.mark.asyncio
+async def test_as24_connection_error_fails_job():
+    """AS24 caído → job FAIL, status=error (mobile no puede salvarlo)."""
+    as24_provider_cls = MagicMock()
+    as24_provider_cls.return_value.search = AsyncMock(
+        side_effect=ProviderConnectionError("timeout", provider="autoscout24")
+    )
+    as24_provider_cls.return_value.close = AsyncMock()
+
+    mobile_provider_cls = MagicMock()
+    mobile_provider_cls.return_value.search = AsyncMock(
+        return_value=_mobile_result(3)
+    )
+    mobile_provider_cls.return_value.close = AsyncMock()
+
+    with (
+        patch("app.jobs.provider_canary.AutoScout24Provider", as24_provider_cls),
+        patch("app.jobs.provider_canary.MobileDeProvider", mobile_provider_cls),
+        patch("app.jobs.provider_canary.settings.provider_http_proxy", ""),
+        patch("app.jobs.provider_canary.settings.provider_http_cookies", ""),
+    ):
+        result = await ProviderCanaryJob().execute(_make_context())
+
+    assert result.success is False
+    assert result.data["autoscout24"]["status"] == "error"
+    assert "error" in result.data["autoscout24"]
+
+
+@pytest.mark.asyncio
+async def test_as24_ok_mobile_antibot_is_warn_not_fail():
+    """Política AS24-first: mobile 403 sin proxy no tumba el job."""
+    as24_provider_cls = MagicMock()
+    as24_provider_cls.return_value.search = AsyncMock(return_value=_as24_result(20))
+    as24_provider_cls.return_value.close = AsyncMock()
+
+    mobile_provider_cls = MagicMock()
+    mobile_provider_cls.return_value.search = AsyncMock(
+        side_effect=ProviderConnectionError("HTTP 403", provider="mobile_de")
+    )
+    mobile_provider_cls.return_value.close = AsyncMock()
+
+    with (
+        patch("app.jobs.provider_canary.AutoScout24Provider", as24_provider_cls),
+        patch("app.jobs.provider_canary.MobileDeProvider", mobile_provider_cls),
+        patch("app.jobs.provider_canary.settings.provider_http_proxy", ""),
+        patch("app.jobs.provider_canary.settings.provider_http_cookies", ""),
+    ):
+        result = await ProviderCanaryJob().execute(_make_context())
+
+    assert result.success is True
+    assert result.data["policy"] == "as24_first"
+    assert result.data["autoscout24"]["status"] == "ok"
+    assert result.data["autoscout24"]["count"] == 20
+    # warn_antibot, no fail: sin proxy el 403 no es concluyente.
+    assert result.data["mobile_de"]["status"] == "warn_antibot"
+
+
+@pytest.mark.asyncio
+async def test_mobile_generic_error_without_proxy_does_not_fail_job():
+    """Un error inesperado de mobile sin proxy tampoco tumba AS24-first."""
+    as24_provider_cls = MagicMock()
+    as24_provider_cls.return_value.search = AsyncMock(return_value=_as24_result(4))
+    as24_provider_cls.return_value.close = AsyncMock()
+
+    mobile_provider_cls = MagicMock()
+    mobile_provider_cls.return_value.search = AsyncMock(
+        side_effect=RuntimeError("boom")
+    )
+    mobile_provider_cls.return_value.close = AsyncMock()
+
+    with (
+        patch("app.jobs.provider_canary.AutoScout24Provider", as24_provider_cls),
+        patch("app.jobs.provider_canary.MobileDeProvider", mobile_provider_cls),
+        patch("app.jobs.provider_canary.settings.provider_http_proxy", ""),
+        patch("app.jobs.provider_canary.settings.provider_http_cookies", ""),
+    ):
+        result = await ProviderCanaryJob().execute(_make_context())
+
+    assert result.success is True
+    assert result.data["mobile_de"]["status"] == "error"
+
+
 def test_anti_bot_configured_toggle():
     """`_anti_bot_configured` refleja proxy/cookies en settings."""
     with (

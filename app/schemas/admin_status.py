@@ -36,6 +36,8 @@ class ProviderCanaryStatus(BaseModel):
     success: bool | None = None
     message: str | None = None
     finished_at: str | None = None
+    policy: str | None = None
+    """Política de providers, ``"as24_first"``: AS24 obligatorio, mobile.de opcional."""
     autoscout24: dict | None = None
     mobile_de: dict | None = None
     strict_mobile: bool | None = None

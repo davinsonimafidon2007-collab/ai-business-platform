@@ -320,6 +320,22 @@ mobile.de puede devolver 403 sin proxy; no es bloqueante: el provider está desa
 SMTP y Firebase son opcionales (`scripts/check_integrations_ready.py` puede mostrarlos BLOCKED).
 Contexto: [docs/CONTEXT_PERSONAL_USE.md](docs/CONTEXT_PERSONAL_USE.md).
 
+#### Providers (uso personal) — AS24-first
+
+- **AutoScout24 DE**: fuente principal. Smoke: `python scripts/smoke_as24_live.py`
+  (exit 0 con ≥1 listing; exit 1 si 0 listings o error). Añade `--json` para ops.
+- **mobile.de**: opcional. Un **403 sin proxy es lo esperado** y no bloquea: el
+  canary lo marca `warn_antibot`. Solo pasa a ser estricto si configuras
+  `PROVIDER_HTTP_PROXY` / `PROVIDER_HTTP_COOKIES`.
+- **ES**: fixtures offline, `python scripts/smoke_es_providers.py`.
+
+El `ProviderCanaryJob` aplica la misma política: falla si AS24 devuelve 0
+listings y tolera mobile.de caído. Su resultado incluye `policy: "as24_first"`,
+visible en `GET /api/v1/admin/status`.
+
+El smoke live depende de la red real, así que **no es gate de CI**: en CI corren
+los tests con mocks.
+
 #### Arranque sin login (PERS.CLOSE.1)
 
 ```bash
