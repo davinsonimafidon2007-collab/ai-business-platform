@@ -338,14 +338,37 @@ los tests con mocks.
 
 #### Arranque sin login (PERS.CLOSE.1)
 
+**1. Backend** (`.env` en la raíz):
+
 ```bash
-echo "AUTH_DISABLED=true"             >> .env            # backend
-echo "NEXT_PUBLIC_AUTH_DISABLED=true" >> frontend/.env   # frontend
-docker compose up --build
-# abrir el frontend → dashboard directo, sin registro ni login
+AUTH_DISABLED=true
+JWT_SECRET_KEY=<32+ chars>   # python -c "import secrets; print(secrets.token_urlsafe(48))"
 ```
 
-El backend inyecta un usuario local ADMIN persistente (`local@localhost`, UUID
+```bash
+docker compose up --build -d      # API en http://localhost:8000
+curl -s http://localhost:8000/health
+```
+
+**2. Frontend** (`frontend/.env.local`):
+
+```bash
+NEXT_PUBLIC_API_URL=http://localhost:8000
+NEXT_PUBLIC_AUTH_DISABLED=true
+```
+
+```bash
+cd frontend && npm ci && npm run dev   # http://localhost:3000
+```
+
+Abre `http://localhost:3000` → entra directo al dashboard, sin registro ni login.
+
+> **Ojo con `NEXT_PUBLIC_API_URL`.** `.env.local` tiene prioridad sobre `.env`
+> en Next.js. Si apunta a `10.0.2.2:8000` (emulador Android) o a la IP de la
+> LAN, desde el navegador del PC la app carga **en blanco, sin datos y sin
+> error visible**. Para el navegador local tiene que ser `localhost`.
+
+El backend inyecta un usuario local ADMIN persistente (`local@example.com`, UUID
 fijo `00000000-0000-4000-8000-000000000001`), así que los datos se guardan con
 FKs válidas. `APP_MODE` **no** controla esto: el único interruptor es
 `AUTH_DISABLED`. Con `ENVIRONMENT=production` el flag hace que la app **no
