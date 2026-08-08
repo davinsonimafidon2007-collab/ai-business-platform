@@ -60,7 +60,7 @@ async def test_allowed_response_redis_mode_header() -> None:
 
     mw = RateLimitMiddleware(object(), window_seconds=60)
     fake = AsyncMock()
-    pipe = AsyncMock()
+    pipe = MagicMock()
     pipe.execute = AsyncMock(return_value=[1, 55])
     fake.pipeline = lambda: pipe
     fake.expire = AsyncMock()

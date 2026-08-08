@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -13,7 +13,7 @@ async def test_rate_limit_hit_denies_over_limit() -> None:
     from app.core import redis as redis_mod
 
     fake = AsyncMock()
-    pipe = AsyncMock()
+    pipe = MagicMock()
     pipe.execute = AsyncMock(return_value=[6, 50])
     fake.pipeline = lambda: pipe
 
@@ -32,7 +32,7 @@ async def test_rate_limit_hit_allows_under_limit() -> None:
     from app.core import redis as redis_mod
 
     fake = AsyncMock()
-    pipe = AsyncMock()
+    pipe = MagicMock()
     pipe.execute = AsyncMock(return_value=[2, 40])
     fake.pipeline = lambda: pipe
     fake.expire = AsyncMock()
@@ -62,7 +62,7 @@ async def test_rate_limit_hit_sets_expire_on_first_hit() -> None:
     from app.core import redis as redis_mod
 
     fake = AsyncMock()
-    pipe = AsyncMock()
+    pipe = MagicMock()
     pipe.execute = AsyncMock(return_value=[1, -1])
     fake.pipeline = lambda: pipe
     fake.expire = AsyncMock()
@@ -116,7 +116,7 @@ async def test_allow_uses_redis_when_available() -> None:
     middleware = RateLimitMiddleware(app, window_seconds=60)
 
     fake = AsyncMock()
-    pipe = AsyncMock()
+    pipe = MagicMock()
     pipe.execute = AsyncMock(return_value=[6, 50])
     fake.pipeline = lambda: pipe
 
