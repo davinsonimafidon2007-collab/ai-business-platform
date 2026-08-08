@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { renderHook, act } from "@testing-library/react";
+import { renderHook, act, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useSearchVehicles, useSearchHistory, useDeleteSearch, formatFiltersForApi } from "@/app/hooks/use-search";
 import type { SearchFilters } from "@/app/types/vehicle";
@@ -56,11 +56,9 @@ describe("useSearchHistory", () => {
 
     const { result } = renderHook(() => useSearchHistory(), { wrapper: createWrapper() });
 
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 0));
+    await waitFor(() => {
+      expect(result.current.data).toEqual(mockHistory);
     });
-
-    expect(result.current.data).toEqual(mockHistory);
   });
 });
 
