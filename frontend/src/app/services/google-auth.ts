@@ -14,10 +14,12 @@ import type { AuthResponse, User } from "@/app/types/auth";
 
 // Web client ID from google-services.json (client_type: 3)
 const WEB_CLIENT_ID =
+  process.env.NEXT_PUBLIC_GOOGLE_WEB_CLIENT_ID ||
   "983773208764-oevega4uglktmrisjrh41teq5mjb270n.apps.googleusercontent.com";
 
 // Android client ID from google-services.json (client_type: 1)
 const ANDROID_CLIENT_ID =
+  process.env.NEXT_PUBLIC_GOOGLE_ANDROID_CLIENT_ID ||
   "983773208764-7i0hfifq4ni324qnugvj0a79bu09fh4t.apps.googleusercontent.com";
 
 // The plugin requires initialize() to be called once before signIn() will
@@ -78,11 +80,9 @@ export async function signInWithGoogle(): Promise<void> {
     id_token: idToken,
   });
 
-  localStorage.setItem("access_token", authRes.data.access_token);
-  localStorage.setItem("refresh_token", authRes.data.refresh_token);
-
   const userRes = await api.get<User>("/auth/me");
   // Persistencia unificada via setSession (mismo contrato que login/register).
+  // setSession guarda access_token/refresh_token/user en localStorage.
   useAuthStore.getState().setSession({
     accessToken: authRes.data.access_token,
     refreshToken: authRes.data.refresh_token,

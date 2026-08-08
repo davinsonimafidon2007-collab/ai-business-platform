@@ -56,6 +56,9 @@ npm-debug.log*
 # Environment files
 .env
 .env.*
+# Excepción: templates de entorno que sí se versionan (incluidos subdirs).
+!.env.example
+!**/.env.example
 
 # Build
 build/

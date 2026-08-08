@@ -1,3 +1,5 @@
+"use client";
+
 import './dashboard.css';
 import { useState } from 'react';
 import {
@@ -423,7 +425,7 @@ export default function DashboardPage() {
 
                   <h4 className="ph-section-title">Actividad reciente</h4>
                   <div className="ph-activity">
-                    <div className="ph-activity-row"><span>✅</span><span>Fase "Búsqueda" completada para Audi A4 2018</span><span>Hace 1h</span></div>
+                    <div className="ph-activity-row"><span>✅</span><span>Fase “Búsqueda” completada para Audi A4 2018</span><span>Hace 1h</span></div>
                     <div className="ph-activity-row"><span>📄</span><span>Documentación generada para Mercedes C220d</span><span>Hace 2h</span></div>
                     <div className="ph-activity-row"><span>🚚</span><span>Traslado iniciado para BMW 320d 2019</span><span>Hace 3h</span></div>
                     <div className="ph-activity-row"><span>➕</span><span>Nueva oportunidad creada: Audi A3 2020</span><span>Hace 5h</span></div>
