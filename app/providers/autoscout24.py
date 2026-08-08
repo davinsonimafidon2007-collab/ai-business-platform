@@ -19,7 +19,7 @@ import json
 import logging
 import re
 from typing import Any
-from urllib.parse import urljoin
+from urllib.parse import quote, urlencode, urljoin
 
 from bs4 import BeautifulSoup
 
@@ -70,6 +70,87 @@ class AutoScout24Provider(VehicleProvider):
     @property
     def source_name(self) -> str:
         return "autoscout24"
+
+    def build_search_url(self, query: str, **kwargs: Any) -> str:
+        """Construye la URL de listados de AS24 a partir de criterios.
+
+        ``VehicleProvider.search()`` descarga el ``query`` tal cual, así que
+        quien llama debe pasar una URL. El SearchOrchestrator pasaba el término
+        crudo ("BMW") y acababa pidiendo ``autoscout24.de/BMW`` → 404, que el
+        orquestador se tragaba devolviendo 200 con 0 resultados
+        (E2E.MANUAL.PASS.1). Si ``query`` ya es una URL se respeta.
+
+        Filtros soportados: brand/model (path ``/lst/<marca>/<modelo>``),
+        min_price/max_price, min_year/max_year, max_mileage, fuel_type,
+        transmission.
+        """
+        if query and query.strip().startswith("http"):
+            return query.strip()
+
+        brand = (kwargs.get("brand") or "").strip()
+        model = (kwargs.get("model") or "").strip()
+
+        # Sin brand explícito, el término libre actúa como marca (uso habitual).
+        if not brand and query:
+            parts = query.strip().split(None, 1)
+            brand = parts[0]
+            if not model and len(parts) > 1:
+                model = parts[1]
+
+        path = "/lst"
+        if brand:
+            path += f"/{quote(brand.lower().replace(' ', '-'))}"
+            if model:
+                path += f"/{quote(model.lower().replace(' ', '-'))}"
+
+        params: dict[str, str] = {
+            "atype": "C",
+            "cy": "D",
+            "desc": "0",
+            "sort": "standard",
+            "source": "listpage_search-mask",
+            "ustate": "N,U",
+        }
+
+        # ``budget_min``/``budget_max`` son los nombres que usa SearchOrchestrator.
+        mapping = {
+            "min_price": "pricefrom",
+            "budget_min": "pricefrom",
+            "max_price": "priceto",
+            "budget_max": "priceto",
+            "min_year": "fregfrom",
+            "max_year": "fregto",
+            "max_mileage": "kmto",
+            "min_mileage": "kmfrom",
+        }
+        for key, param in mapping.items():
+            value = kwargs.get(key)
+            if value is not None:
+                params[param] = str(int(value)) if isinstance(value, float) else str(value)
+
+        fuel_map = {
+            "gasolina": "B", "petrol": "B", "benzin": "B",
+            "diesel": "D",
+            "eléctrico": "E", "electrico": "E", "electric": "E",
+            "híbrido": "2", "hibrido": "2", "hybrid": "2",
+        }
+        fuel = (kwargs.get("fuel_type") or "").strip().lower()
+        if fuel in fuel_map:
+            params["fuel"] = fuel_map[fuel]
+
+        transmission = (kwargs.get("transmission") or "").strip().lower()
+        if transmission in {"manual", "schaltgetriebe"}:
+            params["gear"] = "M"
+        elif transmission in {"automática", "automatica", "automatic", "automatik"}:
+            params["gear"] = "A"
+
+        return f"{self._base_url or BASE_URL}{path}?{urlencode(params)}"
+
+    async def search(self, query: str, **kwargs: Any) -> list[VehicleSearchResult]:
+        """Busca en AS24 aceptando término libre o URL completa."""
+        search_url = self.build_search_url(query, **kwargs)
+        html = await self._download_url(search_url)
+        return self._parse_search_results(html, search_url)
 
     def _parse_search_results(self, html: str, search_url: str) -> list[VehicleSearchResult]:
         """Parsea resultados priorizando ``__NEXT_DATA__`` (más estable)."""

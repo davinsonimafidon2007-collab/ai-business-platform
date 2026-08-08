@@ -158,8 +158,40 @@ async def test_auth_disabled_inactive_local_user_raises(
         await get_current_user(_FakeRequest(), credentials=None, session=None)
 
 
-def test_auth_disabled_forbidden_in_production() -> None:
+def test_env_auth_disabled_does_not_leak_into_tests(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """E2E.MANUAL.PASS.1: AUTH_DISABLED=true del OS no contamina la suite.
+
+    En Docker con uso personal, compose inyecta AUTH_DISABLED=true en el
+    entorno. Si ese valor se cuela en ENVIRONMENT=test, los tests que esperan
+    401 empiezan a ver 200 (13 fallos observados). Solo el opt-in explícito
+    AUTH_DISABLED_IN_TESTS debe permitirlo.
+    """
+    monkeypatch.setenv("AUTH_DISABLED", "true")
+    monkeypatch.delenv("AUTH_DISABLED_IN_TESTS", raising=False)
+
+    cfg = Settings(environment="test", auth_disabled=True)
+
+    assert cfg.auth_disabled is False
+
+
+def test_auth_disabled_opt_in_for_tests(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Con AUTH_DISABLED_IN_TESTS=true sí se puede testear el flag ON."""
+    monkeypatch.setenv("AUTH_DISABLED_IN_TESTS", "true")
+
+    cfg = Settings(environment="test", auth_disabled=True)
+
+    assert cfg.auth_disabled is True
+
+
+def test_auth_disabled_forbidden_in_production(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """production + AUTH_DISABLED=true sin override → Settings no carga."""
+    # Opt-in explícito: sin él, el guard anti-contaminación fuerza False.
+    monkeypatch.setenv("AUTH_DISABLED_IN_TESTS", "true")
+
     with pytest.raises(ValidationError):
         Settings(
             environment="production",
@@ -169,8 +201,12 @@ def test_auth_disabled_forbidden_in_production() -> None:
         )
 
 
-def test_auth_disabled_allowed_in_production_with_override() -> None:
+def test_auth_disabled_allowed_in_production_with_override(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Con ALLOW_AUTH_DISABLED_IN_PROD=true sí arranca (asumido por el operador)."""
+    monkeypatch.setenv("AUTH_DISABLED_IN_TESTS", "true")
+
     cfg = Settings(
         environment="production",
         auth_disabled=True,

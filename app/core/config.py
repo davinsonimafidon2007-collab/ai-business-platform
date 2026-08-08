@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Any, Literal
 import os
 
 from pydantic import model_validator
@@ -64,13 +64,46 @@ class Settings(BaseSettings):
 
         El valor ``AUTH_DISABLED=true`` del ``.env`` local (uso personal) no debe
         filtrarse a la suite de tests: sin él, los tests de auth/middleware
-        fallarían. Solo se desactiva en test si se pide explícitamente vía
-        variable de entorno del OS (p. ej. para un test de integración con flag
-        ON). En development/production se respeta el valor del ``.env``.
+        fallarían (401 esperados que pasan a 200).
+
+        El escape NO puede ser el propio ``AUTH_DISABLED`` del OS: al correr en
+        Docker con el flag personal, compose lo inyecta siempre en el entorno y
+        la protección quedaba anulada (E2E.MANUAL.PASS.1: 13 tests rojos por
+        contaminación). Se usa una variable dedicada, ``AUTH_DISABLED_IN_TESTS``,
+        que solo se activa a propósito. En development/production se respeta el
+        valor del ``.env``.
         """
-        if self.environment == "test" and os.environ.get("AUTH_DISABLED", "").strip().lower() not in {"true", "1"}:
+        if self.environment != "test":
+            return self
+
+        opt_in = os.environ.get("AUTH_DISABLED_IN_TESTS", "").strip().lower()
+        if opt_in not in {"true", "1"}:
             object.__setattr__(self, "auth_disabled", False)
         return self
+
+    @model_validator(mode="before")
+    @classmethod
+    def _ignore_env_auth_disabled_under_pytest(cls, data: Any) -> Any:
+        """Bajo pytest, ``AUTH_DISABLED`` del OS no se hereda por defecto.
+
+        Varios tests construyen ``Settings()`` con ``patch.dict(os.environ, ...)``
+        para probar reglas de producción (CORS, JWT). En una máquina de uso
+        personal ``AUTH_DISABLED=true`` está siempre en el entorno, se colaba en
+        esos Settings y disparaba el fail-fast de producción antes que la regla
+        bajo test (E2E.MANUAL.PASS.1: 6 tests de CORS/config en rojo).
+
+        Para pedirlo a propósito en un test existe ``AUTH_DISABLED_IN_TESTS``.
+        Fuera de pytest no se toca nada: el runtime real respeta el ``.env``.
+        """
+        if not isinstance(data, dict):
+            return data
+        if "PYTEST_CURRENT_TEST" not in os.environ:
+            return data
+        if os.environ.get("AUTH_DISABLED_IN_TESTS", "").strip().lower() in {"true", "1"}:
+            return data
+        # pydantic-settings ya ha volcado el valor del entorno en ``data``, así
+        # que no basta con comprobar si la clave falta: hay que sobrescribirla.
+        return {**data, "auth_disabled": False}
 
     @model_validator(mode="after")
     def auth_disabled_forbidden_in_production(self) -> "Settings":

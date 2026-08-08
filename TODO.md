@@ -34,9 +34,41 @@ autenticación. Si quieres entrar sin login, activa `AUTH_DISABLED`.
 No se ha borrado el código de login/JWT: solo se bypasea. Volver a multiusuario
 es poner `AUTH_DISABLED=false`.
 
+---
+
+# E2E.MANUAL.PASS.1 — Camino crítico ejecutado ✅
+
+**2026-08-08 · PASS con SKIP** · evidencia en `docs/e2e_runs/2026-08-08_PASS.md`
+
+Preflight verde (integrations_ready, smoke_es_providers, release_check 1128,
+/health) y camino `search → drawer → opportunities → admin` recorrido vía API
+sin un solo 401.
+
+## Bugs bloqueantes corregidos durante el run
+
+- [x] `docker-compose.yml` no pasaba `AUTH_DISABLED` al contenedor → 401 pese al
+      `.env`. Passthrough añadido (+ `ALLOW_AUTH_DISABLED_IN_PROD`, `APP_MODE`).
+- [x] El flag inyectado contaminaba `ENVIRONMENT=test` (13 tests rojos). Escape
+      dedicado `AUTH_DISABLED_IN_TESTS` + guard `mode="before"` bajo pytest.
+- [x] `SearchOrchestrator` pasaba el término crudo a AS24 → `/BMW` 404 tragado
+      como 200 con 0 resultados. Añadido `build_search_url()` (0 → 5 resultados).
+- [x] `local@localhost` no valida como `EmailStr` → `/auth/me` 500. Cambiado a
+      `local@example.com` (RFC 2606); UUID intacto, fila migrada.
+- [x] 11 tests de regresión (`test_autoscout24_search_url.py`,
+      `test_local_user_email.py`, +2 en `test_auth_disabled.py`).
+
+## Pendiente de este run
+
+- [ ] **Recorrer la UI en navegador** (filas 0.5 / 1.1 / 1.2, SKIP): no había
+      `node_modules` ni navegador en el entorno. `npm ci && npm run dev` y
+      confirmar que la home entra directa al dashboard.
+- [ ] (nota) El `except Exception` del orquestador convierte fallos de provider
+      en 200 vacío; sigue pudiendo enmascarar errores. Candidato a task propio.
+
+---
+
 ## Residual (ops, no código)
 
-- [ ] Pasar `docs/E2E_MANUAL_CHECKLIST.md` en local y anotar la fecha del PASS
 - [ ] (opcional) SMTP real — solo si quieres alertas por email
 - [ ] (opcional) Firebase — solo si quieres Google login (irrelevante sin auth)
 - [ ] ~~Proxy residencial mobile.de~~ — no prioritario (AS24-first)

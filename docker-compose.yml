@@ -19,6 +19,12 @@ services:
       APP_URL: "${APP_URL:-http://localhost:3000}"
       ENABLE_SCHEDULER: "${ENABLE_SCHEDULER:-true}"
       FIREBASE_CREDENTIALS_JSON: "${FIREBASE_CREDENTIALS_JSON}"
+      # Uso personal (PERS.CLOSE.1): sin este passthrough el contenedor arranca
+      # con AUTH_DISABLED vacío (=false) y la API responde 401 aunque el .env
+      # del host diga true.
+      AUTH_DISABLED: "${AUTH_DISABLED:-false}"
+      ALLOW_AUTH_DISABLED_IN_PROD: "${ALLOW_AUTH_DISABLED_IN_PROD:-false}"
+      APP_MODE: "${APP_MODE:-personal}"
     depends_on:
       db:
         condition: service_healthy
