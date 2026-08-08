@@ -6,7 +6,7 @@ temporary SQLite database.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -32,7 +32,7 @@ class TestOpportunityRepository:
             roi=18.3,
             risk="LOW",
             profit=3500.0,
-            analyzed_at=datetime.now(timezone.utc),
+            analyzed_at=datetime.now(UTC),
             engine_version="1.0.0",
         )
         saved = await opportunity_repo.save(opp)

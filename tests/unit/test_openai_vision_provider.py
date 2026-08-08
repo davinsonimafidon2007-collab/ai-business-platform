@@ -24,7 +24,6 @@ from app.models.vision import (
 )
 from app.providers.openai_vision import OpenAIVisionProvider, VisionProviderError
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------

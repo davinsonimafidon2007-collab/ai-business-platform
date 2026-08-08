@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Depends, status
@@ -9,11 +9,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db_session
 from app.dependencies.auth import get_current_user
-from app.models.user import User
-from app.models.search import Search
-from app.models.vehicle import Vehicle
 from app.models.inspection import InspectionSession
 from app.models.opportunity import Opportunity
+from app.models.search import Search
+from app.models.user import User
+from app.models.vehicle import Vehicle
 
 router = APIRouter(tags=["Dashboard"])
 
@@ -31,7 +31,7 @@ async def get_dashboard_stats(
 ) -> dict[str, Any]:
     """Obtiene estadísticas agregadas del usuario autenticado (no globales)."""
     user_id = current_user.id
-    thirty_days_ago = datetime.now(timezone.utc) - timedelta(days=30)
+    thirty_days_ago = datetime.now(UTC) - timedelta(days=30)
 
     # --- Búsquedas guardadas por el usuario ---
     total_searches_result = await session.execute(

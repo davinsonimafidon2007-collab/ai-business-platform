@@ -6,6 +6,7 @@ override de get_current_user en lugar de tokens JWT reales.
 
 from __future__ import annotations
 
+from datetime import UTC
 from typing import Any
 
 import pytest
@@ -18,10 +19,6 @@ from app.dependencies.auth import get_current_user
 from app.main import app
 from app.middleware.rate_limit_middleware import RateLimitMiddleware
 from app.models.user import User
-from app.repositories.api_key_repository import ApiKeyRepository
-from app.repositories.audit_log_repository import AuditLogRepository
-from app.repositories.refresh_token_repository import RefreshTokenRepository
-from app.repositories.user_repository import UserRepository
 from app.services.api_key_service import ApiKeyService
 from app.services.audit_service import AuditService
 from app.services.auth_service import AuthService
@@ -69,9 +66,9 @@ class FakeApiKeyRepository:
             self._keys[key_id].is_active = False
 
     async def update_last_used(self, key_id: str) -> None:
-        from datetime import datetime, timezone
+        from datetime import datetime
         if key_id in self._keys:
-            self._keys[key_id].last_used_at = datetime.now(timezone.utc)
+            self._keys[key_id].last_used_at = datetime.now(UTC)
 
 
 class FakeAuditLogRepository:

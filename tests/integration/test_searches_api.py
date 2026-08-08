@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from fastapi import status
-from httpx import AsyncClient, ASGITransport
 import pytest
+from fastapi import status
+from httpx import ASGITransport, AsyncClient
 
+from app.database import get_db_session
 from app.dependencies.auth import get_current_user
 from app.main import app
-from app.database import get_db_session
 from app.models.base import Base
 from app.models.user import User
 
@@ -15,7 +15,8 @@ from app.models.user import User
 def db_session():
     """Override the get_db_session dependency for testing."""
     import asyncio
-    from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
     engine = create_async_engine("sqlite+aiosqlite:///:memory:", echo=False)
     session_factory = async_sessionmaker(engine, expire_on_commit=False)

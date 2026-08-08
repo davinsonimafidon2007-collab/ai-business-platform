@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -37,8 +37,8 @@ def _make_opportunity(
         roi=roi,
         recommendation=recommendation,
         risk=risk,
-        created_at=datetime.now(timezone.utc),
-        analyzed_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        analyzed_at=datetime.now(UTC),
     )
 
 

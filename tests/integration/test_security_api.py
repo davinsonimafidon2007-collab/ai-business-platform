@@ -7,8 +7,8 @@ and audit logging through the actual API endpoints.
 from __future__ import annotations
 
 import asyncio
+from datetime import UTC
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import HTTPException, Request
@@ -16,16 +16,13 @@ from fastapi.testclient import TestClient
 
 from app.api.v1 import auth as auth_module
 from app.main import app
-from app.models.user import User
 from app.models.role import Role
-from app.services.auth_service import AuthService
+from app.models.user import User
 from app.services.api_key_service import ApiKeyService
 from app.services.audit_service import AuditService
+from app.services.auth_service import AuthService
 from app.services.permission_service import PermissionService
 from app.services.refresh_token_service import RefreshTokenService
-from app.repositories.api_key_repository import ApiKeyRepository
-from app.repositories.audit_log_repository import AuditLogRepository
-
 
 # ── Fake Repositories ──────────────────────────────────────────────────────
 
@@ -74,9 +71,9 @@ class FakeApiKeyRepository:
             self._keys[key_id].is_active = False
 
     async def update_last_used(self, key_id: str) -> None:
-        from datetime import datetime, timezone
+        from datetime import datetime
         if key_id in self._keys:
-            self._keys[key_id].last_used_at = datetime.now(timezone.utc)
+            self._keys[key_id].last_used_at = datetime.now(UTC)
 
 
 class FakeAuditLogRepository:

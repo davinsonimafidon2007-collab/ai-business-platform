@@ -3,10 +3,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.agents.search_agent import SearchAgent
-from app.agents.scoring_agent import ScoringAgent
-from app.agents.opportunity_agent import OpportunityAgent
 from app.agents.alert_agent import AlertAgent
+from app.agents.opportunity_agent import OpportunityAgent
+from app.agents.scoring_agent import ScoringAgent
+from app.agents.search_agent import SearchAgent
 
 
 class PipelineOrchestrator:

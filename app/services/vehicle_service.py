@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID
 
 from app.models.vehicle import Vehicle
@@ -30,7 +30,7 @@ class VehicleService:
         for key, value in data.items():
             if value is not None:
                 setattr(vehicle, key, value)
-        vehicle.updated_at = datetime.now(timezone.utc)
+        vehicle.updated_at = datetime.now(UTC)
         return await self.repository.update(vehicle)
 
     async def delete_vehicle(self, vehicle: Vehicle) -> None:
@@ -154,5 +154,5 @@ class VehicleService:
 
         for key, value in update_data.items():
             setattr(vehicle, key, value)
-        vehicle.updated_at = datetime.now(timezone.utc)
+        vehicle.updated_at = datetime.now(UTC)
         return await self.repository.update(vehicle)

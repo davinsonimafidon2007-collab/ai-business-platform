@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 from unittest.mock import patch
 
 import pytest
@@ -384,6 +383,7 @@ def test_get_request_id_from_state():
     `from __future__ import annotations`.
     """
     from unittest.mock import MagicMock
+
     from fastapi import Request
 
     mock_request = MagicMock(spec=Request)
@@ -396,6 +396,7 @@ def test_get_request_id_from_state():
 def test_get_request_id_from_state_returns_none_when_not_set():
     """Verifica que get_request_id_from_state devuelve None cuando no está configurado."""
     from unittest.mock import MagicMock
+
     from fastapi import Request
 
     mock_request = MagicMock(spec=Request)
@@ -408,6 +409,7 @@ def test_get_request_id_from_state_returns_none_when_not_set():
 def test_get_request_id_from_state_without_attribute():
     """Verifica que get_request_id_from_state no falla si request.state no tiene request_id."""
     from unittest.mock import MagicMock
+
     from fastapi import Request
 
     mock_request = MagicMock(spec=Request)

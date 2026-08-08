@@ -33,7 +33,6 @@ from app.models.negotiation import (
 )
 from app.services.negotiation_engine import NegotiationEngine
 
-
 # =============================================================================
 # Fixtures helpers
 # =============================================================================

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import uuid4
 
 from sqlalchemy import DateTime, String, Text
@@ -24,7 +24,7 @@ class AuditLog(Base):
     user_agent: Mapped[str | None] = mapped_column(String(500), nullable=True)
     timestamp: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
         nullable=False,
         index=True,
     )
@@ -34,4 +34,4 @@ class AuditLog(Base):
         if getattr(self, "id", None) is None:
             self.id = str(uuid4())
         if getattr(self, "timestamp", None) is None:
-            self.timestamp = datetime.now(timezone.utc)
+            self.timestamp = datetime.now(UTC)

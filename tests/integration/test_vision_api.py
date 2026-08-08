@@ -12,9 +12,9 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-import pytest
 
 from app.api.v1.dependencies import get_inspection_service
 from app.api.v1.routes.inspection import router

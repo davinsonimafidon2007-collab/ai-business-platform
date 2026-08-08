@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any, Literal
 from uuid import uuid4
 
 from pydantic import BaseModel, Field
@@ -36,18 +36,18 @@ class Search(Base):
     execution_time: Mapped[float | None] = mapped_column(Float, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
         nullable=False,
     )
 
-    user: Mapped["User | None"] = relationship("User", back_populates="searches")
+    user: Mapped[User | None] = relationship("User", back_populates="searches")
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         if getattr(self, "id", None) is None:
             self.id = str(uuid4())
         if getattr(self, "created_at", None) is None:
-            self.created_at = datetime.now(timezone.utc)
+            self.created_at = datetime.now(UTC)
 
 
 # =============================================================================
@@ -109,6 +109,24 @@ class SearchResult(BaseModel):
     model_config = {"arbitrary_types_allowed": True}
 
 
+class ProviderIssue(BaseModel):
+    """Fallo de un provider durante la búsqueda (SEARCH.DIAG.1).
+
+    El orquestador no aborta si un provider falla: sigue con los demás. Sin
+    esto, una búsqueda con todos los providers caídos devolvía ``200`` con
+    ``results: []``, indistinguible de "no hay coches que encajen". Ese fallo
+    silencioso ya escondió un 404 real de AutoScout24 (E2E.MANUAL.PASS.1).
+    """
+
+    provider: str
+    stage: Literal["registry", "search", "analyze"]
+    """Dónde falló: resolver el provider, la búsqueda, o el análisis de un DTO."""
+    error_type: str
+    message: str
+    external_id: str | None = None
+    """Solo en ``stage="analyze"``: el vehículo concreto que no se pudo analizar."""
+
+
 class SearchSummary(BaseModel):
     """Resumen de una búsqueda orquestada.
 
@@ -131,5 +149,7 @@ class SearchEngineResult(BaseModel):
 
     summary: SearchSummary
     results: list[SearchResult]
+    provider_issues: list[ProviderIssue] = Field(default_factory=list)
+    """Providers que fallaron. Vacío = todos respondieron (SEARCH.DIAG.1)."""
 
     model_config = {"arbitrary_types_allowed": True}

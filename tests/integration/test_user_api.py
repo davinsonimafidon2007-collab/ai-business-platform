@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 from uuid import UUID, uuid4
@@ -32,8 +32,8 @@ class StubUserService:
             is_active=True,
             is_verified=False,
             role=Role.USER,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
         self._users.append(user)
         return user
@@ -52,7 +52,7 @@ class StubUserService:
             if user.id == user_id:
                 for key, value in kwargs.items():
                     setattr(user, key, value)
-                user.updated_at = datetime.now(timezone.utc)
+                user.updated_at = datetime.now(UTC)
                 return user
         raise UserNotFoundError("User not found")
 

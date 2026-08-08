@@ -12,24 +12,21 @@ Esa lógica pertenece a NegotiationEngine y EvaluationEngine.
 from __future__ import annotations
 
 from dataclasses import asdict
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
-from app.core.config import settings
 from app.config.inspection import (
     CRITICAL_SEVERITY_THRESHOLD,
-    DEFAULT_REPAIR_COST_HIGH,
-    DEFAULT_REPAIR_COST_MEDIUM,
     INSPECTION_CATEGORIES,
     SEVERITY_MAP,
     InspectionItemStatus,
     InspectionSessionStatus,
     SeverityLevel,
-    get_category_def,
     get_item_def,
     get_total_items_count,
 )
+from app.core.config import settings
 from app.models.inspection import (
     InspectionObservation,
     InspectionPhoto,
@@ -183,7 +180,7 @@ class InspectionService:
         if existing:
             # Actualizar existente
             existing.status = status
-            existing.updated_at = datetime.now(timezone.utc)
+            existing.updated_at = datetime.now(UTC)
             if notes is not None:
                 existing.notes = notes
             if estimated_repair_cost is not None and item_def.has_cost_estimate:
@@ -354,7 +351,7 @@ class InspectionService:
                 existing_eval = await self._evaluation_repo.get_by_vehicle_id(session.vehicle_id)
                 if existing_eval is not None:
                     existing_eval.negotiation = negotiation_result
-                    existing_eval.updated_at = datetime.now(timezone.utc)
+                    existing_eval.updated_at = datetime.now(UTC)
                     await self._evaluation_repo.update(existing_eval)
                 else:
                     # Crear VehicleEvaluation con el resultado de negociación
@@ -369,8 +366,8 @@ class InspectionService:
 
         # Actualizar la sesión con los resultados
         session.status = InspectionSessionStatus.COMPLETED.value
-        session.completed_at = datetime.now(timezone.utc)
-        session.updated_at = datetime.now(timezone.utc)
+        session.completed_at = datetime.now(UTC)
+        session.updated_at = datetime.now(UTC)
         session.total_repair_cost = summary["costs"]["total_repair_cost"]
         session.total_defects = summary["defects"]["total"]
         session.total_critical_defects = summary["defects"]["critical"]

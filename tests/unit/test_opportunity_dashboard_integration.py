@@ -1,5 +1,6 @@
 """Tests de integración para Dashboard + Opportunity Integration."""
 import pytest
+
 from app.services.dashboard_service import DashboardService
 from app.services.opportunity_integration_service import OpportunityIntegrationService
 

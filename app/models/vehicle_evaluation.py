@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
@@ -41,12 +41,12 @@ class VehicleEvaluation(Base):
     recommendation: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
         nullable=False,
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
         nullable=False,
     )
     # Almacenamos negotiation como JSON string en BD
@@ -54,7 +54,7 @@ class VehicleEvaluation(Base):
         "negotiation", Text, nullable=True, default=None
     )
 
-    vehicle: Mapped["Vehicle"] = relationship("Vehicle", back_populates="evaluations")
+    vehicle: Mapped[Vehicle] = relationship("Vehicle", back_populates="evaluations")
 
     def __init__(self, **kwargs: Any) -> None:
         # Extraer negotiation antes de pasar a super() para evitar duplicación
@@ -63,9 +63,9 @@ class VehicleEvaluation(Base):
         if getattr(self, "id", None) is None:
             self.id = str(uuid4())
         if getattr(self, "created_at", None) is None:
-            self.created_at = datetime.now(timezone.utc)
+            self.created_at = datetime.now(UTC)
         if getattr(self, "updated_at", None) is None:
-            self.updated_at = datetime.now(timezone.utc)
+            self.updated_at = datetime.now(UTC)
         # Asignar negotiation después de la inicialización
         if negotiation_value is not None:
             self.negotiation = negotiation_value

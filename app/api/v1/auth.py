@@ -5,11 +5,9 @@ from typing import Any
 from fastapi import APIRouter, Body, Depends, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import settings
 from app.database import get_db_session
 from app.dependencies.auth import get_current_user
 from app.exceptions import AuthenticationError
-from app.models.refresh_token import RefreshToken
 from app.models.user import User
 from app.notifications.email_provider import SmtpEmailProvider
 from app.repositories.audit_log_repository import AuditLogRepository
@@ -17,7 +15,6 @@ from app.repositories.password_reset_token_repository import PasswordResetTokenR
 from app.repositories.refresh_token_repository import RefreshTokenRepository
 from app.repositories.user_repository import UserRepository
 from app.repositories.verification_token_repository import VerificationTokenRepository
-from app.services.audit_service import AuditService
 from app.schemas.auth import GoogleAuthRequest, LoginRequest, RegisterRequest, TokenResponse
 from app.schemas.password_reset import (
     ForgotPasswordRequest,
@@ -27,6 +24,7 @@ from app.schemas.password_reset import (
 )
 from app.schemas.user import UserRead
 from app.schemas.verification import VerificationRequestResponse, VerifyRequest, VerifyResponse
+from app.services.audit_service import AuditService
 from app.services.auth_service import AuthService
 from app.services.password_reset_service import PasswordResetService
 from app.services.refresh_token_service import RefreshTokenService

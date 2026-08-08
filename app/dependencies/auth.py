@@ -9,9 +9,7 @@ from app.database import get_db_session
 from app.exceptions import AuthenticationError, AuthorizationError, UserNotFoundError
 from app.models.role import Role
 from app.models.user import User
-from app.repositories.api_key_repository import ApiKeyRepository
 from app.repositories.user_repository import UserRepository
-from app.services.api_key_service import ApiKeyService
 from app.services.auth_service import AuthService
 from app.services.permission_service import PermissionService
 from app.services.personal_user_service import PersonalUserService

@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-import logging
 from unittest.mock import patch
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.core.config import Settings
 from app.core.logging import setup_logging
 from app.middleware.logging_middleware import AccessLogMiddleware
 

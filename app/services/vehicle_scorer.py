@@ -27,6 +27,7 @@ from app.config.scoring import (
     LOW_MILEAGE_THRESHOLD,
     MAX_IMAGE_BONUS_RATIO,
     MAX_MISSING_PENALTY_RATIO,
+    MAX_RELEVANT_IMAGES,
     MILEAGE_WEIGHT,
     MODERATE_AGE_BONUS_RATIO,
     MODERATE_AGE_YEARS,
@@ -56,9 +57,8 @@ from app.config.scoring import (
     TRANSMISSION_WEIGHTS,
     VERY_HIGH_MILEAGE_PENALTY_RATIO,
     VERY_HIGH_MILEAGE_THRESHOLD,
-    VERY_OLD_PENALTY_RATIO,
     VERY_OLD_AGE_YEARS,
-    MAX_RELEVANT_IMAGES,
+    VERY_OLD_PENALTY_RATIO,
 )
 
 # =============================================================================

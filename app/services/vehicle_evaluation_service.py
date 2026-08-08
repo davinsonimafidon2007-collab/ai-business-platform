@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID
 
 from app.core.config import settings
@@ -34,7 +34,7 @@ class VehicleEvaluationService:
         for key, value in data.items():
             if value is not None:
                 setattr(evaluation, key, value)
-        evaluation.updated_at = datetime.now(timezone.utc)
+        evaluation.updated_at = datetime.now(UTC)
         return await self.repository.update(evaluation)
 
     async def delete_evaluation(self, evaluation: VehicleEvaluation) -> None:
@@ -67,7 +67,7 @@ class VehicleEvaluationService:
             existing_evaluation.classification = result.classification
             existing_evaluation.warnings = ", ".join(result.warnings) if result.warnings else None
             existing_evaluation.recommendation = result.recommendation
-            existing_evaluation.updated_at = datetime.now(timezone.utc)
+            existing_evaluation.updated_at = datetime.now(UTC)
 
             return await self.repository.update(existing_evaluation)
 

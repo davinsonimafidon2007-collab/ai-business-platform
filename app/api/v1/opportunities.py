@@ -13,7 +13,6 @@ from app.api.v1.schemas.opportunity import (
 )
 from app.database import get_db_session
 from app.dependencies.auth import get_current_user
-from app.models.opportunity import Opportunity
 from app.models.user import User
 from app.models.vehicle import Vehicle
 from app.repositories.opportunity_repository import OpportunityRepository

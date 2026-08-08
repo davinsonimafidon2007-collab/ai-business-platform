@@ -6,7 +6,7 @@ temporary SQLite database.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -95,7 +95,7 @@ class TestSearchHistoryRepository:
             await search_history_repo.save(
                 SearchHistory(
                     query=f"Search {i}",
-                    timestamp=datetime.now(timezone.utc),
+                    timestamp=datetime.now(UTC),
                 )
             )
 
@@ -142,7 +142,7 @@ class TestSearchHistoryRepository:
         search_history_repo: SearchHistoryRepository,
     ) -> None:
         """All fields are persisted correctly."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         record = SearchHistory(
             query="Mercedes C220",
             timestamp=now,

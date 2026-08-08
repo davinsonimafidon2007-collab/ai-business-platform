@@ -15,7 +15,6 @@ from app.models.market import MarketEstimation
 from app.models.search import (
     SearchEngineResult,
     SearchRequest,
-    SearchResult,
     SearchSummary,
 )
 from app.providers.autoscout24 import AutoScout24Provider
@@ -24,8 +23,9 @@ from app.providers.mobile_de import MobileDeProvider
 from app.providers.registry import ProviderRegistry
 from app.services.opportunity_finder import (
     OpportunityAnalysis,
-    OpportunityFinder,
     OpportunityLevel,
+)
+from app.services.opportunity_finder import (
     Recommendation as OppRecommendation,
 )
 from app.services.profit_analyzer import ProfitAnalysis, RiskLevel

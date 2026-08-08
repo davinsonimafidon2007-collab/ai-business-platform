@@ -1,7 +1,7 @@
 import pytest
 
 from app.providers.base import VehicleProvider
-from app.providers.dto import VehicleSearchResult, VehicleDetail
+from app.providers.dto import VehicleDetail, VehicleSearchResult
 
 
 def test_vehicle_provider_is_abstract() -> None:

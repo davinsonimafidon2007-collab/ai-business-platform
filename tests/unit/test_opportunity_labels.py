@@ -6,7 +6,7 @@ aliases legibles `recommendation_label` / `risk_label`. No toca search.py.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from app.api.v1.schemas.opportunity import (
     OpportunityRead,
@@ -39,8 +39,8 @@ def _opp(recommendation: str | None = None, risk: str | None = None) -> Opportun
         risk_level=risk,
         recommendation_label_es=recommendation_label_es(recommendation),
         risk_label_es=risk_label_es(risk),
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
 
 

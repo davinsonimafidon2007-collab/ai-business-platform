@@ -13,7 +13,7 @@ All tests use mocked DB sessions — no real database required.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -23,7 +23,6 @@ from app.jobs.cleanup_cache import CleanupExpiredCacheJob
 from app.jobs.cleanup_old_searches import CleanupOldSearchesJob
 from app.jobs.refresh_market_cache import RefreshMarketCacheJob
 from app.jobs.refresh_opportunities import RefreshOpportunityJob
-
 
 # =============================================================================
 # Fixtures

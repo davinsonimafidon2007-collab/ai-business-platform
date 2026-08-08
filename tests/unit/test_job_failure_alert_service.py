@@ -1,8 +1,9 @@
 """Tests unitarios para el servicio de alertas por racha de fallos (Task J.1)."""
 
-import pytest
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from app.services.job_failure_alert_service import JobFailureAlertService
 
@@ -102,7 +103,7 @@ async def test_after_cooldown_sends_again():
         is True
     )
     # Simular que pasó el cooldown
-    svc._last_sent["canary"] = datetime.now(timezone.utc) - timedelta(hours=7)
+    svc._last_sent["canary"] = datetime.now(UTC) - timedelta(hours=7)
     assert (
         await svc.maybe_notify(
             job_name="canary", consecutive_failures=2, failure_count=2

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
@@ -11,10 +11,8 @@ from app.api.v1 import auth as auth_module
 from app.main import app
 from app.models.password_reset_token import PasswordResetToken
 from app.models.user import User
-from app.repositories.password_reset_token_repository import PasswordResetTokenRepository
-from app.repositories.user_repository import UserRepository
-from app.services.auth_service import AuthService
 from app.services.audit_service import AuditService
+from app.services.auth_service import AuthService
 from app.services.password_reset_service import PasswordResetService
 from app.services.refresh_token_service import RefreshTokenService
 
@@ -50,17 +48,17 @@ class FakePasswordResetTokenRepository:
         return next((t for t in self._tokens if t.token == token), None)
 
     async def get_valid_by_user_id(self, user_id: str) -> PasswordResetToken | None:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         valid = [t for t in self._tokens if t.user_id == user_id and not t.is_used and t.expires_at > now]
         return valid[-1] if valid else None
 
     async def mark_as_used(self, token: PasswordResetToken) -> PasswordResetToken:
         token.is_used = True
-        token.used_at = datetime.now(timezone.utc)
+        token.used_at = datetime.now(UTC)
         return token
 
     async def invalidate_all_for_user(self, user_id: str) -> None:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         for token in self._tokens:
             if token.user_id == user_id and not token.is_used and token.expires_at > now:
                 token.is_used = True
@@ -291,7 +289,7 @@ def test_reset_password_with_expired_token_returns_error(client: TestClient) -> 
 
     # Forzar expiración del token
     token_record = token_repository._tokens[0]
-    token_record.expires_at = datetime.now(timezone.utc) - timedelta(hours=1)
+    token_record.expires_at = datetime.now(UTC) - timedelta(hours=1)
 
     # Intentar reset con token expirado
     response = client.post(

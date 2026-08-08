@@ -33,6 +33,7 @@ from app.core.logging import get_logger
 from app.providers.exceptions import (
     ProviderConnectionError,
     ProviderMaxRetriesExceededError,
+    ProviderNotFoundError,
     ProviderRateLimitError,
     ProviderTimeoutError,
 )
@@ -268,6 +269,15 @@ class ProviderHttpClient:
                 original_error=e,
             ) from e
         except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404:
+                # SEARCH.DIAG.1: en un listado, 404 suele significar que la
+                # marca/modelo no existe en esa web, no que la fuente esté
+                # rota. Se distingue para no alarmar con "proveedor caído".
+                raise ProviderNotFoundError(
+                    f"{self.provider_name}: recurso no encontrado (HTTP 404). "
+                    "Revisa la marca/modelo de la búsqueda.",
+                    provider=self.provider_name,
+                ) from e
             if e.response.status_code == 429:
                 retry_after = e.response.headers.get("Retry-After")
                 raise ProviderRateLimitError(

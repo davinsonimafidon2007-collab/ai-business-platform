@@ -11,7 +11,7 @@ inyectado ni SMTP configurado, solo se loguea (dry-run), nunca crashea.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from app.core.config import settings
@@ -91,7 +91,7 @@ class JobFailureAlertService:
         if int(consecutive_failures) < self._threshold:
             return False
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         if self._in_cooldown(job_name, now):
             logger.debug(
                 "job_failure_alert cooldown job=%s consecutive=%s",

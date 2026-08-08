@@ -7,14 +7,13 @@ test_mobile_de_provider.py.
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.providers.dto import VehicleDetail, VehicleSearchResult
 from app.providers.autoscout24 import AutoScout24Provider
+from app.providers.dto import VehicleDetail, VehicleSearchResult
 
 FIXTURES_DIR = Path(__file__).resolve().parent.parent / "fixtures"
 

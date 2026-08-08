@@ -1,21 +1,19 @@
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
-from fastapi.responses import HTMLResponse
 
 from app.api.v1.admin_api_keys import router as admin_api_keys_router
 from app.api.v1.admin_status import router as admin_status_router
 from app.api.v1.api_keys import router as api_keys_router
 from app.api.v1.auth import router as auth_router
+from app.api.v1.router import api_router
+from app.api.v1.routes.health import router as health_router
 from app.api.v1.searches import router as searches_router
 from app.api.v1.users import router as users_router
 from app.api.v1.vehicles import router as vehicles_router
-from app.api.v1.router import api_router
-from app.api.v1.routes.health import router as health_router
 from app.core.config import settings
 from app.core.exception_handlers import register_exception_handlers
 from app.core.logging import setup_logging
@@ -59,7 +57,7 @@ if settings.environment == "production" and settings.firebase_required:
 
 
 @asynccontextmanager
-async def scheduler_lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+async def scheduler_lifespan(app: FastAPI) -> AsyncGenerator[None]:
     """Manage the background scheduler lifecycle.
 
     Creates the DatabaseManager, instantiates the Scheduler with all

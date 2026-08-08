@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from app.api.v1.schemas.common import CostLineSchema
 from pydantic import BaseModel, Field
+
+from app.api.v1.schemas.common import CostLineSchema
 
 
 class VehicleDetailResponse(BaseModel):

@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import uuid
 
-import pytest
-
 from app.utils.correlation import (
     generate_correlation_id,
     get_correlation_id,

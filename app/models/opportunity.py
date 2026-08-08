@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text, Uuid
+from sqlalchemy import DateTime, Float, ForeignKey, String, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
@@ -50,7 +50,7 @@ class Opportunity(Base):
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
         nullable=False,
     )
     """Momento en que se creó el registro."""
@@ -65,8 +65,8 @@ class Opportunity(Base):
     )
     """Versión del motor de análisis que generó esta oportunidad (opcional)."""
 
-    vehicle: Mapped["Vehicle"] = relationship("Vehicle", back_populates="opportunities")
-    deals: Mapped[list["Deal"]] = relationship(
+    vehicle: Mapped[Vehicle] = relationship("Vehicle", back_populates="opportunities")
+    deals: Mapped[list[Deal]] = relationship(
         "Deal",
         back_populates="opportunity",
     )
@@ -76,5 +76,5 @@ class Opportunity(Base):
         if getattr(self, "id", None) is None:
             self.id = str(uuid4())
         if getattr(self, "created_at", None) is None:
-            self.created_at = datetime.now(timezone.utc)
+            self.created_at = datetime.now(UTC)
 

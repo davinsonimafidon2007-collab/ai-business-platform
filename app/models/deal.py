@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
-from sqlalchemy import DateTime, Enum as SAEnum, ForeignKey, Numeric, String, Text, Uuid
+from sqlalchemy import DateTime, ForeignKey, Numeric, String, Text, Uuid
+from sqlalchemy import Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
@@ -123,18 +124,18 @@ class Deal(Base):
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
         nullable=False,
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
         nullable=False,
     )
 
-    user: Mapped["User"] = relationship("User", back_populates="deals")
-    vehicle: Mapped["Vehicle | None"] = relationship("Vehicle", back_populates="deals")
-    opportunity: Mapped["Opportunity | None"] = relationship(
+    user: Mapped[User] = relationship("User", back_populates="deals")
+    vehicle: Mapped[Vehicle | None] = relationship("Vehicle", back_populates="deals")
+    opportunity: Mapped[Opportunity | None] = relationship(
         "Opportunity", back_populates="deals"
     )
 
@@ -145,6 +146,6 @@ class Deal(Base):
         if getattr(self, "status", None) is None:
             self.status = DealStatus.NEW
         if getattr(self, "created_at", None) is None:
-            self.created_at = datetime.now(timezone.utc)
+            self.created_at = datetime.now(UTC)
         if getattr(self, "updated_at", None) is None:
-            self.updated_at = datetime.now(timezone.utc)
+            self.updated_at = datetime.now(UTC)

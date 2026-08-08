@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
-from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -12,6 +10,7 @@ import pytest
 from app.providers.exceptions import (
     ProviderConnectionError,
     ProviderMaxRetriesExceededError,
+    ProviderNotFoundError,
     ProviderRateLimitError,
     ProviderTimeoutError,
 )
@@ -120,9 +119,16 @@ async def test_http_client_retries_on_timeout(http_client):
 
 @pytest.mark.asyncio
 async def test_http_client_does_not_retry_on_404(http_client):
-    """Test que verifica que NO se reintenta en errores 404."""
+    """Test que verifica que NO se reintenta en errores 404.
+
+    SEARCH.DIAG.1: desde el diagnóstico de providers, el 404 se traduce a
+    ``ProviderNotFoundError`` (marca/modelo inexistente) en vez de propagar
+    el ``httpx.HTTPStatusError`` crudo. Lo que se sigue comprobando aquí es
+    que no hay reintentos.
+    """
     mock_response = MagicMock()
     mock_response.status_code = 404
+    mock_response.headers = {}
     mock_response.raise_for_status = MagicMock(side_effect=httpx.HTTPStatusError("Not found", request=MagicMock(), response=mock_response))
 
     call_count = 0
@@ -133,7 +139,7 @@ async def test_http_client_does_not_retry_on_404(http_client):
         return mock_response
 
     with patch.object(httpx.AsyncClient, "request", new_callable=AsyncMock, side_effect=side_effect):
-        with pytest.raises(httpx.HTTPStatusError):
+        with pytest.raises(ProviderNotFoundError):
             await http_client.get("/test")
         assert call_count == 1  # No reintenta
 
@@ -334,6 +340,42 @@ async def test_http_client_403_raises_provider_connection_error():
     ):
         with pytest.raises(ProviderConnectionError, match="403"):
             await client.get("/fahrzeuge/search.html")
+
+
+@pytest.mark.asyncio
+async def test_http_client_404_raises_provider_not_found():
+    """SEARCH.DIAG.1: 404 → ProviderNotFoundError, no HTTPStatusError crudo.
+
+    En un listado, 404 casi siempre significa marca/modelo inexistente. Como
+    salía sin traducir, el diagnóstico lo reportaba igual que una fuente rota
+    y alarmaba por una búsqueda simplemente vacía.
+    """
+    http_client = ProviderHttpClient(
+        provider_name="autoscout24", base_url="https://example.com", max_retries=2
+    )
+    mock_response = MagicMock()
+    mock_response.status_code = 404
+    mock_response.headers = {}
+    mock_response.raise_for_status = MagicMock(
+        side_effect=httpx.HTTPStatusError(
+            "Not Found", request=MagicMock(), response=mock_response
+        )
+    )
+
+    call_count = 0
+
+    async def side_effect(*args, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        return mock_response
+
+    with patch.object(
+        httpx.AsyncClient, "request", new_callable=AsyncMock, side_effect=side_effect
+    ):
+        with pytest.raises(ProviderNotFoundError, match="marca/modelo"):
+            await http_client.get("/lst/marca-inexistente")
+
+    assert call_count == 1, "un 404 no debe reintentarse"
 
 
 @pytest.mark.asyncio

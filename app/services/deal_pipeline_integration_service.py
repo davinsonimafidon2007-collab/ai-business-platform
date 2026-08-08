@@ -4,8 +4,8 @@ from __future__ import annotations
 from typing import Any
 
 from app.services.deal_service import DealService
-from app.services.negotiation_engine import NegotiationEngine
 from app.services.inspection_service import InspectionService
+from app.services.negotiation_engine import NegotiationEngine
 
 
 class DealPipelineIntegrationService:

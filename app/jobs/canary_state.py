@@ -10,7 +10,7 @@ Reiniciar el proceso → ``None`` hasta el próximo canary.
 from __future__ import annotations
 
 import threading
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 _lock = threading.Lock()
@@ -30,7 +30,7 @@ def set_last_canary_result(
             "success": success,
             "message": message,
             "data": data,
-            "finished_at": datetime.now(timezone.utc).isoformat(),
+            "finished_at": datetime.now(UTC).isoformat(),
         }
 
 

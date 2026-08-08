@@ -13,10 +13,6 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.dependencies import get_inspection_service
-from app.database import get_db_session
-from app.dependencies.auth import get_current_user
-from app.models.user import User
-from app.repositories.vehicle_repository import VehicleRepository
 from app.api.v1.schemas.inspection import (
     InspectionSessionCreate,
     InspectionSessionDetailResponse,
@@ -30,6 +26,10 @@ from app.api.v1.schemas.inspection import (
     VisionAnalyzeRequest,
 )
 from app.core.config import settings
+from app.database import get_db_session
+from app.dependencies.auth import get_current_user
+from app.models.user import User
+from app.repositories.vehicle_repository import VehicleRepository
 from app.services.inspection_service import InspectionService
 
 router = APIRouter(prefix="/inspections", tags=["inspections"])

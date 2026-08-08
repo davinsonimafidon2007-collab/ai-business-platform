@@ -1,16 +1,19 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from app.exceptions import AuthenticationError, VerificationTokenExpiredError, VerificationTokenNotFoundError
+from app.exceptions import (
+    AuthenticationError,
+    VerificationTokenExpiredError,
+    VerificationTokenNotFoundError,
+)
 from app.models.role import Role
 from app.models.user import User
 from app.models.verification_token import VerificationToken
-from app.services.verification_service import VERIFICATION_TOKEN_EXPIRE_HOURS, VerificationService
-
+from app.services.verification_service import VerificationService
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -61,7 +64,7 @@ async def test_request_verification_creates_token_for_unverified_user():
     created_token = token_repo.create.call_args[0][0]
     assert created_token.user_id == str(user.id)
     assert created_token.token is not None
-    assert created_token.expires_at > datetime.now(timezone.utc)
+    assert created_token.expires_at > datetime.now(UTC)
     assert result is not None
 
 
@@ -74,7 +77,7 @@ async def test_request_verification_invalidates_previous_token():
     previous_token = VerificationToken(
         user_id=str(user.id),
         token="old-token",
-        expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
+        expires_at=datetime.now(UTC) + timedelta(hours=1),
     )
     token_repo.get_valid_by_user_id.return_value = previous_token
 
@@ -147,7 +150,7 @@ async def test_confirm_verification_marks_user_as_verified():
     valid_token = VerificationToken(
         user_id=str(user.id),
         token="valid-token-123",
-        expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
+        expires_at=datetime.now(UTC) + timedelta(hours=1),
     )
     token_repo.get_by_token.return_value = valid_token
     user_repo.get_by_id.return_value = user
@@ -190,7 +193,7 @@ async def test_confirm_verification_raises_when_token_expired():
     expired_token = VerificationToken(
         user_id="some-user-id",
         token="expired-token",
-        expires_at=datetime.now(timezone.utc) - timedelta(hours=1),
+        expires_at=datetime.now(UTC) - timedelta(hours=1),
     )
     token_repo.get_by_token.return_value = expired_token
 
@@ -212,7 +215,7 @@ async def test_confirm_verification_raises_when_token_used():
     used_token = VerificationToken(
         user_id="some-user-id",
         token="used-token",
-        expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
+        expires_at=datetime.now(UTC) + timedelta(hours=1),
         is_used=True,
     )
     token_repo.get_by_token.return_value = used_token

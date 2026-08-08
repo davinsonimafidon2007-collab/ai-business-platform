@@ -7,8 +7,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from app.providers.autoscout24 import AutoScout24Provider
 from app.providers.mobile_de import MobileDeProvider
 

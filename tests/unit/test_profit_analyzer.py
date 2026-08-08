@@ -23,7 +23,6 @@ Casos mínimos requeridos:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
 
 import pytest
 
@@ -40,9 +39,7 @@ from app.services.profit_analyzer import (
     ProfitAnalyzer,
     Recommendation,
     RiskLevel,
-    VehicleData,
 )
-
 
 # =============================================================================
 # Fixture helpers: crea objetos duck-typed que cumplen VehicleData
@@ -853,6 +850,7 @@ class TestNoExternalDependencies:
     def test_no_scoring_import(self) -> None:
         """ProfitAnalyzer no debe importar VehicleScorer."""
         import inspect
+
         import app.services.profit_analyzer as pa
 
         source = inspect.getsource(pa)
@@ -862,6 +860,7 @@ class TestNoExternalDependencies:
     def test_no_provider_import(self) -> None:
         """ProfitAnalyzer no debe importar ningún provider."""
         import inspect
+
         import app.services.profit_analyzer as pa
 
         source = inspect.getsource(pa)
@@ -871,6 +870,7 @@ class TestNoExternalDependencies:
     def test_no_http_import(self) -> None:
         """ProfitAnalyzer no debe hacer peticiones HTTP."""
         import inspect
+
         import app.services.profit_analyzer as pa
 
         source = inspect.getsource(pa)
@@ -882,6 +882,7 @@ class TestNoExternalDependencies:
     def test_only_depends_on_vehicle_and_config(self) -> None:
         """ProfitAnalyzer solo debe depender de VehicleData y config."""
         import inspect
+
         import app.services.profit_analyzer as pa
 
         source = inspect.getsource(pa)

@@ -1,8 +1,8 @@
 import pytest
 from pydantic import ValidationError
 
-from app.schemas.user import UserCreate, UserRead, UserUpdate
 from app.models.role import Role
+from app.schemas.user import UserCreate, UserRead, UserUpdate
 
 
 def test_user_create_accepts_valid_email() -> None:

@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-import pytest
-
 from app.services.cost_breakdown_labels import build_cost_lines
 
 

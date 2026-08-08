@@ -15,7 +15,6 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
-
 # =============================================================================
 # DTOs de entrada/salida para el análisis de visión
 # =============================================================================

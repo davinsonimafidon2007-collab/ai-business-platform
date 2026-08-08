@@ -9,14 +9,13 @@ from __future__ import annotations
 from pydantic import BaseModel, Field, model_validator
 
 from app.api.v1.schemas.common import (
+    MarketEstimationSchema,
     OpportunityAnalysisSchema,
     ProfitAnalysisSchema,
-    MarketEstimationSchema,
     VehicleScoreSchema,
 )
 from app.api.v1.schemas.negotiation import NegotiationResultSchema
 from app.models.search import SearchRequest
-
 
 # =============================================================================
 # Request
@@ -88,7 +87,7 @@ class SearchAPIRequest(BaseModel):
         )
 
     @model_validator(mode="after")
-    def _validate_price_range(self) -> "SearchAPIRequest":
+    def _validate_price_range(self) -> SearchAPIRequest:
         """Valida que min_price <= max_price si ambos están presentes."""
         if (
             self.min_price is not None
@@ -161,11 +160,33 @@ class SearchResultItem(BaseModel):
     )
 
 
+class ProviderIssueSchema(BaseModel):
+    """Provider que falló durante la búsqueda (SEARCH.DIAG.1)."""
+
+    provider: str = Field(..., description="Nombre del provider")
+    stage: str = Field(
+        ..., description="Dónde falló: registry | search | analyze"
+    )
+    error_type: str = Field(..., description="Clase de la excepción")
+    message: str = Field(..., description="Mensaje del error")
+    message_es: str = Field(..., description="Mensaje para mostrar al usuario")
+    external_id: str | None = Field(
+        None, description="Vehículo afectado (solo en stage=analyze)"
+    )
+
+
 class SearchAPIResponse(BaseModel):
     """Respuesta completa de una búsqueda."""
 
     summary: SearchSummarySchema = Field(..., description="Resumen de resultados")
     results: list[SearchResultItem] = Field(
         ..., description="Lista de resultados analizados"
+    )
+    provider_issues: list[ProviderIssueSchema] = Field(
+        default_factory=list,
+        description=(
+            "Providers que fallaron. Vacío = todos respondieron. Permite "
+            "distinguir 'no hay coches' de 'la fuente se cayó'."
+        ),
     )
 

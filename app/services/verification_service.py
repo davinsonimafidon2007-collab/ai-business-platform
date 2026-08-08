@@ -2,10 +2,14 @@ from __future__ import annotations
 
 import hashlib
 import secrets
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from app.core.config import settings
-from app.exceptions import AuthenticationError, VerificationTokenExpiredError, VerificationTokenNotFoundError
+from app.exceptions import (
+    AuthenticationError,
+    VerificationTokenExpiredError,
+    VerificationTokenNotFoundError,
+)
 from app.models.user import User
 from app.models.verification_token import VerificationToken
 from app.notifications.email_provider import EmailProvider
@@ -58,7 +62,7 @@ class VerificationService:
 
         # Crear nuevo token
         raw_token = self._generate_token()
-        expires_at = datetime.now(timezone.utc) + timedelta(hours=VERIFICATION_TOKEN_EXPIRE_HOURS)
+        expires_at = datetime.now(UTC) + timedelta(hours=VERIFICATION_TOKEN_EXPIRE_HOURS)
 
         token_record = VerificationToken(
             user_id=str(user.id),
@@ -94,7 +98,7 @@ class VerificationService:
         if token_record.is_used:
             raise VerificationTokenExpiredError("Verification token has already been used")
 
-        if token_record.expires_at is None or token_record.expires_at < datetime.now(timezone.utc):
+        if token_record.expires_at is None or token_record.expires_at < datetime.now(UTC):
             raise VerificationTokenExpiredError("Verification token has expired")
 
         # Marcar token como usado

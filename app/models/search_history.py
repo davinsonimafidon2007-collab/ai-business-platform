@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text, Uuid
+from sqlalchemy import DateTime, Float, ForeignKey, Integer, Text, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
@@ -37,7 +37,7 @@ class SearchHistory(Base):
 
     timestamp: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
         nullable=False,
     )
     """Momento exacto en que se ejecutó la búsqueda."""
@@ -51,12 +51,12 @@ class SearchHistory(Base):
     execution_time: Mapped[float | None] = mapped_column(Float, nullable=True)
     """Tiempo total de ejecución de la búsqueda en segundos."""
 
-    user: Mapped["User | None"] = relationship("User", back_populates="search_histories")
+    user: Mapped[User | None] = relationship("User", back_populates="search_histories")
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         if getattr(self, "id", None) is None:
             self.id = str(uuid4())
         if getattr(self, "timestamp", None) is None:
-            self.timestamp = datetime.now(timezone.utc)
+            self.timestamp = datetime.now(UTC)
 

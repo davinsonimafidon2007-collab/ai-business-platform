@@ -1,18 +1,17 @@
+from datetime import UTC
 from typing import Any
+from unittest.mock import patch
 
 import pytest
 from fastapi import HTTPException, Request
 from fastapi.testclient import TestClient
 
-from unittest.mock import patch
-
 from app.api.v1 import auth as auth_module
 from app.main import app
 from app.models.user import User
 from app.models.verification_token import VerificationToken
-from app.repositories.verification_token_repository import VerificationTokenRepository
-from app.services.auth_service import AuthService
 from app.services.audit_service import AuditService
+from app.services.auth_service import AuthService
 from app.services.refresh_token_service import RefreshTokenService
 from app.services.verification_service import VerificationService
 
@@ -69,15 +68,15 @@ class FakeVerificationTokenRepository:
         return next((t for t in self._tokens if t.token == token), None)
 
     async def get_valid_by_user_id(self, user_id: str) -> VerificationToken | None:
-        from datetime import datetime, timezone
-        now = datetime.now(timezone.utc)
+        from datetime import datetime
+        now = datetime.now(UTC)
         valid = [t for t in self._tokens if t.user_id == user_id and not t.is_used and t.expires_at > now]
         return valid[-1] if valid else None
 
     async def mark_as_used(self, token: VerificationToken) -> VerificationToken:
-        from datetime import datetime, timezone
+        from datetime import datetime
         token.is_used = True
-        token.used_at = datetime.now(timezone.utc)
+        token.used_at = datetime.now(UTC)
         return token
 
 
@@ -276,7 +275,7 @@ def test_verify_with_expired_token_returns_error(
     client: TestClient, fixed_verify_token: str
 ) -> None:
     """Verifica que un token expirado devuelve error."""
-    from datetime import datetime, timedelta, timezone
+    from datetime import datetime, timedelta
 
     with patch(
         "app.services.verification_service.VerificationService._generate_token",
@@ -301,7 +300,7 @@ def test_verify_with_expired_token_returns_error(
 
         # Forzar expiración del token
         token_record = verification_token_repository._tokens[0]
-        token_record.expires_at = datetime.now(timezone.utc) - timedelta(hours=1)
+        token_record.expires_at = datetime.now(UTC) - timedelta(hours=1)
 
         # Confirmar con token expirado
         verify_response = client.post(

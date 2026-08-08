@@ -23,16 +23,11 @@ from typing import Any
 import pytest
 
 from app.config.opportunity import (
-    BUY_NOW_MIN_CONFIDENCE,
     BUY_NOW_MIN_ROI,
-    BUY_NOW_MIN_SCORE,
     EXCELLENT_THRESHOLD,
-    GOOD_THRESHOLD,
-    AVERAGE_THRESHOLD,
-    POOR_THRESHOLD,
-    VEHICLE_SCORE_WEIGHT,
-    PROFIT_WEIGHT,
     MARKET_CONFIDENCE_WEIGHT,
+    PROFIT_WEIGHT,
+    VEHICLE_SCORE_WEIGHT,
 )
 from app.models.market import MarketEstimation
 from app.services.opportunity_finder import (
@@ -43,8 +38,6 @@ from app.services.opportunity_finder import (
     Recommendation,
 )
 from app.services.profit_analyzer import RiskLevel
-from app.services.vehicle_scorer import VehicleScore
-
 
 # =============================================================================
 # Fixtures helpers
@@ -998,9 +991,13 @@ class TestWeightConfiguration:
     def test_weights_are_final(self) -> None:
         """Los pesos deben ser constantes (importadas desde config)."""
         from app.config.opportunity import (
-            VEHICLE_SCORE_WEIGHT as v,
-            PROFIT_WEIGHT as p,
             MARKET_CONFIDENCE_WEIGHT as m,
+        )
+        from app.config.opportunity import (
+            PROFIT_WEIGHT as p,
+        )
+        from app.config.opportunity import (
+            VEHICLE_SCORE_WEIGHT as v,
         )
         assert v == 0.30
         assert p == 0.40

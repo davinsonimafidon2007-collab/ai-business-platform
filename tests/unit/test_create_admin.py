@@ -4,11 +4,11 @@ from contextlib import ExitStack
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+
 from app.models.role import Role
 from app.models.user import User
 from app.scripts.create_admin import _get_credentials_from_env, create_admin_user
 from app.services.auth_service import password_hasher
-
 
 # ---------------------------------------------------------------------------
 # Helpers

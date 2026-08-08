@@ -3,13 +3,12 @@
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-import pytest
 
 from app.api.v1.dependencies import get_inspection_service
-from app.api.v1.routes.inspection import get_vehicle_repository
-from app.api.v1.routes.inspection import router
+from app.api.v1.routes.inspection import get_vehicle_repository, router
 from app.dependencies.auth import get_current_user
 from app.models.inspection import InspectionObservation, InspectionPhoto, InspectionSession
 from app.models.user import User

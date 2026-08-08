@@ -12,7 +12,7 @@ Si no hay EmailProvider inyectado ni SMTP configurado, solo se loguea
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from app.core.config import settings
@@ -123,7 +123,7 @@ class OpportunityAlertService:
         last = self._last_sent.get(vehicle_key)
         if not last:
             return False
-        return datetime.now(timezone.utc) - last < timedelta(hours=self._cooldown)
+        return datetime.now(UTC) - last < timedelta(hours=self._cooldown)
 
     # ------------------------------------------------------------------
     # API pública
@@ -168,7 +168,7 @@ class OpportunityAlertService:
 
         subject, body = self._build_message(opportunity, vehicle)
         await self._send(user_email, subject, body)
-        self._last_sent[vid] = datetime.now(timezone.utc)
+        self._last_sent[vid] = datetime.now(UTC)
         return True
 
     # ------------------------------------------------------------------

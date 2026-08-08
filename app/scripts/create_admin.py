@@ -20,7 +20,6 @@ import getpass
 import os
 import sys
 
-from app.core.config import settings
 from app.database import get_db_session
 from app.models.role import Role
 from app.repositories.user_repository import UserRepository
@@ -77,7 +76,7 @@ async def _create_admin_with_repository(email: str, password: str, repository: U
             print("   Actualizando rol a ADMIN...")
             existing_user.role = Role.ADMIN
             await repository.update(existing_user)
-            print(f"✅ Rol actualizado a ADMIN exitosamente.")
+            print("✅ Rol actualizado a ADMIN exitosamente.")
             print(f"   Email: {existing_user.email}")
             print(f"   ID: {existing_user.id}")
             print(f"   Rol: {existing_user.role.value}")
@@ -96,7 +95,7 @@ async def _create_admin_with_repository(email: str, password: str, repository: U
         admin_user.role = Role.ADMIN
         await repository.update(admin_user)
         
-        print(f"✅ Usuario administrador creado exitosamente:")
+        print("✅ Usuario administrador creado exitosamente:")
         print(f"   Email: {admin_user.email}")
         print(f"   ID: {admin_user.id}")
         print(f"   Rol: {admin_user.role.value}")

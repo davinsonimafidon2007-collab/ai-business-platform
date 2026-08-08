@@ -2,17 +2,15 @@ from __future__ import annotations
 
 import hashlib
 import secrets
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from app.core.config import settings
 from app.exceptions import (
     PasswordResetError,
     PasswordResetTokenExpiredError,
     PasswordResetTokenNotFoundError,
-    UserNotFoundError,
 )
 from app.models.password_reset_token import PasswordResetToken
-from app.models.user import User
 from app.notifications.email_provider import EmailProvider
 from app.repositories.password_reset_token_repository import PasswordResetTokenRepository
 from app.repositories.user_repository import UserRepository
@@ -61,7 +59,7 @@ class PasswordResetService:
 
         # Crear nuevo token
         raw_token = self._generate_token()
-        expires_at = datetime.now(timezone.utc) + timedelta(
+        expires_at = datetime.now(UTC) + timedelta(
             hours=settings.password_reset_token_expire_hours
         )
 
@@ -98,7 +96,7 @@ class PasswordResetService:
         if token_record.is_used:
             raise PasswordResetTokenExpiredError("Password reset token has already been used")
 
-        if token_record.expires_at is None or token_record.expires_at < datetime.now(timezone.utc):
+        if token_record.expires_at is None or token_record.expires_at < datetime.now(UTC):
             raise PasswordResetTokenExpiredError("Password reset token has expired")
 
         # Marcar token como usado (uso único)

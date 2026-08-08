@@ -8,9 +8,8 @@ from __future__ import annotations
 
 import uuid
 from contextvars import ContextVar
-from typing import Optional
 
-_correlation_id_ctx: ContextVar[Optional[str]] = ContextVar("correlation_id", default=None)
+_correlation_id_ctx: ContextVar[str | None] = ContextVar("correlation_id", default=None)
 
 
 def generate_correlation_id() -> str:
@@ -22,7 +21,7 @@ def generate_correlation_id() -> str:
     return str(uuid.uuid4())
 
 
-def get_correlation_id() -> Optional[str]:
+def get_correlation_id() -> str | None:
     """Get the current correlation ID from context.
 
     Returns:

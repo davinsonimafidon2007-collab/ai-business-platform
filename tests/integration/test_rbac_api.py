@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -24,8 +24,8 @@ class StubUserService:
             is_active=True,
             is_verified=False,
             role=Role.USER,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
 
     async def list_users(self) -> list[SimpleNamespace]:
@@ -116,7 +116,7 @@ def test_invalid_jwt_returns_401(unauthenticated_client: TestClient) -> None:
 
 def test_expired_jwt_returns_401(unauthenticated_client: TestClient) -> None:
     token = jwt.encode(
-        {"sub": str(uuid4()), "exp": datetime.now(timezone.utc) - timedelta(minutes=1)},
+        {"sub": str(uuid4()), "exp": datetime.now(UTC) - timedelta(minutes=1)},
         settings.jwt_secret_key,
         algorithm=settings.jwt_algorithm,
     )

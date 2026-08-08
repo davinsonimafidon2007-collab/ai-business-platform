@@ -32,7 +32,12 @@ from typing import Any
 
 from app.core.config import settings
 from app.core.logging import get_logger
-from app.models.search import SearchRequest, SearchResult, SearchSummary
+from app.models.search import (
+    ProviderIssue,
+    SearchRequest,
+    SearchResult,
+    SearchSummary,
+)
 from app.providers.registry import ProviderRegistry
 from app.services.negotiation_engine import NegotiationEngine
 from app.services.opportunity_finder import (
@@ -93,6 +98,8 @@ class SearchOrchestrator:
         self._opportunity_finder = opportunity_finder
         self._negotiation_engine = negotiation_engine or NegotiationEngine()
         self._provider_registry = provider_registry
+        # Fallos de la última llamada a `search()` (SEARCH.DIAG.1).
+        self._last_provider_issues: list[ProviderIssue] = []
         self._import_cost_profile = (
             import_cost_profile
             or getattr(settings, "default_import_cost_profile", None)
@@ -121,11 +128,24 @@ class SearchOrchestrator:
             Lista de SearchResult ordenada por opportunity.overall_score DESC.
         """
         all_results: list[SearchResult] = []
+        # SEARCH.DIAG.1: se acumulan los fallos en vez de tragarlos, para que
+        # la capa superior pueda distinguir "no hay coches" de "el provider
+        # se cayó". Un fallo sigue sin abortar la búsqueda.
+        self._last_provider_issues = []
 
         for provider_name in request.providers:
             try:
                 provider = self._provider_registry.get(provider_name)
-            except KeyError:
+            except KeyError as exc:
+                logger.warning("Provider no registrado: %s", provider_name)
+                self._last_provider_issues.append(
+                    ProviderIssue(
+                        provider=provider_name,
+                        stage="registry",
+                        error_type=type(exc).__name__,
+                        message=f"Provider '{provider_name}' no está registrado",
+                    )
+                )
                 continue
 
             # Construir kwargs adicionales
@@ -142,8 +162,16 @@ class SearchOrchestrator:
                 vehicle_dtos = await self._vehicle_service.search_from_provider(
                     provider, request.query, **kwargs
                 )
-            except Exception:
+            except Exception as exc:
                 logger.exception("Error al buscar en provider %s", provider_name)
+                self._last_provider_issues.append(
+                    ProviderIssue(
+                        provider=provider_name,
+                        stage="search",
+                        error_type=type(exc).__name__,
+                        message=str(exc) or type(exc).__name__,
+                    )
+                )
                 continue
 
             # Analizar cada vehículo
@@ -159,8 +187,20 @@ class SearchOrchestrator:
                         ),
                     )
                     all_results.append(result)
-                except Exception:
-                    logger.exception("Error al analizar vehículo %s", getattr(dto, "external_id", "unknown"))
+                except Exception as exc:
+                    external_id = getattr(dto, "external_id", None)
+                    logger.exception(
+                        "Error al analizar vehículo %s", external_id or "unknown"
+                    )
+                    self._last_provider_issues.append(
+                        ProviderIssue(
+                            provider=provider_name,
+                            stage="analyze",
+                            error_type=type(exc).__name__,
+                            message=str(exc) or type(exc).__name__,
+                            external_id=str(external_id) if external_id else None,
+                        )
+                    )
                     continue
 
         # Limitar resultados
@@ -169,6 +209,15 @@ class SearchOrchestrator:
 
         # Ordenar por defecto: opportunity score DESC
         return self.sort(all_results)
+
+    @property
+    def last_provider_issues(self) -> list[ProviderIssue]:
+        """Fallos de providers de la última ``search()`` (SEARCH.DIAG.1).
+
+        Lista vacía = todos los providers respondieron. Se resetea en cada
+        ``search()``.
+        """
+        return list(self._last_provider_issues)
 
     @staticmethod
     def summarize(results: list[SearchResult]) -> SearchSummary:

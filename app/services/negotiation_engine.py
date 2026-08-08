@@ -18,12 +18,9 @@ Sigue el mismo patrón que ``OpportunityFinder`` y ``ProfitAnalyzer``.
 
 from __future__ import annotations
 
-from typing import Any
-
 from app.config.negotiation import (
     ACCIDENT_DISCOUNT_PERCENT,
     BUY_MAX_DISCOUNT_NEEDED,
-    BUY_MIN_LEVERAGE_SCORE,
     COUNTER_OFFER_MULTIPLIER,
     HIGH_SEVERITY_THRESHOLD,
     LEVERAGE_ACCIDENT_WEIGHT,
@@ -46,14 +43,11 @@ from app.config.negotiation import (
     WALK_AWAY_MULTIPLIER,
 )
 from app.models.negotiation import (
-    DefectItem,
-    InspectionResult,
     NegotiationArgument,
     NegotiationInput,
     NegotiationRecommendation,
     NegotiationResult,
     NegotiationScript,
-    RepairEstimate,
 )
 
 
@@ -597,15 +591,15 @@ class NegotiationEngine:
             )
         elif input_data.inspection_result.has_accident_history:
             opening = (
-                f"Buenos días, el vehículo me interesa pero tengo conocimiento "
-                f"de su historial de accidentes. Esto reduce significativamente "
-                f"su valor de mercado y mis expectativas de reventa."
+                "Buenos días, el vehículo me interesa pero tengo conocimiento "
+                "de su historial de accidentes. Esto reduce significativamente "
+                "su valor de mercado y mis expectativas de reventa."
             )
         else:
             opening = (
-                f"Buenos días, he analizado el vehículo y el mercado en detalle. "
-                f"Basándome en los datos objetivos, tengo una oferta que refleja "
-                f"el valor real del vehículo."
+                "Buenos días, he analizado el vehículo y el mercado en detalle. "
+                "Basándome en los datos objetivos, tengo una oferta que refleja "
+                "el valor real del vehículo."
             )
 
         # --- Defect-based points (top N por impacto) ---

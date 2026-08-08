@@ -3,8 +3,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.services.opportunity_finder import OpportunityFinder
 from app.services.deal_service import DealService
+from app.services.opportunity_finder import OpportunityFinder
 
 
 class OpportunityIntegrationService:

@@ -1,8 +1,5 @@
 from __future__ import annotations
 
-from types import SimpleNamespace
-from typing import Any
-
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 

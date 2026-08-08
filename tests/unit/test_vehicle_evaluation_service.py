@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from uuid import uuid4
+from datetime import UTC, datetime
 
 import pytest
 
@@ -24,9 +23,9 @@ class MockVehicleEvaluationRepository:
         evaluation.id = str(self.next_id)
         self.next_id += 1
         if evaluation.created_at is None:
-            evaluation.created_at = datetime.now(timezone.utc)
+            evaluation.created_at = datetime.now(UTC)
         if evaluation.updated_at is None:
-            evaluation.updated_at = datetime.now(timezone.utc)
+            evaluation.updated_at = datetime.now(UTC)
         self.evaluations[evaluation.id] = evaluation
         return evaluation
 
@@ -43,7 +42,7 @@ class MockVehicleEvaluationRepository:
         return list(self.evaluations.values())[skip : skip + limit]
 
     async def update(self, evaluation: VehicleEvaluation) -> VehicleEvaluation:
-        evaluation.updated_at = datetime.now(timezone.utc)
+        evaluation.updated_at = datetime.now(UTC)
         self.evaluations[evaluation.id] = evaluation
         return evaluation
 

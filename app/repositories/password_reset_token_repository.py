@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -26,7 +26,7 @@ class PasswordResetTokenRepository:
 
     async def get_valid_by_user_id(self, user_id: str) -> PasswordResetToken | None:
         """Retorna el último token no usado y no expirado para un usuario."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         result = await self.session.execute(
             select(PasswordResetToken)
             .where(
@@ -41,7 +41,7 @@ class PasswordResetTokenRepository:
 
     async def mark_as_used(self, token: PasswordResetToken) -> PasswordResetToken:
         token.is_used = True
-        token.used_at = datetime.now(timezone.utc)
+        token.used_at = datetime.now(UTC)
         self.session.add(token)
         await self.session.commit()
         await self.session.refresh(token)
@@ -49,7 +49,7 @@ class PasswordResetTokenRepository:
 
     async def invalidate_all_for_user(self, user_id: str) -> None:
         """Invalida todos los tokens de reset no usados para un usuario."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         result = await self.session.execute(
             select(PasswordResetToken).where(
                 PasswordResetToken.user_id == user_id,

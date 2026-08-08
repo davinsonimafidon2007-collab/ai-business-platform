@@ -1,5 +1,4 @@
 """Tests para Budget Search Agent y endpoint."""
-import pytest
 from app.agents.budget_search_agent import BudgetSearchAgent
 
 

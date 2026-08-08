@@ -15,7 +15,7 @@ Cobertura requerida:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -29,14 +29,6 @@ from app.services.comparable_market_estimator import (
     ConfidenceCalculator,
     MarketStatistics,
     MarketStatisticsCalculator,
-)
-from app.config.comparable_market import (
-    CONFIDENCE_COUNT_WEIGHT,
-    CONFIDENCE_DISPERSION_WEIGHT,
-    CONFIDENCE_DIVERSITY_WEIGHT,
-    CONFIDENCE_FRESHNESS_WEIGHT,
-    CONFIDENCE_SIMILARITY_WEIGHT,
-    CONFIDENCE_DISCARDED_WEIGHT,
 )
 
 # =============================================================================
@@ -686,7 +678,7 @@ class TestComparableMarketEstimator:
         """Si hay caché válida, debe usarla sin llamar a providers."""
         from app.models.cached_market import CachedMarketData
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         cached = CachedMarketData(
             id="cached-1",
             external_id="test-123",
@@ -767,7 +759,6 @@ class TestComparableMarketEstimator:
 
     def test_estimator_protocol_compatibility(self) -> None:
         """ComparableMarketEstimator debe cumplir el protocolo MarketEstimator."""
-        from app.services.market_estimator import MarketEstimator
 
         # Verificar que el método estimate existe y tiene la firma correcta
         assert hasattr(ComparableMarketEstimator, "estimate")

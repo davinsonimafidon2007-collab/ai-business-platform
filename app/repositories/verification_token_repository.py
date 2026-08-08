@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -26,7 +26,7 @@ class VerificationTokenRepository:
 
     async def get_valid_by_user_id(self, user_id: str) -> VerificationToken | None:
         """Retorna el último token no usado y no expirado para un usuario."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         result = await self.session.execute(
             select(VerificationToken)
             .where(
@@ -41,7 +41,7 @@ class VerificationTokenRepository:
 
     async def mark_as_used(self, token: VerificationToken) -> VerificationToken:
         token.is_used = True
-        token.used_at = datetime.now(timezone.utc)
+        token.used_at = datetime.now(UTC)
         self.session.add(token)
         await self.session.commit()
         await self.session.refresh(token)

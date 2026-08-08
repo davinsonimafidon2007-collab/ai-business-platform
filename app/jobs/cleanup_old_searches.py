@@ -7,7 +7,7 @@ periodically purge stale search history data based on the configured
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from app.jobs.base import Job, JobContext, JobResult
 
@@ -36,7 +36,7 @@ class CleanupOldSearchesJob(Job):
         logger.info("Starting old search history cleanup...")
 
         try:
-            cutoff = datetime.now(timezone.utc) - timedelta(
+            cutoff = datetime.now(UTC) - timedelta(
                 seconds=context.settings.search_history_ttl
             )
 

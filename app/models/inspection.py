@@ -12,7 +12,7 @@ en app/config/inspection.py, no de la base de datos.
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
@@ -84,12 +84,12 @@ class InspectionSession(Base):
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
         nullable=False,
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
         nullable=False,
     )
     completed_at: Mapped[datetime | None] = mapped_column(
@@ -101,15 +101,15 @@ class InspectionSession(Base):
         "summary_json", Text, nullable=True, default=None
     )
 
-    vehicle: Mapped["Vehicle"] = relationship("Vehicle", back_populates="inspection_sessions")
-    user: Mapped["User"] = relationship("User", back_populates="inspection_sessions")
-    observations: Mapped[list["InspectionObservation"]] = relationship(
+    vehicle: Mapped[Vehicle] = relationship("Vehicle", back_populates="inspection_sessions")
+    user: Mapped[User] = relationship("User", back_populates="inspection_sessions")
+    observations: Mapped[list[InspectionObservation]] = relationship(
         "InspectionObservation",
         back_populates="session",
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
-    photos: Mapped[list["InspectionPhoto"]] = relationship(
+    photos: Mapped[list[InspectionPhoto]] = relationship(
         "InspectionPhoto",
         back_populates="session",
         cascade="all, delete-orphan",
@@ -132,7 +132,7 @@ class InspectionSession(Base):
             self.total_critical_defects = 0
         if getattr(self, "id", None) is None:
             self.id = str(uuid4())
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         if getattr(self, "created_at", None) is None:
             self.created_at = now
         if getattr(self, "updated_at", None) is None:
@@ -219,17 +219,17 @@ class InspectionObservation(Base):
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
         nullable=False,
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
         nullable=False,
     )
 
-    session: Mapped["InspectionSession"] = relationship("InspectionSession", back_populates="observations")
-    photos: Mapped[list["InspectionPhoto"]] = relationship(
+    session: Mapped[InspectionSession] = relationship("InspectionSession", back_populates="observations")
+    photos: Mapped[list[InspectionPhoto]] = relationship(
         "InspectionPhoto",
         back_populates="observation",
         cascade="all, delete-orphan",
@@ -245,7 +245,7 @@ class InspectionObservation(Base):
             self.severity = SeverityLevel.LOW.value
         if getattr(self, "id", None) is None:
             self.id = str(uuid4())
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         if getattr(self, "created_at", None) is None:
             self.created_at = now
         if getattr(self, "updated_at", None) is None:
@@ -317,12 +317,12 @@ class InspectionPhoto(Base):
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
         nullable=False,
     )
 
-    observation: Mapped["InspectionObservation"] = relationship("InspectionObservation", back_populates="photos")
-    session: Mapped["InspectionSession"] = relationship("InspectionSession", back_populates="photos")
+    observation: Mapped[InspectionObservation] = relationship("InspectionObservation", back_populates="photos")
+    session: Mapped[InspectionSession] = relationship("InspectionSession", back_populates="photos")
 
     def __init__(self, **kwargs: Any) -> None:
         """Inicializa la foto con valores por defecto."""
@@ -332,7 +332,7 @@ class InspectionPhoto(Base):
         if getattr(self, "id", None) is None:
             self.id = str(uuid4())
         if getattr(self, "created_at", None) is None:
-            self.created_at = datetime.now(timezone.utc)
+            self.created_at = datetime.now(UTC)
 
     def to_dict(self) -> dict[str, Any]:
         """Convierte la foto a dict para serialización."""

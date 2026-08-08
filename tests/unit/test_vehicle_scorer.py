@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 import pytest
@@ -15,11 +15,9 @@ from app.config.scoring import (
 )
 from app.services.vehicle_scorer import (
     ScoreReason,
-    VehicleData,
     VehicleScore,
     VehicleScorer,
 )
-
 
 # =============================================================================
 # Fixture helpers: crea objetos duck-typed que cumplen VehicleData

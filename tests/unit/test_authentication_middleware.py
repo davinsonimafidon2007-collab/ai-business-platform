@@ -4,7 +4,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
 from starlette.responses import Response
 
 from app.exceptions import AuthenticationError

@@ -6,7 +6,6 @@ from unittest.mock import patch
 
 import pytest
 
-from app.core.config import Settings
 from app.core.logging import StructuredFormatter, get_logger, get_logging_config, setup_logging
 
 

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import secrets
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from jose import JWTError, jwt
@@ -79,7 +79,7 @@ class AuthService:
         return user
 
     def create_access_token(self, *, user_id: str | Any) -> str:
-        expire_at = datetime.now(timezone.utc) + timedelta(
+        expire_at = datetime.now(UTC) + timedelta(
             minutes=settings.jwt_access_token_expire_minutes
         )
         # RFC 7519: exp debe ser NumericDate (segundos Unix), no datetime

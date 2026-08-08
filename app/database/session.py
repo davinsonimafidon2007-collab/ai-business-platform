@@ -15,7 +15,7 @@ db_manager = DatabaseManager(settings.database_url, echo=False)
 AsyncSessionLocal = db_manager.session_factory
 
 
-async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
+async def get_db_session() -> AsyncGenerator[AsyncSession]:
     """FastAPI dependency that yields an async database session."""
     async with db_manager.get_session() as session:
         yield session

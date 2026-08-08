@@ -1,22 +1,20 @@
 from __future__ import annotations
 
-from fastapi import status
-from httpx import AsyncClient, ASGITransport
 import pytest
+from fastapi import status
+from httpx import ASGITransport, AsyncClient
 
-from app.main import app
 from app.database import get_db_session
+from app.main import app
 from app.models.base import Base
-from app.models.vehicle import Vehicle
-from app.models.vehicle_evaluation import VehicleEvaluation
-from app.models.search import Search
 
 
 @pytest.fixture
 def db_session():
     """Override the get_db_session dependency for testing."""
     import asyncio
-    from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
     engine = create_async_engine("sqlite+aiosqlite:///:memory:", echo=False)
     session_factory = async_sessionmaker(engine, expire_on_commit=False)

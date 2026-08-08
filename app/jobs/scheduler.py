@@ -12,11 +12,10 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from app.jobs.base import Job, JobContext, JobMetrics, JobResult, JobStatus
-
 
 # =============================================================================
 # Data classes
@@ -276,7 +275,7 @@ class Scheduler:
 
         while self._running and not cancel_event.is_set():
             if not first_run:
-                now = datetime.now(timezone.utc)
+                now = datetime.now(UTC)
                 entry.metrics.next_execution = now + timedelta(seconds=entry.interval)
                 try:
                     await self._wait_with_cancellation(
@@ -289,7 +288,7 @@ class Scheduler:
                     break
             else:
                 first_run = False
-                entry.metrics.next_execution = datetime.now(timezone.utc)
+                entry.metrics.next_execution = datetime.now(UTC)
 
             entry.metrics.status = JobStatus.RUNNING
             result = await self._execute_with_semaphore(entry.job)
@@ -324,20 +323,20 @@ class Scheduler:
 
     async def _execute_job(self, job: Job) -> JobResult:
         """Execute a job and time it."""
-        start = datetime.now(timezone.utc)
+        start = datetime.now(UTC)
         try:
             result = await job.execute(self._context)
         except asyncio.CancelledError:
             raise
         except Exception as exc:
-            duration = (datetime.now(timezone.utc) - start).total_seconds()
+            duration = (datetime.now(UTC) - start).total_seconds()
             result = JobResult(
                 success=False,
                 message=f"Unhandled exception: {exc}",
                 duration=duration,
             )
         else:
-            duration = (datetime.now(timezone.utc) - start).total_seconds()
+            duration = (datetime.now(UTC) - start).total_seconds()
             result.duration = duration
 
         return result
@@ -357,6 +356,6 @@ class Scheduler:
                     asyncio.sleep(min(wait_time, remaining)),
                     timeout=min(wait_time, remaining),
                 )
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 pass
             remaining -= wait_time

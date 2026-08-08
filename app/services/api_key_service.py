@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 import secrets
-from datetime import datetime, timezone
-from typing import Any
+from datetime import UTC, datetime
 
 from pwdlib import PasswordHash
 
@@ -89,7 +88,7 @@ class ApiKeyService:
         if record is None:
             raise AuthenticationError("Invalid API key")
 
-        if record.expires_at and record.expires_at < datetime.now(timezone.utc):
+        if record.expires_at and record.expires_at < datetime.now(UTC):
             raise AuthenticationError("API key has expired")
 
         await self.repository.update_last_used(record.id)

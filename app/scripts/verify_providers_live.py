@@ -30,8 +30,8 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from app.providers.autoscout24 import AutoScout24Provider
-from app.providers.mobile_de import MobileDeProvider
 from app.providers.exceptions import ProviderConnectionError, ProviderError
+from app.providers.mobile_de import MobileDeProvider
 
 AS24_SEARCH_URL = (
     "https://www.autoscout24.de/lst"

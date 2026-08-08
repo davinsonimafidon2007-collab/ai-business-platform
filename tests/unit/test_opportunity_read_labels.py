@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from app.api.v1.schemas.opportunity import OpportunityRead, OpportunityVehicleSummary
 from app.services.recommendation_labels import recommendation_label_es, risk_label_es
@@ -29,8 +29,8 @@ def test_opportunity_read_accepts_label_fields() -> None:
         risk_level="LOW",
         recommendation_label_es=recommendation_label_es("BUY_NOW"),
         risk_label_es=risk_label_es("LOW"),
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     assert row.recommendation_label_es == "Comprar ya"
     assert row.risk_label_es == "Bajo"

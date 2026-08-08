@@ -17,7 +17,7 @@ import json
 import math
 import statistics
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from app.config.comparable_market import (
@@ -610,7 +610,7 @@ class ComparableMarketEstimator:
     async def _save_to_cache(
         self, vehicle_id: str, vehicle_source: str, market_hash: str, estimation: MarketEstimation,
     ) -> None:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         cached = CachedMarketData(
             external_id=vehicle_id,
             provider=vehicle_source,

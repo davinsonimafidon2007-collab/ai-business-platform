@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from app.agents.budget_search_agent import BudgetSearchAgent
-from app.config.import_costs import get_profile, PROFILE_ALIASES
+from app.config.import_costs import PROFILE_ALIASES, get_profile
 
 router = APIRouter(prefix="/budget-search", tags=["budget-search"])
 

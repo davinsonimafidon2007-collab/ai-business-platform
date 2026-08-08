@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
@@ -51,33 +51,33 @@ class Vehicle(Base):
     equipment: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
         nullable=False,
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
         nullable=False,
     )
 
-    user: Mapped["User"] = relationship("User", back_populates="vehicles")
-    evaluations: Mapped[list["VehicleEvaluation"]] = relationship(
+    user: Mapped[User] = relationship("User", back_populates="vehicles")
+    evaluations: Mapped[list[VehicleEvaluation]] = relationship(
         "VehicleEvaluation",
         back_populates="vehicle",
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
-    opportunities: Mapped[list["Opportunity"]] = relationship(
+    opportunities: Mapped[list[Opportunity]] = relationship(
         "Opportunity",
         back_populates="vehicle",
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
-    deals: Mapped[list["Deal"]] = relationship(
+    deals: Mapped[list[Deal]] = relationship(
         "Deal",
         back_populates="vehicle",
     )
-    inspection_sessions: Mapped[list["InspectionSession"]] = relationship(
+    inspection_sessions: Mapped[list[InspectionSession]] = relationship(
         "InspectionSession",
         back_populates="vehicle",
         cascade="all, delete-orphan",
@@ -89,6 +89,6 @@ class Vehicle(Base):
         if getattr(self, "id", None) is None:
             self.id = str(uuid4())
         if getattr(self, "created_at", None) is None:
-            self.created_at = datetime.now(timezone.utc)
+            self.created_at = datetime.now(UTC)
         if getattr(self, "updated_at", None) is None:
-            self.updated_at = datetime.now(timezone.utc)
+            self.updated_at = datetime.now(UTC)

@@ -343,7 +343,7 @@ def _load_profiles_from_file() -> tuple[dict[str, ImportCostProfile], dict[str, 
     """
     if not os.path.isfile(_IMPORT_COSTS_DATA_FILE):
         return None
-    with open(_IMPORT_COSTS_DATA_FILE, "r", encoding="utf-8") as fh:
+    with open(_IMPORT_COSTS_DATA_FILE, encoding="utf-8") as fh:
         data = json.load(fh)
     profiles: dict[str, ImportCostProfile] = {}
     for name, raw in (data.get("profiles") or {}).items():

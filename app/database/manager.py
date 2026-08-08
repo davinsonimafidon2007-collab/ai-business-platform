@@ -6,8 +6,8 @@ a single engine + session factory as the canonical database layer.
 
 from __future__ import annotations
 
-from contextlib import asynccontextmanager
 from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 from typing import Any
 
 from sqlalchemy.ext.asyncio import (
@@ -15,8 +15,6 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
 )
-
-from app.models.base import Base
 
 
 class DatabaseManager:
@@ -95,7 +93,7 @@ class DatabaseManager:
         await self._engine.dispose()
 
     @asynccontextmanager
-    async def get_session(self) -> AsyncGenerator[AsyncSession, None]:
+    async def get_session(self) -> AsyncGenerator[AsyncSession]:
         """Obtiene una sesión asíncrona como context manager.
 
         Yields:

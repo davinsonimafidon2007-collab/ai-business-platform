@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Any
+from datetime import UTC, datetime
 
 from app.models.audit_log import AuditLog
 from app.repositories.audit_log_repository import AuditLogRepository
@@ -33,7 +32,7 @@ class AuditService:
             details=details,
             ip_address=ip_address,
             user_agent=user_agent,
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
         )
         return await self.repository.create(audit_log)
 

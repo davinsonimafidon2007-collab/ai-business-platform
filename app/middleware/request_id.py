@@ -3,12 +3,12 @@ from __future__ import annotations
 import logging
 import time
 import uuid
-from typing import Callable
+from collections.abc import Callable
 
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from app.utils.correlation import generate_correlation_id, get_correlation_id, set_correlation_id
+from app.utils.correlation import generate_correlation_id, set_correlation_id
 
 logger = logging.getLogger(__name__)
 
@@ -81,7 +81,7 @@ class RequestIdMiddleware(BaseHTTPMiddleware):
 
             return response
 
-        except Exception as exc:
+        except Exception:
             process_time = time.time() - start_time
             logger.error(
                 "Request failed with unhandled exception",

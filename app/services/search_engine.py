@@ -21,8 +21,7 @@ Arquitectura:
 
 from __future__ import annotations
 
-from typing import Any
-
+from app.core.config import settings
 from app.models.search import (
     SearchEngineResult,
     SearchRequest,
@@ -32,7 +31,6 @@ from app.models.search import (
 from app.providers.autoscout24 import AutoScout24Provider
 from app.providers.mobile_de import MobileDeProvider
 from app.providers.registry import ProviderRegistry
-from app.core.config import settings
 from app.services.market_estimator import MarketEstimator
 from app.services.negotiation_engine import NegotiationEngine
 from app.services.opportunity_finder import OpportunityFinder
@@ -142,10 +140,13 @@ class SearchEngineService:
         # 2. Generar resumen a partir de los resultados
         summary: SearchSummary = self._orchestrator.summarize(results)
 
-        # 3. Devolver resultado completo
+        # 3. Devolver resultado completo, incluidos los providers que fallaron
+        #    (SEARCH.DIAG.1): sin esto, "0 resultados" y "todo caído" se ven
+        #    igual desde fuera.
         return SearchEngineResult(
             summary=summary,
             results=results,
+            provider_issues=self._orchestrator.last_provider_issues,
         )
 
     # ------------------------------------------------------------------

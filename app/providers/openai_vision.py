@@ -23,7 +23,6 @@ from app.models.vision import (
     VisionObservation,
     VisionSeverity,
 )
-from app.providers.vision_provider import VisionProvider
 
 logger = logging.getLogger(__name__)
 

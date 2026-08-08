@@ -6,7 +6,7 @@ resolved through this module, making them easily testable and swappable.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     # Import diferido: estos módulos se importan dentro de las factories para
@@ -27,7 +27,9 @@ from app.providers.autoscout24 import AutoScout24Provider
 from app.providers.base import VehicleProvider
 from app.providers.http_client import ProviderHttpClient
 from app.providers.mobile_de import MobileDeProvider
+from app.providers.openai_vision import OpenAIVisionProvider
 from app.providers.registry import ProviderRegistry
+from app.providers.vision_provider import MockVisionProvider
 from app.repositories.cached_market_repository import CachedMarketRepository
 from app.repositories.inspection_repository import (
     InspectionObservationRepository,
@@ -37,19 +39,16 @@ from app.repositories.inspection_repository import (
 from app.repositories.vehicle_repository import VehicleRepository
 from app.services.comparable_market_estimator import ComparableMarketEstimator
 from app.services.evaluation_engine import EvaluationEngine
+from app.services.inspection_service import InspectionService
 from app.services.market_estimator import MarketEstimator
 from app.services.negotiation_engine import NegotiationEngine
 from app.services.opportunity_alert_service import OpportunityAlertService
 from app.services.opportunity_finder import OpportunityFinder
 from app.services.profit_analyzer import ProfitAnalyzer
 from app.services.search_engine import SearchEngineService
-from app.services.inspection_service import InspectionService
-from app.services.vision_service import VisionService
-from app.providers.vision_provider import MockVisionProvider
-from app.providers.openai_vision import OpenAIVisionProvider
 from app.services.vehicle_scorer import VehicleScorer
 from app.services.vehicle_service import VehicleService
-
+from app.services.vision_service import VisionService
 
 # =============================================================================
 # Repositories

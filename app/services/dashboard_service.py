@@ -5,7 +5,6 @@ from typing import Any
 
 from app.services.opportunity_finder import OpportunityFinder
 from app.services.profit_analyzer import ProfitAnalyzer
-from app.services.market_estimator import MarketEstimator
 from app.services.vehicle_scorer import VehicleScorer
 
 

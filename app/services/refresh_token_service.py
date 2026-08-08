@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import hashlib
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from jose import JWTError, jwt
@@ -27,7 +27,7 @@ class RefreshTokenService:
         self.repository = repository
 
     def create_refresh_token(self, *, user_id: str | Any) -> str:
-        expire_at = datetime.now(timezone.utc) + timedelta(
+        expire_at = datetime.now(UTC) + timedelta(
             minutes=settings.jwt_refresh_token_expire_minutes
         )
         payload = {
@@ -47,7 +47,7 @@ class RefreshTokenService:
             raise AuthenticationError("Invalid or expired refresh token") from exc
 
     async def create_refresh_token_record(self, *, user_id: str, token: str) -> RefreshToken:
-        expires_at = datetime.now(timezone.utc) + timedelta(minutes=settings.jwt_refresh_token_expire_minutes)
+        expires_at = datetime.now(UTC) + timedelta(minutes=settings.jwt_refresh_token_expire_minutes)
         refresh_token = RefreshToken(
             token=_hash_token(token),
             user_id=user_id,
@@ -67,7 +67,7 @@ class RefreshTokenService:
         if refresh_token.is_revoked:
             raise AuthenticationError("Refresh token has been revoked")
 
-        if refresh_token.expires_at is None or refresh_token.expires_at < datetime.now(timezone.utc):
+        if refresh_token.expires_at is None or refresh_token.expires_at < datetime.now(UTC):
             raise AuthenticationError("Refresh token has expired")
         
         return refresh_token

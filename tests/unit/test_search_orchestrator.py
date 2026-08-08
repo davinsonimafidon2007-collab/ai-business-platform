@@ -15,7 +15,7 @@ Casos mínimos requeridos:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -28,14 +28,14 @@ from app.providers.dto import VehicleSearchResult
 from app.providers.registry import ProviderRegistry
 from app.services.opportunity_finder import (
     OpportunityAnalysis,
-    OpportunityFinder,
     OpportunityLevel,
+)
+from app.services.opportunity_finder import (
     Recommendation as OppRecommendation,
 )
 from app.services.profit_analyzer import ProfitAnalysis, RiskLevel
 from app.services.search_orchestrator import SearchOrchestrator
 from app.services.vehicle_scorer import VehicleScore
-
 
 # =============================================================================
 # Stubs

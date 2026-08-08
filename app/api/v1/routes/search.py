@@ -10,14 +10,6 @@ from typing import Any
 from fastapi import APIRouter, Depends, status
 
 from app.api.v1.dependencies import get_search_engine_service
-from app.dependencies.auth import get_current_user, require_search
-from app.models.user import User
-from app.api.v1.schemas.search import (
-    SearchAPIRequest,
-    SearchAPIResponse,
-    SearchResultItem,
-    SearchSummarySchema,
-)
 from app.api.v1.schemas.common import (
     CostBreakdownSchema,
     MarketEstimationSchema,
@@ -30,8 +22,18 @@ from app.api.v1.schemas.negotiation import (
     NegotiationResultSchema,
     NegotiationScriptSchema,
 )
+from app.api.v1.schemas.search import (
+    ProviderIssueSchema,
+    SearchAPIRequest,
+    SearchAPIResponse,
+    SearchResultItem,
+    SearchSummarySchema,
+)
+from app.dependencies.auth import require_search
+from app.models.user import User
 from app.services.cost_breakdown_labels import build_cost_lines
 from app.services.profit_coherence import build_coherence_warnings
+from app.services.provider_issue_labels import build_provider_issue_payloads
 from app.services.recommendation_labels import recommendation_label_es, risk_label_es
 from app.services.search_engine import SearchEngineService
 
@@ -339,5 +341,12 @@ async def search_vehicles(
             rejected=summary.rejected,
         ),
         results=items,
+        # SEARCH.DIAG.1: providers caídos, con mensaje ES para la UI.
+        provider_issues=[
+            ProviderIssueSchema(**payload)
+            for payload in build_provider_issue_payloads(
+                getattr(engine_result, "provider_issues", [])
+            )
+        ],
     )
 

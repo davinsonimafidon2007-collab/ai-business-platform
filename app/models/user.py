@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
@@ -37,52 +37,52 @@ class User(Base):
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
         nullable=False,
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
         nullable=False,
     )
 
-    vehicles: Mapped[list["Vehicle"]] = relationship(
+    vehicles: Mapped[list[Vehicle]] = relationship(
         "Vehicle",
         back_populates="user",
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
-    searches: Mapped[list["Search"]] = relationship(
+    searches: Mapped[list[Search]] = relationship(
         "Search",
         back_populates="user",
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
-    deals: Mapped[list["Deal"]] = relationship(
+    deals: Mapped[list[Deal]] = relationship(
         "Deal",
         back_populates="user",
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
-    api_keys: Mapped[list["ApiKey"]] = relationship(
+    api_keys: Mapped[list[ApiKey]] = relationship(
         "ApiKey",
         back_populates="user",
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
-    refresh_tokens: Mapped[list["RefreshToken"]] = relationship(
+    refresh_tokens: Mapped[list[RefreshToken]] = relationship(
         "RefreshToken",
         back_populates="user",
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
-    search_histories: Mapped[list["SearchHistory"]] = relationship(
+    search_histories: Mapped[list[SearchHistory]] = relationship(
         "SearchHistory",
         back_populates="user",
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
-    inspection_sessions: Mapped[list["InspectionSession"]] = relationship(
+    inspection_sessions: Mapped[list[InspectionSession]] = relationship(
         "InspectionSession",
         back_populates="user",
         cascade="all, delete-orphan",
@@ -100,6 +100,6 @@ class User(Base):
         if getattr(self, "role", None) is None:
             self.role = Role.USER
         if getattr(self, "created_at", None) is None:
-            self.created_at = datetime.now(timezone.utc)
+            self.created_at = datetime.now(UTC)
         if getattr(self, "updated_at", None) is None:
-            self.updated_at = datetime.now(timezone.utc)
+            self.updated_at = datetime.now(UTC)

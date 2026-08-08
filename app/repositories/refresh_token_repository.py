@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID
 
 from sqlalchemy import select
@@ -28,7 +28,7 @@ class RefreshTokenRepository:
         refresh_token = result.scalar_one_or_none()
         if refresh_token:
             refresh_token.is_revoked = True
-            refresh_token.revoked_at = datetime.now(timezone.utc)
+            refresh_token.revoked_at = datetime.now(UTC)
             await self.session.commit()
 
     async def revoke_all_by_user_id(self, user_id: UUID | str) -> None:
@@ -38,6 +38,6 @@ class RefreshTokenRepository:
         tokens = result.scalars().all()
         for token in tokens:
             token.is_revoked = True
-            token.revoked_at = datetime.now(timezone.utc)
+            token.revoked_at = datetime.now(UTC)
         if tokens:
             await self.session.commit()

@@ -7,9 +7,7 @@ operations. No real PostgreSQL required.
 from __future__ import annotations
 
 from collections.abc import AsyncGenerator
-from typing import Any
 
-import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,7 +23,7 @@ from app.repositories.search_history_repository import SearchHistoryRepository
 
 
 @pytest_asyncio.fixture
-async def db_manager() -> AsyncGenerator[DatabaseManager, None]:
+async def db_manager() -> AsyncGenerator[DatabaseManager]:
     """Creates a DatabaseManager with an in-memory SQLite database.
 
     Creates all tables before yielding and disposes after.
@@ -43,7 +41,7 @@ async def db_manager() -> AsyncGenerator[DatabaseManager, None]:
 @pytest_asyncio.fixture
 async def session(
     db_manager: DatabaseManager,
-) -> AsyncGenerator[AsyncSession, None]:
+) -> AsyncGenerator[AsyncSession]:
     """Provides an async session for testing."""
     async with db_manager.session_factory() as session:
         try:

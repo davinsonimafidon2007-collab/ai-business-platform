@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID
 
 from sqlalchemy import and_, func, or_, select
@@ -113,7 +113,7 @@ class CachedMarketRepository:
         Returns:
             The valid CachedMarketData if found (not expired), None otherwise.
         """
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         conditions = [
             CachedMarketData.external_id == external_id,
             CachedMarketData.provider == provider,
@@ -191,7 +191,7 @@ class CachedMarketRepository:
         Returns:
             Number of deleted records.
         """
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         result = await self.session.execute(
             select(CachedMarketData).where(
                 CachedMarketData.expires_at < now

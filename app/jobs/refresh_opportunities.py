@@ -7,7 +7,7 @@ correspondiente.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from app.core.config import settings
 from app.jobs.base import Job, JobContext, JobResult
@@ -83,7 +83,7 @@ class RefreshOpportunityJob(Job):
                                 opp.roi = round(result.profit_margin_percent, 2)
                                 opp.risk = risk
                                 opp.profit = round(result.gross_profit, 2)
-                                opp.analyzed_at = datetime.now(timezone.utc)
+                                opp.analyzed_at = datetime.now(UTC)
                             else:
                                 opp = Opportunity(
                                     vehicle_id=vehicle.id,
@@ -92,7 +92,7 @@ class RefreshOpportunityJob(Job):
                                     roi=round(result.profit_margin_percent, 2),
                                     risk=risk,
                                     profit=round(result.gross_profit, 2),
-                                    analyzed_at=datetime.now(timezone.utc),
+                                    analyzed_at=datetime.now(UTC),
                                 )
 
                             await opp_repo.save(opp)

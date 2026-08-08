@@ -16,13 +16,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime, timedelta, timezone
 
 import pytest
 
 from app.jobs.base import Job, JobContext, JobResult, JobStatus
 from app.jobs.scheduler import Scheduler
-
 
 # =============================================================================
 # Helper: a test job that tracks calls

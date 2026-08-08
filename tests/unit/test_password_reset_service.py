@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -14,7 +14,6 @@ from app.models.password_reset_token import PasswordResetToken
 from app.models.role import Role
 from app.models.user import User
 from app.services.password_reset_service import PasswordResetService
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -67,7 +66,7 @@ async def test_request_password_reset_creates_token_for_existing_user():
     created_token = token_repo.create.call_args[0][0]
     assert created_token.user_id == str(user.id)
     assert created_token.token is not None
-    assert created_token.expires_at > datetime.now(timezone.utc)
+    assert created_token.expires_at > datetime.now(UTC)
 
 
 @pytest.mark.asyncio
@@ -98,7 +97,7 @@ async def test_request_password_reset_invalidates_previous_token():
     previous_token = PasswordResetToken(
         user_id=str(user.id),
         token="old-token",
-        expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
+        expires_at=datetime.now(UTC) + timedelta(hours=1),
     )
     token_repo.get_valid_by_user_id.return_value = previous_token
 
@@ -154,7 +153,7 @@ async def test_reset_password_updates_password():
     valid_token = PasswordResetToken(
         user_id=str(user.id),
         token="valid-token-123",
-        expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
+        expires_at=datetime.now(UTC) + timedelta(hours=1),
     )
     token_repo.get_by_token.return_value = valid_token
     user_repo.get_by_id.return_value = user
@@ -201,7 +200,7 @@ async def test_reset_password_raises_when_token_expired():
     expired_token = PasswordResetToken(
         user_id="some-user-id",
         token="expired-token",
-        expires_at=datetime.now(timezone.utc) - timedelta(hours=1),
+        expires_at=datetime.now(UTC) - timedelta(hours=1),
     )
     token_repo.get_by_token.return_value = expired_token
 
@@ -223,7 +222,7 @@ async def test_reset_password_raises_when_token_used():
     used_token = PasswordResetToken(
         user_id="some-user-id",
         token="used-token",
-        expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
+        expires_at=datetime.now(UTC) + timedelta(hours=1),
         is_used=True,
     )
     token_repo.get_by_token.return_value = used_token
@@ -246,7 +245,7 @@ async def test_reset_password_raises_when_user_not_found():
     valid_token = PasswordResetToken(
         user_id="nonexistent-user-id",
         token="valid-token",
-        expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
+        expires_at=datetime.now(UTC) + timedelta(hours=1),
     )
     token_repo.get_by_token.return_value = valid_token
     user_repo.get_by_id.return_value = None

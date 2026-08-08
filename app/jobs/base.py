@@ -10,13 +10,12 @@ import copy
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 from typing import Any
 
 from app.core.config import settings as app_settings
 from app.database import DatabaseManager
-
 
 # =============================================================================
 # Enums
@@ -150,7 +149,7 @@ class Job(ABC):
         """Update internal metrics after a job run (internal use)."""
         self._metrics.execution_count += 1
         self._metrics.last_duration = result.duration
-        self._metrics.last_execution = datetime.now(timezone.utc)
+        self._metrics.last_execution = datetime.now(UTC)
 
         if result.success:
             self._metrics.success_count += 1

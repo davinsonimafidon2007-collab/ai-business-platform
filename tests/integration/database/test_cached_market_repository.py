@@ -9,7 +9,7 @@ does NOT depend on the vehicles table.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -38,7 +38,7 @@ class TestCachedMarketRepository:
             comparable_count=12,
             notes='{"source": "comparable_market"}',
             explanation="El anuncio está alineado con el mercado.",
-            expires_at=datetime.now(timezone.utc) + timedelta(hours=24),
+            expires_at=datetime.now(UTC) + timedelta(hours=24),
         )
         saved = await cached_market_repo.save(entry)
         assert saved.id is not None
@@ -130,7 +130,7 @@ class TestCachedMarketRepository:
         cached_market_repo: CachedMarketRepository,
     ) -> None:
         """get_valid() only returns non-expired entries."""
-        future = datetime.now(timezone.utc) + timedelta(hours=1)
+        future = datetime.now(UTC) + timedelta(hours=1)
         entry = CachedMarketData(
             external_id="ext_001",
             provider="mobile_de",
@@ -152,7 +152,7 @@ class TestCachedMarketRepository:
         cached_market_repo: CachedMarketRepository,
     ) -> None:
         """get_valid() returns None for expired entries."""
-        past = datetime.now(timezone.utc) - timedelta(hours=1)
+        past = datetime.now(UTC) - timedelta(hours=1)
         entry = CachedMarketData(
             external_id="ext_001",
             provider="mobile_de",
@@ -173,7 +173,7 @@ class TestCachedMarketRepository:
         cached_market_repo: CachedMarketRepository,
     ) -> None:
         """get_valid() works without market_hash."""
-        future = datetime.now(timezone.utc) + timedelta(hours=1)
+        future = datetime.now(UTC) + timedelta(hours=1)
         entry = CachedMarketData(
             external_id="ext_001",
             provider="mobile_de",
@@ -245,8 +245,8 @@ class TestCachedMarketRepository:
         cached_market_repo: CachedMarketRepository,
     ) -> None:
         """delete_expired() removes all expired entries."""
-        future = datetime.now(timezone.utc) + timedelta(hours=1)
-        past = datetime.now(timezone.utc) - timedelta(hours=1)
+        future = datetime.now(UTC) + timedelta(hours=1)
+        past = datetime.now(UTC) - timedelta(hours=1)
 
         valid = CachedMarketData(
             external_id="ext_valid",
