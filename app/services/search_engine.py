@@ -156,20 +156,42 @@ class SearchEngineService:
     def _register_providers(self) -> None:
         """Registra los providers en el ProviderRegistry.
 
-        Es seguro llamar múltiples veces: si un provider ya está registrado,
-        se omite (no se lanza excepción).
+        Es seguro llamar multiples veces: si un provider ya esta registrado,
+        se omite (no se lanza excepcion).
         """
         registry = self._provider_registry
 
-        # Registrar mobile_de si no está ya registrado
+        # Registrar mobile_de si no esta ya registrado
         try:
             registry.get("mobile_de")
         except KeyError:
             registry.register(self._mobile_de_provider)
 
-        # Registrar autoscout24 si no está ya registrado
+        # Registrar autoscout24 si no esta ya registrado
         try:
             registry.get("autoscout24")
         except KeyError:
             registry.register(self._autoscout24_provider)
+
+        # Registrar autoscout24_es si enabled
+        if getattr(settings, "enable_autoscout24_es", False):
+            try:
+                registry.get("autoscout24_es")
+            except KeyError:
+                from app.providers.autoscout24_es import AutoScout24EsProvider
+                from app.providers.http_client import ProviderHttpClient
+
+                client = ProviderHttpClient(
+                    provider_name="autoscout24_es",
+                    base_url="https://www.autoscout24.es",
+                    timeout=settings.provider_http_timeout,
+                    max_retries=settings.provider_http_max_retries,
+                )
+                registry.register(
+                    AutoScout24EsProvider(http_client=client, base_url="https://www.autoscout24.es")
+                )
+
+        # Asegurar fixtures ES (auto-registro por perfil SPAIN)
+        registry.ensure_es_market_fixture()
+        registry.ensure_coches_net_fixture()
 

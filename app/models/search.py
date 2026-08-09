@@ -69,7 +69,7 @@ class SearchRequest(BaseModel):
 
     query: str = Field(..., min_length=1, description="Término de búsqueda")
     max_results: int = Field(default=20, ge=1, le=100, description="Máximo de resultados")
-    providers: list[str] = Field(default_factory=lambda: ["mobile_de", "autoscout24"])
+    providers: list[str] = Field(default_factory=lambda: ["mobile_de", "autoscout24", "autoscout24_es", "es_market_fixture", "coches_net_fixture"])
     country: str = Field(default="ES", max_length=10)
     budget_min: float | None = Field(default=None, ge=0)
     budget_max: float | None = Field(default=None, ge=0)

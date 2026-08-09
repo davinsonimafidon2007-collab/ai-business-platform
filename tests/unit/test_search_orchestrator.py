@@ -261,7 +261,8 @@ class TestModelStructure:
         request = SearchRequest(query="test")
         assert request.query == "test"
         assert request.max_results == 20
-        assert request.providers == ["mobile_de", "autoscout24"]
+        assert "mobile_de" in request.providers
+        assert "autoscout24" in request.providers
         assert request.country == "ES"
         assert request.budget_min is None
         assert request.budget_max is None
