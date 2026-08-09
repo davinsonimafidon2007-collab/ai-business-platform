@@ -12,6 +12,7 @@ from app.providers.exceptions import (
     ProviderRateLimitError,
     ProviderTimeoutError,
 )
+from app.providers.gemini_vision import GeminiVisionProvider
 from app.providers.http_client import ProviderHttpClient
 from app.providers.mobile_de import MobileDeProvider
 from app.providers.openai_vision import OpenAIVisionProvider, VisionProviderError
@@ -36,6 +37,7 @@ __all__ = [
     "ProviderMaxRetriesExceededError",
     "MockVisionProvider",
     "VisionProvider",
+    "GeminiVisionProvider",
     "OpenAIVisionProvider",
     "VisionProviderError",
     "CochesNetHtmlFixtureProvider",

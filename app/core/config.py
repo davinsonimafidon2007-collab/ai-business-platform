@@ -281,10 +281,22 @@ class Settings(BaseSettings):
     """Si True, registra provider coches_net_html_fixture (listados Coches.net offline desde HTML)."""
 
     # =========================================================================
-    # OpenAI Vision provider
+    # Vision provider (Gemini or OpenAI)
     # =========================================================================
+    gemini_api_key: str = ""
+    """Google AI API key for Gemini vision analysis."""
+
+    gemini_model: str = "gemini-2.0-flash"
+    """Gemini model to use (default: gemini-2.0-flash)."""
+
+    gemini_max_tokens: int = 2000
+    """Max tokens for Gemini vision response."""
+
+    gemini_temperature: float = 0.1
+    """Temperature for Gemini vision (low = deterministic)."""
+
     openai_api_key: str = ""
-    """OpenAI API key for GPT-4 Vision analysis of inspection photos."""
+    """OpenAI API key for GPT-4 Vision analysis of inspection photos (fallback)."""
 
     openai_model: str = "gpt-4o"
     """Vision model to use (default: gpt-4o)."""

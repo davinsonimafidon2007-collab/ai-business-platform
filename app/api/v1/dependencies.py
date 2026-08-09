@@ -233,15 +233,19 @@ def get_openai_vision_provider() -> OpenAIVisionProvider:
     )
 
 
-def get_vision_provider() -> OpenAIVisionProvider | MockVisionProvider:
-    """Returns either OpenAI or Mock provider depending on configuration.
+def get_vision_provider():
+    """Returns Gemini, OpenAI, or Mock provider depending on configuration.
 
-    If `openai_api_key` is set and non-empty, returns an OpenAIVisionProvider.
-    Otherwise falls back to MockVisionProvider for development/testing.
-
-    To switch providers in production, simply set the OPENAI_API_KEY
-    environment variable and the rest of the system will use it.
+    Priority: Gemini (GEMINI_API_KEY) > OpenAI (OPENAI_API_KEY) > Mock.
     """
+    if settings.gemini_api_key:
+        from app.providers.gemini_vision import GeminiVisionProvider
+        return GeminiVisionProvider(
+            api_key=settings.gemini_api_key,
+            model=settings.gemini_model,
+            max_tokens=settings.gemini_max_tokens,
+            temperature=settings.gemini_temperature,
+        )
     if settings.openai_api_key:
         return OpenAIVisionProvider(
             api_key=settings.openai_api_key,
@@ -253,9 +257,9 @@ def get_vision_provider() -> OpenAIVisionProvider | MockVisionProvider:
 
 
 def get_vision_service(
-    provider: OpenAIVisionProvider | MockVisionProvider = Depends(get_vision_provider),
+    provider=Depends(get_vision_provider),
 ) -> VisionService:
-    """Obtiene el servicio adaptador de visión."""
+    """Obtiene el servicio adaptador de vision."""
     return VisionService(provider=provider)
 
 
