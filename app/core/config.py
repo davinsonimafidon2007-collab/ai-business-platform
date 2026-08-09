@@ -226,6 +226,12 @@ class Settings(BaseSettings):
     provider_canary_interval: int = 21600
     """Seconds between provider canary runs (default 6h). 0 = disabled."""
 
+    search_order_interval: int = 60
+    """Seconds between search-order processing runs (PERSONAL.NOAUTH). 0 = off."""
+
+    search_orders_per_run: int = 5
+    """Maximum search orders processed per scheduler run."""
+
     job_failure_alert_enabled: bool = True
     """Master toggle for job consecutive-failure alerts (Task J.1)."""
 

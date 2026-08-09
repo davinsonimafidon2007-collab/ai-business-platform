@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from app.models.refresh_token import RefreshToken
     from app.models.search import Search
     from app.models.search_history import SearchHistory
+    from app.models.search_order import SearchOrder
     from app.models.vehicle import Vehicle
 
 
@@ -78,6 +79,12 @@ class User(Base):
     )
     search_histories: Mapped[list[SearchHistory]] = relationship(
         "SearchHistory",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+    search_orders: Mapped[list["SearchOrder"]] = relationship(
+        "SearchOrder",
         back_populates="user",
         cascade="all, delete-orphan",
         passive_deletes=True,

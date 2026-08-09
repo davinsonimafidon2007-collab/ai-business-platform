@@ -11,6 +11,7 @@ from app.api.v1.api_keys import router as api_keys_router
 from app.api.v1.auth import router as auth_router
 from app.api.v1.router import api_router
 from app.api.v1.routes.health import router as health_router
+from app.api.v1.search_orders import router as search_orders_router
 from app.api.v1.searches import router as searches_router
 from app.api.v1.users import router as users_router
 from app.api.v1.vehicles import router as vehicles_router
@@ -132,6 +133,7 @@ app.include_router(api_keys_router, prefix="/api/v1")
 app.include_router(admin_api_keys_router, prefix="/api/v1")
 app.include_router(admin_status_router, prefix="/api/v1")
 app.include_router(searches_router, prefix="/api/v1")
+app.include_router(search_orders_router, prefix="/api/v1")
 app.include_router(users_router, prefix="/api/v1")
 app.include_router(vehicles_router, prefix="/api/v1")
 app.include_router(api_router, prefix="/api/v1")

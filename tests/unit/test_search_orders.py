@@ -1,0 +1,275 @@
+"""Tests del sistema de órdenes de búsqueda en background (PERSONAL.NOAUTH).
+
+Cubre:
+- SearchOrderRepository: create/pending, add_vehicle idempotente,
+  mark_seen + badge, total_new_by_user.
+- Endpoints /api/v1/search-orders: crear (deriva max_purchase_price del
+  presupuesto total), listar, detalle, new-count, marcar visto, eliminar.
+- ProcessSearchOrdersJob: una orden PENDING pasa a COMPLETED con los
+  vehículos nuevos contabilizados en new_count.
+"""
+
+from __future__ import annotations
+
+import logging
+from collections.abc import AsyncGenerator
+from types import SimpleNamespace
+from typing import Any
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
+import pytest_asyncio
+from httpx import ASGITransport, AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
+from app import models  # noqa: F401  (registra todos los modelos en Base.metadata)
+from app.database import get_db_session
+from app.dependencies.auth import get_current_user
+from app.jobs.base import JobContext
+from app.main import app
+from app.models.base import Base
+from app.models.role import Role
+from app.models.search_order import SearchOrder
+from app.models.user import User
+from app.repositories.search_order_repository import SearchOrderRepository
+
+TEST_USER_ID = "11111111-1111-1111-1111-111111111111"
+TEST_VEHICLE_ID = "22222222-2222-2222-2222-222222222222"
+
+
+@pytest_asyncio.fixture
+async def session() -> AsyncGenerator[AsyncSession]:
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:", echo=False)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    async with factory() as s:
+        yield s
+    await engine.dispose()
+
+
+# =============================================================================
+# Repository
+# =============================================================================
+
+
+@pytest.mark.asyncio
+async def test_repo_create_and_pending(session: AsyncSession) -> None:
+    repo = SearchOrderRepository(session)
+    saved = await repo.create(
+        SearchOrder(user_id=TEST_USER_ID, query="Audi A4", filters={"max_results": 10})
+    )
+    assert saved.status == "PENDING"
+    pending = await repo.pending_orders()
+    assert [o.id for o in pending] == [saved.id]
+
+
+@pytest.mark.asyncio
+async def test_repo_add_vehicle_idempotent(session: AsyncSession) -> None:
+    repo = SearchOrderRepository(session)
+    order = await repo.create(SearchOrder(user_id=TEST_USER_ID, query="BMW 320d"))
+    link1 = await repo.add_vehicle(order, TEST_VEHICLE_ID, result_json='{"a":1}')
+    link2 = await repo.add_vehicle(order, TEST_VEHICLE_ID, result_json='{"a":2}')
+    assert link1.id == link2.id
+    links = await repo.list_order_vehicles(order.id)
+    assert len(links) == 1
+    assert links[0].result_json == '{"a":2}'
+
+
+@pytest.mark.asyncio
+async def test_repo_mark_seen_resets_badge(session: AsyncSession) -> None:
+    repo = SearchOrderRepository(session)
+    order = await repo.create(SearchOrder(user_id=TEST_USER_ID, query="VW Golf"))
+    await repo.add_vehicle(order, TEST_VEHICLE_ID)
+    order.results_count = 1
+    order.new_count = 1
+    await repo.save(order)
+
+    assert await repo.total_new_by_user(TEST_USER_ID) == 1
+
+    await repo.mark_seen(order.id, TEST_USER_ID)
+
+    assert order.new_count == 0
+    assert await repo.total_new_by_user(TEST_USER_ID) == 0
+    links = await repo.list_order_vehicles(order.id)
+    assert all(link.seen for link in links)
+
+
+# =============================================================================
+# API
+# =============================================================================
+
+
+@pytest_asyncio.fixture
+async def client(session: AsyncSession) -> AsyncGenerator[AsyncClient]:
+    async def _get_session():
+        yield session
+
+    async def _get_current_user() -> User:
+        return User(
+            id=TEST_USER_ID,
+            email="local@example.com",
+            hashed_password="",
+            full_name="Local Admin",
+            is_active=True,
+            is_verified=True,
+            role=Role.ADMIN,
+        )
+
+    app.dependency_overrides[get_db_session] = _get_session
+    app.dependency_overrides[get_current_user] = _get_current_user
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as c:
+        yield c
+    if get_db_session in app.dependency_overrides:
+        del app.dependency_overrides[get_db_session]
+    if get_current_user in app.dependency_overrides:
+        del app.dependency_overrides[get_current_user]
+
+
+@pytest.mark.asyncio
+async def test_create_order_derives_max_purchase_price(
+    session: AsyncSession, client: AsyncClient
+) -> None:
+    resp = await client.post(
+        "/api/v1/search-orders",
+        json={
+            "query": "Audi A4",
+            "total_budget": 12000,
+            "profit_margin_min": 500,
+            "profile": "SPAIN",
+        },
+    )
+    assert resp.status_code == 201, resp.text
+    data = resp.json()
+    assert data["status"] == "PENDING"
+    assert data["total_budget"] == 12000
+    assert data["max_purchase_price"] is not None
+    assert data["max_purchase_price"] > 0
+
+    order = await SearchOrderRepository(session).get_by_id(data["id"])
+    assert order is not None
+    assert order.max_purchase_price == data["max_purchase_price"]
+
+
+@pytest.mark.asyncio
+async def test_create_order_rejects_unknown_profile(
+    client: AsyncClient,
+) -> None:
+    resp = await client.post(
+        "/api/v1/search-orders",
+        json={"query": "Audi A4", "total_budget": 12000, "profile": "MARTE"},
+    )
+    assert resp.status_code == 400, resp.text
+
+
+@pytest.mark.asyncio
+async def test_new_count_and_list_and_detail(
+    session: AsyncSession, client: AsyncClient
+) -> None:
+    assert (await client.get("/api/v1/search-orders/new-count")).json() == {
+        "new_count": 0
+    }
+
+    created = (
+        await client.post("/api/v1/search-orders", json={"query": "BMW X5"})
+    ).json()
+
+    listing = await client.get("/api/v1/search-orders")
+    assert listing.status_code == 200
+    assert [o["id"] for o in listing.json()] == [created["id"]]
+
+    detail = await client.get(f"/api/v1/search-orders/{created['id']}")
+    assert detail.status_code == 200
+    assert detail.json()["vehicles"] == []
+
+
+@pytest.mark.asyncio
+async def test_mark_seen_and_delete(session: AsyncSession, client: AsyncClient) -> None:
+    created = (
+        await client.post("/api/v1/search-orders", json={"query": "Ford Focus"})
+    ).json()
+
+    repo = SearchOrderRepository(session)
+    order = await repo.get_by_id(created["id"])
+    assert order is not None
+    order.new_count = 3
+    await repo.save(order)
+
+    mark = await client.post(f"/api/v1/search-orders/{created['id']}/seen")
+    assert mark.status_code == 200
+    assert mark.json()["new_count"] == 0
+
+    missing = await client.get(f"/api/v1/search-orders/{created['id']}")
+    assert missing.status_code == 200
+
+    deleted = await client.delete(f"/api/v1/search-orders/{created['id']}")
+    assert deleted.status_code == 204
+
+    gone = await client.get(f"/api/v1/search-orders/{created['id']}")
+    assert gone.status_code == 404
+
+
+# =============================================================================
+# Job
+# =============================================================================
+
+
+@pytest.mark.asyncio
+async def test_job_completes_pending_order(
+    session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.jobs.process_search_orders import ProcessSearchOrdersJob
+
+    repo = SearchOrderRepository(session)
+    order = await repo.create(SearchOrder(user_id=TEST_USER_ID, query="BMW 320d"))
+
+    fake_result = SimpleNamespace(
+        vehicle=SimpleNamespace(source="mobile_de", external_id="ext-1")
+    )
+    fake_engine = MagicMock()
+    fake_engine.search = AsyncMock(return_value=SimpleNamespace(results=[fake_result]))
+
+    fake_persist = AsyncMock(return_value={"saved": 1, "created": 1, "updated": 0})
+
+    job = ProcessSearchOrdersJob()
+    monkeypatch.setattr(
+        "app.jobs.process_search_orders.SearchPersistenceService",
+        lambda _session: MagicMock(persist_engine_result=fake_persist),
+    )
+    monkeypatch.setattr(job, "_build_search_engine", lambda _session: fake_engine)
+    monkeypatch.setattr(
+        job, "_find_vehicle_id", AsyncMock(return_value=TEST_VEHICLE_ID)
+    )
+    monkeypatch.setattr(job, "_snapshot_item", staticmethod(lambda _r: "{}"))
+
+    db_manager = MagicMock()
+
+    class _Ctx:
+        def __init__(self, s: AsyncSession) -> None:
+            self._s = s
+
+        async def __aenter__(self) -> AsyncSession:
+            return self._s
+
+        async def __aexit__(self, *_: Any) -> None:
+            return None
+
+    db_manager.get_session.return_value = _Ctx(session)
+    context = JobContext(
+        db_manager=db_manager,
+        settings=MagicMock(search_orders_per_run=5),
+        logger=logging.getLogger("test_search_orders"),
+    )
+
+    result = await job.execute(context)
+
+    assert result.success, result.message
+    refreshed = await repo.get_by_id(order.id)
+    assert refreshed is not None
+    assert refreshed.status == "COMPLETED"
+    assert refreshed.results_count == 1
+    assert refreshed.new_count == 1
+    links = await repo.list_order_vehicles(order.id)
+    assert len(links) == 1
+    assert links[0].vehicle_id == TEST_VEHICLE_ID

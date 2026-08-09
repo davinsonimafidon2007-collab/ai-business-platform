@@ -11,6 +11,7 @@ import logging
 from app.jobs.base import JobContext
 from app.jobs.cleanup_cache import CleanupExpiredCacheJob
 from app.jobs.cleanup_old_searches import CleanupOldSearchesJob
+from app.jobs.process_search_orders import ProcessSearchOrdersJob
 from app.jobs.provider_canary import ProviderCanaryJob
 from app.jobs.refresh_market_cache import RefreshMarketCacheJob
 from app.jobs.refresh_opportunities import RefreshOpportunityJob
@@ -52,6 +53,13 @@ def create_scheduler(context: JobContext) -> Scheduler:
         CleanupOldSearchesJob(),
         interval=86400,  # 24 horas
     )
+
+    # Órdenes de búsqueda en background (PERSONAL.NOAUTH). interval=0 desactiva.
+    search_order_interval = int(
+        getattr(context.settings, "search_order_interval", 60) or 0
+    )
+    if search_order_interval > 0:
+        scheduler.register(ProcessSearchOrdersJob(), interval=search_order_interval)
 
     # Canary de scrapers (AS24 0 listings = fail). interval=0 desactiva.
     canary_interval = int(getattr(context.settings, "provider_canary_interval", 21600) or 0)

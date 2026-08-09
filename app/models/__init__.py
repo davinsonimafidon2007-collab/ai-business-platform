@@ -23,6 +23,7 @@ from app.models.refresh_token import RefreshToken
 from app.models.role import Role
 from app.models.search import Search
 from app.models.search_history import SearchHistory
+from app.models.search_order import SearchOrder, SearchOrderVehicle
 from app.models.user import User
 from app.models.vehicle import Vehicle
 from app.models.vehicle_evaluation import VehicleEvaluation
@@ -58,6 +59,8 @@ __all__ = [
     "Role",
     "Search",
     "SearchHistory",
+    "SearchOrder",
+    "SearchOrderVehicle",
     "User",
     "Vehicle",
     "VehicleEvaluation",
