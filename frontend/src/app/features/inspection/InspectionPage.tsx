@@ -5,6 +5,7 @@ import { inspectionService } from "../../services/inspection";
 import { InspectionProgressBar } from "./InspectionProgressBar";
 import { CategoryStep } from "./CategoryStep";
 import { InspectionSummary } from "./InspectionSummary";
+import { LiveNegotiationPanel } from "./LiveNegotiationPanel";
 import type {
   InspectionSession,
   InspectionSessionDetail,
@@ -69,6 +70,16 @@ export function InspectionPage({
     init();
   }, [vehicleId, initialSessionId]);
 
+  const refreshSummary = useCallback(async () => {
+    if (!session || pageState === "summary") return;
+    try {
+      const fresh = await inspectionService.getSummary(session.id);
+      setSummary(fresh);
+    } catch (err) {
+      console.error("Error refreshing live negotiation:", err);
+    }
+  }, [session, pageState]);
+
   const handleItemStatusChange = useCallback(
     async (itemId: string, status: InspectionItemStatus) => {
       if (!session) return;
@@ -96,6 +107,7 @@ export function InspectionPage({
           item_id: itemId,
           status,
         });
+        await refreshSummary();
       } catch (err) {
         console.error("Error updating item:", err);
         // Revert on error
@@ -115,7 +127,7 @@ export function InspectionPage({
         );
       }
     },
-    [session, catalog, currentCategoryIndex],
+    [session, catalog, currentCategoryIndex, refreshSummary],
   );
 
   const handleItemNotesChange = useCallback(
@@ -170,11 +182,12 @@ export function InspectionPage({
             ?.items.find((i) => i.id === itemId)?.status ?? "UNKNOWN",
           estimated_repair_cost: cost,
         });
+        await refreshSummary();
       } catch (err) {
         console.error("Error updating cost:", err);
       }
     },
-    [session, catalog, currentCategoryIndex],
+    [session, catalog, currentCategoryIndex, refreshSummary],
   );
 
   const handleNextCategory = useCallback(() => {
@@ -237,9 +250,10 @@ export function InspectionPage({
           notes: suggestion.notes, estimated_repair_cost: suggestion.suggested_repair_cost,
         }),
       }));
+      await refreshSummary();
     }
     setVisionSuggestions((previous) => previous.filter((item) => item.photo_id !== suggestion.photo_id));
-  }, [session]);
+  }, [session, refreshSummary]);
 
   const handleItemPhotoCapture = useCallback(async (itemId: string, _observationId: string | null, file: File) => {
     if (!session) return;
@@ -280,13 +294,14 @@ export function InspectionPage({
         // Upload photo with existing observation_id
         await inspectionService.uploadPhotoFile(session.id, item.observation_id, file);
       }
+      await refreshSummary();
     } catch (err) {
       console.error("Error uploading photo:", err);
       setError(err instanceof Error ? err.message : "Error al subir fotografía");
     } finally {
       setIsUploadingPhoto(false);
     }
-  }, [session, catalog, currentCategoryIndex]);
+  }, [session, catalog, currentCategoryIndex, refreshSummary]);
 
   const currentCategory = catalog[currentCategoryIndex];
   const totalItems = catalog.reduce((sum, cat) => sum + cat.items.length, 0);
@@ -364,6 +379,13 @@ export function InspectionPage({
         reviewedItems={reviewedItems}
         totalItems={totalItems}
       />
+
+      {summary?.negotiation && (
+        <LiveNegotiationPanel
+          totalRepairCost={summary.costs?.total_repair_cost ?? 0}
+          negotiation={summary.negotiation}
+        />
+      )}
 
       <div className="rounded-lg border border-gray-200 p-4">
         <button

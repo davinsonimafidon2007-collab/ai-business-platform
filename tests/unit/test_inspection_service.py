@@ -78,6 +78,19 @@ async def test_finalize_session_stores_summary(service: InspectionService, repos
 
 
 @pytest.mark.asyncio
+async def test_generate_summary_in_progress_includes_negotiation(service: InspectionService, repos: tuple[AsyncMock, AsyncMock, AsyncMock]) -> None:
+    """El summary de una sesión en progreso ya incluye la negociación en vivo."""
+    session = InspectionSession(vehicle_id="00000000-0000-0000-0000-000000000001")
+    observation = InspectionObservation(session_id=session.id, category_id="exterior", item_id="pintura", status="BAD", estimated_repair_cost=200, severity="CRITICAL")
+    repos[0].get_by_id.return_value = session
+    repos[1].get_by_session.return_value = [observation]
+    result = await service.generate_summary(session.id)
+    assert result is not None
+    assert "negotiation" in result
+    assert result["negotiation"].get("recommendation") is not None
+
+
+@pytest.mark.asyncio
 async def test_finalize_rejects_missing_or_completed_session(service: InspectionService, repos: tuple[AsyncMock, AsyncMock, AsyncMock]) -> None:
     repos[0].get_by_id.return_value = None
     with pytest.raises(ValueError, match="not found"):

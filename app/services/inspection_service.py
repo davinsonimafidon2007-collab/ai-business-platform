@@ -36,6 +36,7 @@ from app.models.negotiation import (
     DefectItem,
     InspectionResult,
     NegotiationInput,
+    NegotiationResult,
     RepairEstimate,
 )
 from app.models.vehicle_evaluation import VehicleEvaluation
@@ -304,46 +305,8 @@ class InspectionService:
         summary = self._build_summary(session, observations)
 
         # --- Ejecutar NegotiationEngine con los datos de la inspección ---
-        # Construir NegotiationInput a partir de los datos del summary
-        defect_items = self._build_defect_items(observations)
-        total_repair_cost = summary["costs"]["total_repair_cost"]
-        repair_estimate = RepairEstimate(
-            total_repair_cost=total_repair_cost,
-            parts_cost=summary["costs"]["parts_cost"],
-            labor_cost=summary["costs"]["labor_cost"],
-            paint_and_body_cost=summary["costs"]["paint_and_body_cost"],
-            diagnostic_cost=50.0 if total_repair_cost > 0 else 0.0,
-        )
-        inspection_result = InspectionResult(
-            defects=defect_items,
-            overall_condition=summary["overall_condition"] or 10,
-            has_accident_history=False,
-        )
-        # NegotiationInput requiere market_estimation, profit_analysis_data y vehicle_score_data
-        # Usamos datos mínimos (vacíos) ya que la inspección no tiene acceso directo a estos
-        # El NegotiationEngine tolera valores por defecto
-        from app.models.market import MarketEstimation
-        negotiation_input = NegotiationInput(
-            inspection_result=inspection_result,
-            repair_estimate=repair_estimate,
-            market_estimation=MarketEstimation(
-                market_price=0.0,
-                supply_level=50.0,
-                demand_level=50.0,
-                market_trend="stable",
-                confidence=50.0,
-            ),
-            asking_price=0.0,
-            profit_analysis_data={},
-            vehicle_score_data={},
-        )
-        negotiation_result = self._negotiation_engine.analyze(negotiation_input)
-
-        # Añadir NegotiationResult al summary
-        summary["negotiation"] = asdict(negotiation_result)
-        # Convertir enum recommendation a string
-        if "recommendation" in summary["negotiation"] and hasattr(summary["negotiation"]["recommendation"], "value"):
-            summary["negotiation"]["recommendation"] = summary["negotiation"]["recommendation"].value
+        negotiation_result = self._build_negotiation(summary, observations)
+        summary["negotiation"] = self._serialize_negotiation(negotiation_result)
 
         # --- Actualizar VehicleEvaluation si tenemos repositorio ---
         if self._evaluation_repo is not None:
@@ -400,10 +363,70 @@ class InspectionService:
             return session.summary
 
         observations = await self._observation_repo.get_by_session(session_id)
-        return self._build_summary(session, observations)
+        summary = self._build_summary(session, observations)
+        summary["negotiation"] = self._serialize_negotiation(
+            self._build_negotiation(summary, observations)
+        )
+        return summary
 
     # ------------------------------------------------------------------
     # Internal helpers
+
+    def _build_negotiation(
+        self, summary: dict[str, Any], observations: list[InspectionObservation]
+    ) -> NegotiationResult:
+        """Ejecuta NegotiationEngine con los datos actuales de la inspección.
+
+        Reutilizado por ``finalize_session`` y por ``generate_summary`` para
+        que la negociación se actualice en vivo mientras la inspección sigue
+        en progreso (PERSONAL.NOAUTH).
+        """
+        from app.models.market import MarketEstimation
+
+        defect_items = self._build_defect_items(observations)
+        total_repair_cost = summary["costs"]["total_repair_cost"]
+        repair_estimate = RepairEstimate(
+            total_repair_cost=total_repair_cost,
+            parts_cost=summary["costs"]["parts_cost"],
+            labor_cost=summary["costs"]["labor_cost"],
+            paint_and_body_cost=summary["costs"]["paint_and_body_cost"],
+            diagnostic_cost=50.0 if total_repair_cost > 0 else 0.0,
+        )
+        inspection_result = InspectionResult(
+            defects=defect_items,
+            overall_condition=summary["overall_condition"] or 10,
+            has_accident_history=False,
+        )
+        # NegotiationInput requiere market_estimation, profit_analysis_data y
+        # vehicle_score_data; la inspección no tiene acceso directo a ellos, así
+        # que se usan datos mínimos (el NegotiationEngine tolera valores por defecto).
+        negotiation_input = NegotiationInput(
+            inspection_result=inspection_result,
+            repair_estimate=repair_estimate,
+            market_estimation=MarketEstimation(
+                market_price=0.0,
+                supply_level=50.0,
+                demand_level=50.0,
+                market_trend="stable",
+                confidence=50.0,
+            ),
+            asking_price=0.0,
+            profit_analysis_data={},
+            vehicle_score_data={},
+        )
+        return self._negotiation_engine.analyze(negotiation_input)
+
+    @staticmethod
+    def _serialize_negotiation(
+        negotiation_result: NegotiationResult,
+    ) -> dict[str, Any]:
+        """Convierte NegotiationResult a dict con el enum recomendación en string."""
+        negotiation: dict[str, Any] = asdict(negotiation_result)
+        if "recommendation" in negotiation and hasattr(
+            negotiation["recommendation"], "value"
+        ):
+            negotiation["recommendation"] = negotiation["recommendation"].value
+        return negotiation
     # ------------------------------------------------------------------
 
     def _build_summary(
