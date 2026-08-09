@@ -1,15 +1,26 @@
 "use client";
 
 import { useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useAuthStore } from "@/app/store/auth-store";
 import { isAuthDisabled } from "@/app/config/app-mode";
 
+export const LAST_PATH_KEY = "last_path";
+
 export function AuthGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
+  const pathname = usePathname();
   const { isAuthenticated, isLoading } = useAuthStore();
   // Fuente de verdad única del bypass (PERS.CLOSE.1): NEXT_PUBLIC_AUTH_DISABLED.
   const authDisabled = isAuthDisabled();
+
+  // Persistir la última ruta de la app (PERSONAL.NOAUTH): al reabrir, la app
+  // "retoma la última sesión" en la misma pantalla, sin pasar por el login.
+  useEffect(() => {
+    if (typeof window === "undefined" || !pathname) return;
+    if (pathname === "/" || pathname.startsWith("/auth/")) return;
+    window.localStorage.setItem(LAST_PATH_KEY, pathname);
+  }, [pathname]);
 
   useEffect(() => {
     if (authDisabled) return;

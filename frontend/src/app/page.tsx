@@ -5,11 +5,33 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuthStore } from "@/app/store/auth-store";
 import { isAuthDisabled } from "@/app/config/app-mode";
+import { LAST_PATH_KEY } from "@/app/components/auth/auth-guard";
+
+const APP_PATHS = [
+  "/dashboard",
+  "/search",
+  "/vehicles",
+  "/history",
+  "/inspection",
+  "/opportunities",
+  "/deals",
+  "/admin",
+  "/api-keys",
+];
+
+function lastVisitedPath(): string | null {
+  if (typeof window === "undefined") return null;
+  const raw = window.localStorage.getItem(LAST_PATH_KEY);
+  if (!raw) return null;
+  const path = raw.startsWith("/") ? raw : `/${raw}`;
+  return APP_PATHS.some((prefix) => path.startsWith(prefix)) ? path : null;
+}
 
 export default function Home() {
   const router = useRouter();
   const { isAuthenticated, isLoading, initialize } = useAuthStore();
-  // Uso personal (PERS.CLOSE.1): no hay landing de login, directo al dashboard.
+  // Uso personal (PERS.CLOSE.1): no hay landing de login, directo al dashboard
+  // o a la última ruta visitada (PERSONAL.NOAUTH).
   const authDisabled = isAuthDisabled();
 
   useEffect(() => {
@@ -18,7 +40,7 @@ export default function Home() {
 
   useEffect(() => {
     if (authDisabled) {
-      router.replace("/dashboard/");
+      router.replace(lastVisitedPath() ?? "/dashboard/");
       return;
     }
     if (!isLoading && isAuthenticated) {
