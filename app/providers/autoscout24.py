@@ -100,8 +100,6 @@ class AutoScout24Provider(VehicleProvider):
         path = "/lst"
         if brand:
             path += f"/{quote(brand.lower().replace(' ', '-'))}"
-            if model:
-                path += f"/{quote(model.lower().replace(' ', '-'))}"
 
         params: dict[str, str] = {
             "atype": "C",
@@ -111,6 +109,9 @@ class AutoScout24Provider(VehicleProvider):
             "source": "listpage_search-mask",
             "ustate": "N,U",
         }
+
+        if model:
+            params["q"] = model
 
         # ``budget_min``/``budget_max`` son los nombres que usa SearchOrchestrator.
         mapping = {

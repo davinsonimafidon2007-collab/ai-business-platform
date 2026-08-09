@@ -41,13 +41,19 @@ def test_absolute_url_is_preserved() -> None:
 def test_brand_and_model_go_in_path() -> None:
     url = _provider().build_search_url("", brand="BMW", model="Serie 3")
 
-    assert urlparse(url).path == "/lst/bmw/serie-3"
+    parsed = urlparse(url)
+    assert parsed.path == "/lst/bmw"
+    query = parse_qs(parsed.query)
+    assert query["q"] == ["Serie 3"]
 
 
 def test_free_text_splits_into_brand_and_model() -> None:
     url = _provider().build_search_url("BMW 320")
 
-    assert urlparse(url).path == "/lst/bmw/320"
+    parsed = urlparse(url)
+    assert parsed.path == "/lst/bmw"
+    query = parse_qs(parsed.query)
+    assert query["q"] == ["320"]
 
 
 def test_orchestrator_budget_kwargs_map_to_price_filters() -> None:
