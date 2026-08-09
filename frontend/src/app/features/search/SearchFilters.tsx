@@ -6,6 +6,7 @@ import type { SearchFilters as SearchFiltersType } from "@/app/types/vehicle";
 
 interface SearchFiltersProps {
   onSearch: (filters: SearchFiltersType) => void;
+  onBackgroundSearch?: (filters: SearchFiltersType) => void;
   isLoading?: boolean;
 }
 
@@ -41,7 +42,7 @@ const SORT_OPTIONS = [
   { value: "profit", label: "Beneficio" },
 ];
 
-export function SearchFilters({ onSearch, isLoading }: SearchFiltersProps) {
+export function SearchFilters({ onSearch, onBackgroundSearch, isLoading }: SearchFiltersProps) {
   const [filters, setFilters] = useState<SearchFiltersType>({
     query: "",
     brand: "",
@@ -57,12 +58,17 @@ export function SearchFilters({ onSearch, isLoading }: SearchFiltersProps) {
     provider: "",
     sort_by: "",
     sort_order: "desc",
+    total_budget: undefined,
   });
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onSearch(filters);
+  };
+
+  const handleBackgroundSearch = () => {
+    onBackgroundSearch?.(filters);
   };
 
   const handleReset = () => {
@@ -81,6 +87,7 @@ export function SearchFilters({ onSearch, isLoading }: SearchFiltersProps) {
       provider: "",
       sort_by: "",
       sort_order: "desc",
+      total_budget: undefined,
     });
   };
 
@@ -104,10 +111,36 @@ export function SearchFilters({ onSearch, isLoading }: SearchFiltersProps) {
             className="mt-1 block w-full rounded-lg border border-secondary-300 bg-white px-3 py-2 text-sm text-secondary-900 placeholder-secondary-400 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-secondary-600 dark:bg-secondary-700 dark:text-secondary-100 dark:placeholder-secondary-500"
           />
         </div>
+        <div className="w-full sm:w-44">
+          <label
+            htmlFor="total-budget"
+            className="block text-sm font-medium text-secondary-700 dark:text-secondary-300"
+            title="Capital total disponible (compra + matriculación + costes de importación)"
+          >
+            Importe total (€)
+          </label>
+          <input
+            id="total-budget"
+            type="number"
+            min={0}
+            value={filters.total_budget ?? ""}
+            onChange={(e) =>
+              update("total_budget", e.target.value ? Number(e.target.value) : undefined)
+            }
+            placeholder="Ej: 12000"
+            title="Capital total de la operación; la app calcula el precio máximo de compra"
+            className="mt-1 block w-full rounded-lg border border-secondary-300 bg-white px-3 py-2 text-sm text-secondary-900 placeholder-secondary-400 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-secondary-600 dark:bg-secondary-700 dark:text-secondary-100 dark:placeholder-secondary-500"
+          />
+        </div>
         <div className="flex items-end gap-2">
           <Button type="submit" disabled={isLoading}>
             {isLoading ? "Buscando..." : "Buscar"}
           </Button>
+          {onBackgroundSearch && (
+            <Button type="button" variant="outline" onClick={handleBackgroundSearch}>
+              Buscar en segundo plano
+            </Button>
+          )}
           <Button type="button" variant="ghost" onClick={handleReset}>
             Limpiar
           </Button>

@@ -14,6 +14,8 @@ from app.models.opportunity import Opportunity
 from app.models.search import Search
 from app.models.user import User
 from app.models.vehicle import Vehicle
+from app.models.vehicle_evaluation import VehicleEvaluation
+from app.repositories.search_order_repository import SearchOrderRepository
 
 router = APIRouter(tags=["Dashboard"])
 
@@ -91,6 +93,61 @@ async def get_dashboard_stats(
     )
     average_execution_time = avg_time_result.scalar() or 0
 
+    # --- Órdenes de búsqueda (badge de nuevos + últimas órdenes) ---
+    order_repo = SearchOrderRepository(session)
+    new_search_results = await order_repo.total_new_by_user(str(user_id))
+    recent_orders_raw = await order_repo.list_by_user(str(user_id), limit=5)
+    recent_orders = [
+        {
+            "id": order.id,
+            "query": order.query,
+            "status": order.status,
+            "results_count": order.results_count,
+            "new_count": order.new_count,
+            "max_purchase_price": order.max_purchase_price,
+            "error_message": order.error_message,
+            "created_at": order.created_at.isoformat() if order.created_at else None,
+            "last_run_at": order.last_run_at.isoformat() if order.last_run_at else None,
+        }
+        for order in recent_orders_raw
+    ]
+
+    # --- Últimos vehículos guardados con su evaluación (si existe) ---
+    vehicles_stmt = (
+        select(Vehicle, VehicleEvaluation)
+        .outerjoin(VehicleEvaluation, VehicleEvaluation.vehicle_id == Vehicle.id)
+        .where(Vehicle.user_id == user_id)
+        .order_by(Vehicle.created_at.desc())
+        .limit(6)
+    )
+    recent_vehicles_rows = (await session.execute(vehicles_stmt)).all()
+    recent_vehicles = []
+    for vehicle, evaluation in recent_vehicles_rows:
+        images = (vehicle.images or "").split(",")
+        recent_vehicles.append(
+            {
+                "id": vehicle.id,
+                "brand": vehicle.brand,
+                "model": vehicle.model,
+                "year": vehicle.year,
+                "price": vehicle.price,
+                "currency": vehicle.currency,
+                "image_url": images[0].strip() if images and images[0].strip() else None,
+                "score": evaluation.score if evaluation else None,
+                "classification": evaluation.classification if evaluation else None,
+                "estimated_profit": (
+                    evaluation.estimated_profit if evaluation else None
+                ),
+                "estimated_total_cost": (
+                    evaluation.estimated_total_cost if evaluation else None
+                ),
+                "has_evaluation": evaluation is not None,
+                "created_at": vehicle.created_at.isoformat()
+                if vehicle.created_at
+                else None,
+            }
+        )
+
     return {
         "total_searches": total_searches,
         "recent_searches": recent_searches,
@@ -100,4 +157,7 @@ async def get_dashboard_stats(
         "total_opportunities": total_opportunities,
         "average_results_per_search": round(float(average_results_per_search), 2),
         "average_execution_time": round(float(average_execution_time), 2),
+        "new_search_results": new_search_results,
+        "recent_orders": recent_orders,
+        "recent_vehicles": recent_vehicles,
     }

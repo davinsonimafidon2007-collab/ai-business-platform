@@ -258,6 +258,8 @@ export interface SearchFilters {
   provider?: string;
   sort_by?: string;
   sort_order?: "asc" | "desc";
+  /** Importe total de la operación (EUR) para la búsqueda en segundo plano. */
+  total_budget?: number;
 }
 
 // =============================================================================

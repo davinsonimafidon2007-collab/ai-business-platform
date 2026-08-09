@@ -1,10 +1,14 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
+import { useMutation } from "@tanstack/react-query";
 import { SearchFilters } from "@/app/features/search/SearchFilters";
 import { VehicleTable } from "@/app/features/vehicle/VehicleTable";
 import { VehicleDrawer } from "@/app/features/vehicle/VehicleDrawer";
 import { useSearchVehicles, formatFiltersForApi } from "@/app/hooks/use-search";
+import { searchOrdersService } from "@/app/services/search-orders";
+import type { CreateSearchOrderRequest, SearchOrder } from "@/app/types/search-orders";
 import type { SearchFilters as SearchFiltersType, SearchResultItem } from "@/app/types/vehicle";
 
 function searchErrorMessage(err: unknown): { title: string; detail: string; hint?: string } {
@@ -48,10 +52,36 @@ function searchErrorMessage(err: unknown): { title: string; detail: string; hint
 export default function SearchPage() {
   const searchMutation = useSearchVehicles();
   const [selectedVehicle, setSelectedVehicle] = useState<SearchResultItem | null>(null);
+  const [backgroundOrder, setBackgroundOrder] = useState<SearchOrder | null>(null);
+
+  const backgroundMutation = useMutation({
+    mutationFn: (payload: CreateSearchOrderRequest) => searchOrdersService.create(payload),
+    onSuccess: (order) => setBackgroundOrder(order),
+  });
 
   const handleSearch = (filters: SearchFiltersType) => {
     const apiParams = formatFiltersForApi(filters);
     searchMutation.mutate(apiParams);
+  };
+
+  const handleBackgroundSearch = (filters: SearchFiltersType) => {
+    const payload: CreateSearchOrderRequest = {
+      query: filters.query.trim() || "*",
+      total_budget: filters.total_budget ?? null,
+      filters: {
+        brand: filters.brand || undefined,
+        model: filters.model || undefined,
+        min_year: filters.min_year,
+        max_year: filters.max_year,
+        min_mileage: filters.min_mileage,
+        max_mileage: filters.max_mileage,
+        fuel_type: filters.fuel_type || undefined,
+        transmission: filters.transmission || undefined,
+        provider: filters.provider || undefined,
+        max_results: 30,
+      },
+    };
+    backgroundMutation.mutate(payload);
   };
 
   return (
@@ -65,7 +95,37 @@ export default function SearchPage() {
         </p>
       </div>
 
-      <SearchFilters onSearch={handleSearch} isLoading={searchMutation.isPending} />
+      <SearchFilters
+        onSearch={handleSearch}
+        onBackgroundSearch={handleBackgroundSearch}
+        isLoading={searchMutation.isPending || backgroundMutation.isPending}
+      />
+
+      {backgroundMutation.isSuccess && backgroundOrder && (
+        <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-900/20">
+          <h3 className="text-sm font-semibold text-blue-700 dark:text-blue-300">
+            Búsqueda lanzada en segundo plano
+          </h3>
+          <p className="mt-1 text-sm text-blue-600 dark:text-blue-400">
+            {backgroundOrder.query} se está procesando. Te avisaremos con el
+            contador de nuevos resultados.
+          </p>
+          <Link
+            href="/orders"
+            className="mt-2 inline-block text-sm font-medium text-blue-700 underline hover:text-blue-800 dark:text-blue-300"
+          >
+            Ver el estado de mis búsquedas →
+          </Link>
+        </div>
+      )}
+
+      {backgroundMutation.isError && (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/20">
+          <p className="text-sm text-red-700 dark:text-red-300">
+            No se pudo lanzar la búsqueda en segundo plano. Inténtalo de nuevo.
+          </p>
+        </div>
+      )}
 
       {/* Provider Issues Warning (SEARCH.DIAG.1) */}
       {searchMutation.isSuccess && (searchMutation.data.provider_issues?.length ?? 0) > 0 && (

@@ -83,7 +83,7 @@ class User(Base):
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
-    search_orders: Mapped[list["SearchOrder"]] = relationship(
+    search_orders: Mapped[list[SearchOrder]] = relationship(
         "SearchOrder",
         back_populates="user",
         cascade="all, delete-orphan",
