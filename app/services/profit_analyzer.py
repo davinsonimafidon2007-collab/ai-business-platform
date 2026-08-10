@@ -91,6 +91,12 @@ class CostBreakdown:
     total_cost: float = 0.0
     """Coste total de la importación (purchase_price + fixed + variable)."""
 
+    iedmt_amount: float = 0.0
+    """Impuesto especial IEDMT basado en emisiones CO₂ (g/km). Solo España."""
+
+    co2_gkm: float | None = None
+    """Emisiones CO₂ parseadas del vehículo (None si no disponibles)."""
+
     # ------------------------------------------------------------------
     # Explicación por componente (labels legibles, domain en español)
     # ------------------------------------------------------------------
@@ -193,6 +199,8 @@ class VehicleData(Protocol):
     def year(self) -> int | None: ...
     @property
     def mileage(self) -> int | None: ...
+    @property
+    def emissions(self) -> str | None: ...
 
 
 # =============================================================================
@@ -265,10 +273,14 @@ class ProfitAnalyzer:
             )
 
         # --- Calcular costes ---
+        from app.services.iedmt import parse_co2_gkm
+
+        co2_gkm = parse_co2_gkm(getattr(vehicle, "emissions", None))
         breakdown = self._compute_cost_breakdown(
             purchase_price=purchase_price,
             profile=profile,
             extra_costs=extra_costs,
+            co2_gkm=co2_gkm,
         )
 
         # --- Precio de venta estimado ---
@@ -351,6 +363,7 @@ class ProfitAnalyzer:
         purchase_price: float,
         profile: Any,
         extra_costs: dict[str, float],
+        co2_gkm: float | None = None,
     ) -> CostBreakdown:
         """Calcula el desglose completo de costes.
 
@@ -358,6 +371,7 @@ class ProfitAnalyzer:
             purchase_price: Precio de compra del vehículo.
             profile: Perfil de costes ImportCostProfile.
             extra_costs: Costes adicionales opcionales.
+            co2_gkm: Emisiones CO₂ del vehículo (para IEDMT, solo España).
 
         Returns:
             CostBreakdown con todos los costes calculados.
@@ -369,8 +383,14 @@ class ProfitAnalyzer:
         paperwork_cost = profile.paperwork_cost
         base_miscellaneous = profile.miscellaneous_cost
 
+        # IEDMT: impuesto especial por CO₂ (solo España, co2 disponible)
+        from app.services.iedmt import iedmt_tax
+
+        iedmt = iedmt_tax(co2_gkm) if co2_gkm else 0.0
+
         # Costes variables (porcentaje sobre el precio de compra)
-        taxes = purchase_price * profile.tax_rate
+        # Si hay IEDMT, se suma al tax_rate base
+        taxes = purchase_price * profile.tax_rate + iedmt
         commission_cost = purchase_price * profile.commission_rate
         repair_estimate = purchase_price * profile.repair_estimate_rate
 
@@ -403,6 +423,8 @@ class ProfitAnalyzer:
             total_fixed_costs=total_fixed_costs,
             total_variable_costs=total_variable_costs,
             total_cost=total_cost,
+            iedmt_amount=iedmt,
+            co2_gkm=co2_gkm,
         )
 
     # ------------------------------------------------------------------

@@ -169,7 +169,7 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:3000,http://localhost:5173,http://localhost:8080,capacitor://localhost,ionic://localhost,http://localhost,https://localhost"
     cors_allow_credentials: bool = True
     cors_allow_methods: str = "GET,POST,PUT,PATCH,DELETE,OPTIONS"
-    cors_allow_headers: str = "*"
+    cors_allow_headers: str = "Authorization,Content-Type,Accept,X-Request-ID,X-API-Key,X-Requested-With"
     rate_limit_global: int = 60
     rate_limit_login: int = 5
     rate_limit_register: int = 10
@@ -243,6 +243,13 @@ class Settings(BaseSettings):
     search_order_retry_cooldown_minutes: int = 30
     """Cooldown (min) entre reintentos de una orden FAILED (J1). Evita
     reintentar un fallo permanente de provider en cada ciclo del job."""
+
+    search_order_max_pending_per_user: int = 10
+    """Máximo de órdenes activas (PENDING/RUNNING/FAILED) por usuario (P3).
+
+    Sin límite, un usuario puede encolar cientos de búsquedas que el job
+    procesa una a una (cada una golpea providers live): backlog y abuso de
+    recursos. Al superar el tope, crear otra orden responde 409."""
 
     job_failure_alert_enabled: bool = True
     """Master toggle for job consecutive-failure alerts (Task J.1)."""

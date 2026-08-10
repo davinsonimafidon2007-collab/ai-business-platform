@@ -40,7 +40,12 @@ class DealRepository:
             The Deal if found, None otherwise.
         """
         result = await self.session.execute(
-            select(Deal).where(Deal.id == str(deal_id))
+            select(Deal)
+            .where(Deal.id == str(deal_id))
+            .options(
+                selectinload(Deal.vehicle),
+                selectinload(Deal.opportunity),
+            )
         )
         return result.scalar_one_or_none()
 

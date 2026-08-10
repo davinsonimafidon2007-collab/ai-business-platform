@@ -17,6 +17,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.budget_search_agent import BudgetSearchAgent
 from app.config.import_costs import PROFILE_ALIASES, get_profile
+from app.core.config import settings
+from app.core.limits import MAX_LIST_DEPTH, MAX_SEARCH_RESULTS
 from app.database import get_db_session
 from app.dependencies.auth import get_current_user
 from app.models.search_order import SearchOrder
@@ -133,17 +135,47 @@ async def create_search_order(
         agent = BudgetSearchAgent(profile_name=profile_name)
         max_purchase_price = agent.calculate_max_purchase_price(request.total_budget)
         if max_purchase_price <= 0:
+            profile_obj = get_profile(profile_name)
+            fixed = (
+                profile_obj.transport_cost
+                + profile_obj.registration_cost
+                + profile_obj.inspection_cost
+                + profile_obj.paperwork_cost
+                + profile_obj.miscellaneous_cost
+            )
             raise HTTPException(
                 status_code=400,
                 detail=(
                     f"Presupuesto insuficiente: {request.total_budget:.0f} € no cubre "
-                    f"los costes fijos de importación del perfil '{profile_name}'. "
-                    f"Sin ese margen no puede comprarse ningún vehículo."
+                    f"los costes fijos de importación ({fixed:.0f} €) del perfil "
+                    f"'{profile_name}'. Sube el presupuesto o elige un perfil con "
+                    f"costes fijos menores."
                 ),
             )
 
     filters = dict(request.filters or {})
     filters.setdefault("max_results", 30)
+    # P3: clamp max_results a [1, MAX_SEARCH_RESULTS] (los filtros son un dict
+    # libre que no pasa por el validator de SearchRequest).
+    try:
+        max_results = int(filters["max_results"])
+    except (TypeError, ValueError):
+        max_results = 30
+    filters["max_results"] = min(max(1, max_results), MAX_SEARCH_RESULTS)
+
+    # P3: tope de órdenes activas por usuario (evita backlog/abuso del job).
+    repo = SearchOrderRepository(session)
+    max_pending = int(settings.search_order_max_pending_per_user or 0)
+    if max_pending > 0:
+        active = await repo.count_active_by_user(str(current_user.id))
+        if active >= max_pending:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f"Ya tienes {active} búsquedas en curso (límite: {max_pending}). "
+                    "Espera a que terminen o borra alguna antes de crear otra."
+                ),
+            )
 
     order = SearchOrder(
         user_id=str(current_user.id),
@@ -155,14 +187,13 @@ async def create_search_order(
         results_count=0,
         new_count=0,
     )
-    repo = SearchOrderRepository(session)
     saved = await repo.create(order)
     return _order_read(saved)
 
 
 @router.get("", response_model=list[SearchOrderRead])
 async def list_search_orders(
-    skip: int = Query(0, ge=0),
+    skip: int = Query(0, ge=0, le=MAX_LIST_DEPTH),
     limit: int = Query(100, ge=1, le=500),
     session: AsyncSession = Depends(get_db_session),
     current_user: User = Depends(get_current_user),

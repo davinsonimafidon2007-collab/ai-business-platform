@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import logging
 import re
 from abc import ABC, abstractmethod
+from collections import defaultdict
 from typing import Any, ClassVar
 from urllib.parse import urljoin
 
@@ -11,13 +13,15 @@ from app.providers.dto import VehicleDetail, VehicleSearchResult
 from app.providers.exceptions import ProviderParsingError
 from app.providers.http_client import ProviderHttpClient
 
+logger = logging.getLogger(__name__)
+
 
 class VehicleProvider(ABC):
     """Interfaz abstracta que deben implementar todos los providers de vehículos.
 
     Incluye toda la lógica de parsing común: extracción de URL, precio,
     kilometraje, año, combustible, transmisión, potencia, ubicación,
-imágenes y descripción.
+    imágenes y descripción.
 
     Las subclases solo deben definir:
       - ``source_name`` (property)
@@ -32,6 +36,39 @@ imágenes y descripción.
       El provider delega en estos colaboradores pero conserva su API pública
       estable (``search``, ``get_vehicle``) y sus métodos de parsing privados.
     """
+
+    # --------------------------------------------------------------
+    # Selector health tracking (AUDIT.PARALLEL.1 — selectores frágiles)
+    # --------------------------------------------------------------
+
+    _selector_hits: ClassVar[defaultdict[str, int]] = defaultdict(int)
+    _selector_misses: ClassVar[defaultdict[str, int]] = defaultdict(int)
+
+    @classmethod
+    def get_selector_health(cls) -> dict[str, dict[str, int]]:
+        """Return selector hit/miss counts for monitoring."""
+        all_keys = set(cls._selector_hits.keys()) | set(cls._selector_misses.keys())
+        return {
+            key: {
+                "hits": cls._selector_hits.get(key, 0),
+                "misses": cls._selector_misses.get(key, 0),
+            }
+            for key in sorted(all_keys)
+        }
+
+    @classmethod
+    def reset_selector_health(cls) -> None:
+        """Reset health counters (for testing)."""
+        cls._selector_hits.clear()
+        cls._selector_misses.clear()
+
+    def _track_selector(self, selector: str, matched: bool) -> None:
+        """Track whether a CSS selector matched any nodes."""
+        key = f"{self.source_name}:{selector}"
+        if matched:
+            self._selector_hits[key] += 1
+        else:
+            self._selector_misses[key] += 1
 
     # --------------------------------------------------------------
     # Configuraciones modificables por subclase

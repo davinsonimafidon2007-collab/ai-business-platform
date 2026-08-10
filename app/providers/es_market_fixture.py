@@ -7,6 +7,12 @@ Pensado para:
   - alimentar ComparableMarketEstimator con precios destino ES
   - tests deterministas sin red
   - sustituible por coches.net / AS24-ES en P.1b sin cambiar el estimador
+
+NOTE (AUDIT.PARALLEL.1): Este provider es un fixture offline intencional.
+Los providers ES live (coches.net, etc.) NO están implementados porque
+requieren scraping de sitios con anti-bot agresivo. El pipeline de
+"comparables españoles" usa datos de fixture para estimación de mercado.
+Para datos live, usar AutoScout24 (que sí tiene scraping funcional).
 """
 
 from __future__ import annotations

@@ -4,8 +4,9 @@ from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
-from app.core.limits import clamp_limit
+from app.core.limits import clamp_limit, clamp_skip
 from app.models.vehicle import Vehicle
 
 
@@ -20,7 +21,14 @@ class VehicleRepository:
         return vehicle
 
     async def get_by_id(self, vehicle_id: str | UUID) -> Vehicle | None:
-        result = await self.session.execute(select(Vehicle).where(Vehicle.id == str(vehicle_id)))
+        result = await self.session.execute(
+            select(Vehicle)
+            .where(Vehicle.id == str(vehicle_id))
+            .options(
+                selectinload(Vehicle.evaluations),
+                selectinload(Vehicle.opportunities),
+            )
+        )
         return result.scalar_one_or_none()
 
     async def get_by_external_id(self, source: str, external_id: str) -> Vehicle | None:
@@ -30,11 +38,13 @@ class VehicleRepository:
         return result.scalar_one_or_none()
 
     async def list_all(self, skip: int = 0, limit: int = 100) -> list[Vehicle]:
+        skip = clamp_skip(skip)
         limit = clamp_limit(limit)
         result = await self.session.execute(select(Vehicle).offset(skip).limit(limit))
         return list(result.scalars().all())
 
     async def list_by_user(self, user_id: str, skip: int = 0, limit: int = 100) -> list[Vehicle]:
+        skip = clamp_skip(skip)
         limit = clamp_limit(limit)
         result = await self.session.execute(
             select(Vehicle)

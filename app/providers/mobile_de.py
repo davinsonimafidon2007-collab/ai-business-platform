@@ -122,6 +122,7 @@ class MobileDeProvider(VehicleProvider):
         ]
         for selector in strategies:
             nodes = soup.select(selector)
+            self._track_selector(selector, bool(nodes))
             if nodes:
                 logger.debug("mobile_de: selector %r -> %d nodos", selector, len(nodes))
                 return nodes

@@ -322,10 +322,17 @@ class Scheduler:
             return await self._execute_job(job)
 
     async def _execute_job(self, job: Job) -> JobResult:
-        """Execute a job and time it."""
+        """Execute a job and time it.
+
+        Uses a Redis distributed lock when available to prevent duplicate
+        execution across multiple instances (AUDIT.PARALLEL.1).
+        """
+        from app.core.distributed_lock import RedisLock
+
         start = datetime.now(UTC)
         try:
-            result = await job.execute(self._context)
+            async with RedisLock(job.name, ttl=max(60, getattr(job, "interval", 300) * 2)):
+                result = await job.execute(self._context)
         except asyncio.CancelledError:
             raise
         except Exception as exc:

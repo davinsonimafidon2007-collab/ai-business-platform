@@ -25,6 +25,7 @@ from bs4 import BeautifulSoup
 
 from app.providers.base import VehicleProvider
 from app.providers.dto import VehicleDetail, VehicleSearchResult
+from app.providers.exceptions import ProviderParsingError
 from app.providers.parsers import autoscout24_parser
 
 logger = logging.getLogger(__name__)
@@ -154,24 +155,50 @@ class AutoScout24Provider(VehicleProvider):
         return self._parse_search_results(html, search_url)
 
     def _parse_search_results(self, html: str, search_url: str) -> list[VehicleSearchResult]:
-        """Parsea resultados priorizando ``__NEXT_DATA__`` (más estable)."""
-        from_json = self._parse_listings_from_next_data(html)
-        if from_json:
+        """Parsea resultados priorizando ``__NEXT_DATA__`` (más estable).
+
+        Si ``__NEXT_DATA__`` está presente y es legible, su resultado es
+        autoritativo (incluye 0 resultados legítimos). Si el JSON está roto o
+        cambió su estructura (P2) y el fallback HTML tampoco encuentra anuncios,
+        lanza ``ProviderParsingError`` para que el orquestador reporte un
+        ProviderIssue en vez de devolver "0 resultados" silenciosos.
+        """
+        from_json, status = self._parse_listings_from_next_data(html)
+        if status == autoscout24_parser.NEXT_DATA_OK:
             logger.debug(
                 "autoscout24: %d anuncios extraídos de __NEXT_DATA__",
                 len(from_json),
             )
             return from_json
 
-        logger.info(
-            "autoscout24: __NEXT_DATA__ ausente o vacío; fallback a selectores HTML"
-        )
-        return super()._parse_search_results(html, search_url)
+        if status == autoscout24_parser.NEXT_DATA_ABSENT:
+            logger.info(
+                "autoscout24: __NEXT_DATA__ ausente; fallback a selectores HTML"
+            )
+            return super()._parse_search_results(html, search_url)
 
-    def _parse_listings_from_next_data(self, html: str) -> list[VehicleSearchResult]:
+        logger.warning(
+            "autoscout24: __NEXT_DATA__ presente pero ilegible (%s); "
+            "fallback a selectores HTML",
+            status,
+        )
+        html_results = super()._parse_search_results(html, search_url)
+        if not html_results:
+            raise ProviderParsingError(
+                "AutoScout24 cambió la estructura de su página de resultados: "
+                f"__NEXT_DATA__ {status} y ningún anuncio parseable por HTML.",
+                provider=self.source_name,
+            )
+        return html_results
+
+    def _parse_listings_from_next_data(
+        self, html: str
+    ) -> tuple[list[VehicleSearchResult], str]:
         """Extrae listings desde el JSON embebido de Next.js.
 
         Delega en ``autoscout24_parser.parse_listings_from_next_data``.
+        Devuelve ``(results, status)``: el estado distingue 0 resultados
+        legítimos de un cambio estructural (P2).
         """
         base = (self._base_url or BASE_URL).rstrip("/")
         return autoscout24_parser.parse_listings_from_next_data(
@@ -208,6 +235,7 @@ class AutoScout24Provider(VehicleProvider):
         ]
         for selector in strategies:
             nodes = soup.select(selector)
+            self._track_selector(selector, bool(nodes))
             if nodes:
                 logger.debug(
                     "autoscout24: selector HTML %r -> %d nodos",
@@ -349,7 +377,8 @@ class AutoScout24Provider(VehicleProvider):
             raw = script.string or script.get_text() or ""
             try:
                 data = json.loads(raw)
-            except Exception:
+            except (TypeError, ValueError):
+                logger.debug("autoscout24: JSON-LD de precio malformado, se omite")
                 continue
             price = self._price_from_json_ld(data)
             if price is not None:
@@ -369,7 +398,10 @@ class AutoScout24Provider(VehicleProvider):
         for sel in css_candidates:
             try:
                 nodes = soup.select(sel)
-            except Exception:
+            except (TypeError, ValueError):
+                logger.debug(
+                    "autoscout24: selector de precio %r inválido, se omite", sel
+                )
                 continue
             for node in nodes:
                 text = node.get_text(" ", strip=True)
