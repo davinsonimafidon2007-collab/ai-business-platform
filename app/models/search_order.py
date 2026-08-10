@@ -55,6 +55,9 @@ class SearchOrder(Base):
     """Filtros de búsqueda adicionales (JSON serializado)."""
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="PENDING")
     """PENDING | RUNNING | COMPLETED | FAILED"""
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    """Intentos de procesamiento. Una orden FAILED con ``attempts`` >=
+    ``search_order_max_attempts`` se abandona (no se reintenta cada ciclo)."""
     results_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     """Vehículos totales encontrados por esta orden."""
     new_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)

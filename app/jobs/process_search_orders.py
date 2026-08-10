@@ -51,7 +51,16 @@ class ProcessSearchOrdersJob(Job):
                             recovered,
                         )
 
-                orders = await order_repo.pending_orders(limit=settings.search_orders_per_run)
+                orders = await order_repo.pending_orders(
+                    limit=settings.search_orders_per_run,
+                    max_attempts=int(
+                        getattr(settings, "search_order_max_attempts", 5) or 0
+                    ),
+                    retry_cooldown_minutes=int(
+                        getattr(settings, "search_order_retry_cooldown_minutes", 30)
+                        or 0
+                    ),
+                )
                 if not orders:
                     return JobResult(
                         success=True,
@@ -79,37 +88,45 @@ class ProcessSearchOrdersJob(Job):
 
                     try:
 
-                        existing_ids = {
-                            v.vehicle_id
-                            for v in await order_repo.list_order_vehicles(order.id, limit=10000)
-                        }
+                        existing_ids = await order_repo.vehicle_ids_for_order(order.id)
 
                         domain_request = self._build_request(order)
                         engine_result = await engine.search(domain_request)
 
-                        await persistence.persist_engine_result(
+                        persist_info = await persistence.persist_engine_result(
                             user_id=order.user_id,
                             engine_result=engine_result,
                         )
                         results = list(getattr(engine_result, "results", []) or [])
+                        # persist_engine_result devuelve el vehicle_id por índice:
+                        # vincula sin re-consultar por source/external_id (J3).
+                        links = persist_info.get("links", {})
 
                         new_count = 0
-                        for search_result in results:
-                            dto = getattr(search_result, "vehicle", None)
-                            vehicle_id = await self._find_vehicle_id(
-                                session, order.user_id, dto
-                            )
+                        unlinked = 0
+                        for idx, search_result in enumerate(results):
+                            vehicle_id = links.get(idx)
                             if vehicle_id is None:
+                                # Sin source/external_id no se pudo persistir ni
+                                # vincular: no contarlo como resultado de la orden.
+                                unlinked += 1
                                 continue
                             item_json = self._snapshot_item(search_result)
-                            link = await order_repo.add_vehicle(
+                            await order_repo.add_vehicle(
                                 order, vehicle_id, seen=False, result_json=item_json
                             )
                             if vehicle_id not in existing_ids:
                                 new_count += 1
-                            session.add(link)
 
-                        order.results_count = len(results)
+                        if unlinked:
+                            logger.warning(
+                                "Order %s: %d result(s) without linkable vehicle "
+                                "(missing source/external_id)",
+                                order.id,
+                                unlinked,
+                            )
+
+                        order.results_count = len(results) - unlinked
                         order.new_count = new_count
                         order.status = "COMPLETED"
                         order.error_message = None
@@ -117,16 +134,17 @@ class ProcessSearchOrdersJob(Job):
                         order.updated_at = datetime.now(UTC)
                         await order_repo.save(order)
                         completed += 1
-                        total_found += len(results)
+                        total_found += order.results_count
                         logger.info(
                             "Search order %s completed: %d results (%d new)",
                             order.id,
-                            len(results),
+                            order.results_count,
                             new_count,
                         )
                     except Exception as exc:
                         logger.exception("Search order %s failed", order.id)
                         order.status = "FAILED"
+                        order.attempts = (order.attempts or 0) + 1
                         order.error_message = str(exc)[:2000]
                         order.last_run_at = datetime.now(UTC)
                         order.updated_at = datetime.now(UTC)
@@ -248,25 +266,10 @@ class ProcessSearchOrdersJob(Job):
 
             return _build_search_result_item(search_result).model_dump_json()
         except Exception:
-            logger.exception("No se pudo serializar el snapshot del resultado")
-            return None
-
-    async def _find_vehicle_id(self, session: Any, user_id: str, dto: Any) -> str | None:
-        if dto is None:
-            return None
-        source = getattr(dto, "source", None)
-        external_id = getattr(dto, "external_id", None)
-        if not source or not external_id:
-            return None
-        from sqlalchemy import select
-
-        from app.models.vehicle import Vehicle
-
-        result = await session.execute(
-            select(Vehicle.id).where(
-                Vehicle.source == str(source),
-                Vehicle.external_id == str(external_id),
-                Vehicle.user_id == str(user_id),
+            vehicle = getattr(search_result, "vehicle", None)
+            ext_id = getattr(vehicle, "external_id", None) if vehicle is not None else None
+            logger.exception(
+                "No se pudo serializar el snapshot del resultado (external_id=%s)",
+                ext_id,
             )
-        )
-        return result.scalar_one_or_none()
+            return None

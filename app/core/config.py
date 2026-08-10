@@ -236,6 +236,14 @@ class Settings(BaseSettings):
     """Orden RUNNING más vieja que esto (min) se resetea a PENDING en el
     siguiente run (recovery de crashes/OOM). 0 = disabled."""
 
+    search_order_max_attempts: int = 5
+    """Máximo de intentos de procesamiento de una orden (J1). Una orden FAILED
+    que supera este tope se abandona. 0 = sin límite (reintenta siempre)."""
+
+    search_order_retry_cooldown_minutes: int = 30
+    """Cooldown (min) entre reintentos de una orden FAILED (J1). Evita
+    reintentar un fallo permanente de provider en cada ciclo del job."""
+
     job_failure_alert_enabled: bool = True
     """Master toggle for job consecutive-failure alerts (Task J.1)."""
 

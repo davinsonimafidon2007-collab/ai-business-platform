@@ -3,11 +3,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from app.agents.budget_search_agent import BudgetSearchAgent
 from app.config.import_costs import PROFILE_ALIASES, get_profile
+from app.dependencies.auth import get_current_user
+from app.models.user import User
 
 router = APIRouter(prefix="/budget-search", tags=["budget-search"])
 
@@ -27,7 +29,10 @@ class BudgetSearchResponse(BaseModel):
 
 
 @router.post("/search", response_model=BudgetSearchResponse)
-async def search_by_budget(request: BudgetSearchRequest) -> Any:
+async def search_by_budget(
+    request: BudgetSearchRequest,
+    current_user: User = Depends(get_current_user),
+) -> Any:
     """Busca vehículos que encajen en el capital disponible."""
     profile_name = (request.profile or "SPAIN").upper()
     profile_name = PROFILE_ALIASES.get(profile_name, profile_name)

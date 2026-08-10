@@ -39,7 +39,7 @@ class SearchPersistenceService:
         self,
         user_id: str,
         engine_result: Any,
-    ) -> dict[str, int]:
+    ) -> dict[str, Any]:
         """Persiste vehículos + evaluaciones + oportunidades de un resultado.
 
         Args:
@@ -47,12 +47,16 @@ class SearchPersistenceService:
             engine_result: ``SearchEngineResult`` con ``results: list[SearchResult]``.
 
         Returns:
-            dict con contadores: ``saved``, ``created``, ``updated``.
+            dict con contadores (``saved``, ``created``, ``updated``) y
+            ``links: dict[int, str]`` que mapea el índice de cada resultado al
+            ``vehicle_id`` persistido. Permite al job vincular los vehículos a
+            la orden sin volver a consultarlos por source/external_id (J3).
         """
         results = list(getattr(engine_result, "results", []) or [])
         saved = created = updated = 0
+        links: dict[int, str] = {}
 
-        for search_result in results:
+        for idx, search_result in enumerate(results):
             dto = getattr(search_result, "vehicle", None)
             if dto is None:
                 continue
@@ -60,6 +64,7 @@ class SearchPersistenceService:
             vehicle = await self._upsert_vehicle(user_id, dto)
             if vehicle is None:
                 continue
+            links[idx] = vehicle.id
             saved += 1
 
             try:
@@ -75,7 +80,12 @@ class SearchPersistenceService:
                 raise
 
         await self.session.commit()
-        return {"saved": saved, "created": created, "updated": updated}
+        return {
+            "saved": saved,
+            "created": created,
+            "updated": updated,
+            "links": links,
+        }
 
     # ------------------------------------------------------------------
     # Vehículos

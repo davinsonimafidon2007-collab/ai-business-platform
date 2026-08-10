@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
-from sqlalchemy import select, update
+from sqlalchemy import and_, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.search_order import SearchOrder, SearchOrderVehicle
@@ -42,14 +42,36 @@ class SearchOrderRepository:
         )
         return list(result.scalars().all())
 
-    async def pending_orders(self, limit: int = 10) -> list[SearchOrder]:
-        """Órdenes listas para procesar (PENDING o reintento de FAILED)."""
-        result = await self.session.execute(
-            select(SearchOrder)
-            .where(SearchOrder.status.in_(["PENDING", "FAILED"]))
-            .order_by(SearchOrder.created_at.asc())
-            .limit(limit)
+    async def pending_orders(
+        self,
+        limit: int = 10,
+        max_attempts: int = 5,
+        retry_cooldown_minutes: int = 30,
+    ) -> list[SearchOrder]:
+        """Órdenes listas para procesar (J1).
+
+        - PENDING: siempre.
+        - FAILED: solo si ``attempts < max_attempts`` y pasó el cooldown desde
+          ``last_run_at``. Sin esto, un fallo permanente de provider (403, etc.)
+          se reintentaba en cada ciclo del job sin límite ni backoff.
+        """
+        stmt = select(SearchOrder).where(
+            or_(
+                SearchOrder.status == "PENDING",
+                and_(
+                    SearchOrder.status == "FAILED",
+                    SearchOrder.attempts < max_attempts,
+                    or_(
+                        SearchOrder.last_run_at.is_(None),
+                        SearchOrder.last_run_at
+                        < datetime.now(UTC)
+                        - timedelta(minutes=retry_cooldown_minutes),
+                    ),
+                ),
+            )
         )
+        stmt = stmt.order_by(SearchOrder.created_at.asc()).limit(limit)
+        result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
     async def stale_running_orders(
@@ -61,12 +83,10 @@ class SearchOrderRepository:
         reinicio) y dejar la orden en RUNNING para siempre. Estas son
         candidatas a recuperación: se resetean a PENDING para reprocesar.
         """
-        # SQLite almacena DateTime(timezone=True) como naive UTC; usar un
-        # cutoff naive evita que la comparación SQL devuelva vacío. En
-        # Postgres (timestamptz) también es correcto: se asume sesión UTC.
-        cutoff = (datetime.now(UTC) - timedelta(minutes=stale_minutes)).replace(
-            tzinfo=None
-        )
+        # Cutoff aware UTC, igual que los writes (datetime.now(UTC)). Antes se
+        # usaba un cutoff naive, inconsistente con el valor aware que escribe
+        # claim_order/save; en Postgres/timestamptz eso era no determinista (J2).
+        cutoff = datetime.now(UTC) - timedelta(minutes=stale_minutes)
         result = await self.session.execute(
             select(SearchOrder)
             .where(
@@ -143,6 +163,19 @@ class SearchOrderRepository:
         )
         self.session.add(link)
         return link
+
+    async def vehicle_ids_for_order(self, order_id: str | UUID) -> set[str]:
+        """IDs de vehículos ya vinculados a la orden (para calcular ``new_count``).
+
+        Devuelve TODOS los ids, sin límite de página: el badge de "nuevos"
+        depende de este conjunto completo (J6).
+        """
+        result = await self.session.execute(
+            select(SearchOrderVehicle.vehicle_id).where(
+                SearchOrderVehicle.search_order_id == str(order_id)
+            )
+        )
+        return set(result.scalars().all())
 
     async def list_order_vehicles(
         self, order_id: str | UUID, limit: int = 200

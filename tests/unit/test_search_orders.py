@@ -65,6 +65,144 @@ async def test_repo_create_and_pending(session: AsyncSession) -> None:
 
 
 @pytest.mark.asyncio
+async def test_repo_pending_skips_failed_over_max_attempts(session: AsyncSession) -> None:
+    """Una orden FAILED con attempts >= max_attempts se abandona (J1)."""
+    from datetime import UTC, datetime, timedelta
+
+    repo = SearchOrderRepository(session)
+    order = await repo.create(SearchOrder(user_id=TEST_USER_ID, query="Audi A4"))
+    order.status = "FAILED"
+    order.attempts = 5
+    order.last_run_at = datetime.now(UTC) - timedelta(hours=1)
+    await repo.save(order)
+
+    pending = await repo.pending_orders(max_attempts=5, retry_cooldown_minutes=0)
+    assert order.id not in [o.id for o in pending]
+
+
+@pytest.mark.asyncio
+async def test_repo_pending_failed_within_cooldown_skipped(session: AsyncSession) -> None:
+    """Una orden FAILED reciente no se reintenta hasta pasada la cooldown (J1)."""
+    from datetime import UTC, datetime
+
+    repo = SearchOrderRepository(session)
+    order = await repo.create(SearchOrder(user_id=TEST_USER_ID, query="Audi A4"))
+    order.status = "FAILED"
+    order.attempts = 1
+    order.last_run_at = datetime.now(UTC)
+    await repo.save(order)
+
+    pending = await repo.pending_orders(max_attempts=5, retry_cooldown_minutes=30)
+    assert order.id not in [o.id for o in pending]
+
+
+@pytest.mark.asyncio
+async def test_repo_pending_failed_after_cooldown_included(session: AsyncSession) -> None:
+    """Una orden FAILED antigua y con intentos restantes sí se reintenta (J1)."""
+    from datetime import UTC, datetime, timedelta
+
+    repo = SearchOrderRepository(session)
+    order = await repo.create(SearchOrder(user_id=TEST_USER_ID, query="Audi A4"))
+    order.status = "FAILED"
+    order.attempts = 2
+    order.last_run_at = datetime.now(UTC) - timedelta(hours=2)
+    await repo.save(order)
+
+    pending = await repo.pending_orders(max_attempts=5, retry_cooldown_minutes=30)
+    assert [o.id for o in pending] == [order.id]
+
+
+@pytest.mark.asyncio
+async def test_persist_returns_links(session: AsyncSession) -> None:
+    """persist_engine_result devuelve vehicle_id por índice para vincular (J3)."""
+    from app.services.search_persistence import SearchPersistenceService
+
+    svc = SearchPersistenceService(session)
+    result = SimpleNamespace(
+        results=[
+            SimpleNamespace(
+                vehicle=SimpleNamespace(
+                    source="mobile_de", external_id="ext-1", brand="BMW", model="320d"
+                ),
+                vehicle_score=None,
+                market_estimation=None,
+                profit_analysis=None,
+                opportunity=None,
+                negotiation=None,
+            ),
+            SimpleNamespace(
+                vehicle=SimpleNamespace(source="", external_id=None),
+                vehicle_score=None,
+                market_estimation=None,
+                profit_analysis=None,
+                opportunity=None,
+                negotiation=None,
+            ),
+        ]
+    )
+    info = await svc.persist_engine_result(user_id=TEST_USER_ID, engine_result=result)
+
+    assert 0 in info["links"]
+    assert 1 not in info["links"]
+    assert info["saved"] == 1
+
+
+@pytest.mark.asyncio
+async def test_job_increments_attempts_on_failure(
+    session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Un fallo del job marca FAILED e incrementa attempts (J1)."""
+    from app.jobs.process_search_orders import ProcessSearchOrdersJob
+
+    repo = SearchOrderRepository(session)
+    order = await repo.create(SearchOrder(user_id=TEST_USER_ID, query="BMW 320d"))
+
+    async def _boom(*_args: Any, **_kwargs: Any) -> Any:
+        raise RuntimeError("provider 403")
+
+    fake_engine = MagicMock()
+    fake_engine.search = AsyncMock(side_effect=_boom)
+
+    job = ProcessSearchOrdersJob()
+    monkeypatch.setattr(
+        "app.jobs.process_search_orders.SearchPersistenceService",
+        lambda _session: MagicMock(),
+    )
+    monkeypatch.setattr(job, "_build_search_engine", lambda _session: fake_engine)
+
+    db_manager = MagicMock()
+
+    class _Ctx:
+        def __init__(self, s: AsyncSession) -> None:
+            self._s = s
+
+        async def __aenter__(self) -> AsyncSession:
+            return self._s
+
+        async def __aexit__(self, *_: Any) -> None:
+            return None
+
+    db_manager.get_session.return_value = _Ctx(session)
+    context = JobContext(
+        db_manager=db_manager,
+        settings=MagicMock(
+            search_orders_per_run=5,
+            search_order_max_attempts=5,
+            search_order_retry_cooldown_minutes=30,
+            search_order_stale_minutes=15,
+        ),
+        logger=logging.getLogger("test_search_orders"),
+    )
+
+    result = await job.execute(context)
+    assert result.success is False, result.message
+    refreshed = await repo.get_by_id(order.id)
+    assert refreshed is not None
+    assert refreshed.status == "FAILED"
+    assert refreshed.attempts == 1
+
+
+@pytest.mark.asyncio
 async def test_repo_add_vehicle_idempotent(session: AsyncSession) -> None:
     repo = SearchOrderRepository(session)
     order = await repo.create(SearchOrder(user_id=TEST_USER_ID, query="BMW 320d"))
@@ -294,7 +432,9 @@ async def test_job_completes_pending_order(
     fake_engine = MagicMock()
     fake_engine.search = AsyncMock(return_value=SimpleNamespace(results=[fake_result]))
 
-    fake_persist = AsyncMock(return_value={"saved": 1, "created": 1, "updated": 0})
+    fake_persist = AsyncMock(
+        return_value={"saved": 1, "created": 1, "updated": 0, "links": {0: TEST_VEHICLE_ID}}
+    )
 
     job = ProcessSearchOrdersJob()
     monkeypatch.setattr(
@@ -302,9 +442,6 @@ async def test_job_completes_pending_order(
         lambda _session: MagicMock(persist_engine_result=fake_persist),
     )
     monkeypatch.setattr(job, "_build_search_engine", lambda _session: fake_engine)
-    monkeypatch.setattr(
-        job, "_find_vehicle_id", AsyncMock(return_value=TEST_VEHICLE_ID)
-    )
     monkeypatch.setattr(job, "_snapshot_item", staticmethod(lambda _r: "{}"))
 
     db_manager = MagicMock()
@@ -322,7 +459,12 @@ async def test_job_completes_pending_order(
     db_manager.get_session.return_value = _Ctx(session)
     context = JobContext(
         db_manager=db_manager,
-        settings=MagicMock(search_orders_per_run=5),
+        settings=MagicMock(
+            search_orders_per_run=5,
+            search_order_max_attempts=5,
+            search_order_retry_cooldown_minutes=30,
+            search_order_stale_minutes=15,
+        ),
         logger=logging.getLogger("test_search_orders"),
     )
 
