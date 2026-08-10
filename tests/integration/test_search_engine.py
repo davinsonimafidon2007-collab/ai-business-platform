@@ -564,3 +564,217 @@ class TestSearchEngineSearch:
             result = await search_engine.search(request)
         assert result.summary.total_results == 1
         assert len(result.results) == 1
+
+
+# =============================================================================
+# Tests de integración ES — AutoScout24 España
+# =============================================================================
+
+
+class TestSearchEngineES:
+    """Tests del flujo completo con provider autoscout24_es."""
+
+    @pytest.fixture
+    def es_dto(self) -> VehicleSearchResult:
+        return VehicleSearchResult(
+            source="autoscout24_es",
+            external_id="ES-99001",
+            url="https://www.autoscout24.es/lst/bmw/320?xyz=99001",
+            brand="BMW",
+            model="320d",
+            year=2021,
+            mileage=45000,
+            fuel_type="diesel",
+            transmission="automatic",
+            power_hp=190,
+            price=28000.0,
+            currency="EUR",
+            description="BMW 320d en buen estado",
+            images=["as24_1.jpg"],
+        )
+
+    @pytest.fixture
+    def de_dto_same_vehicle(self) -> VehicleSearchResult:
+        """Mismo coche listado en autoscout24 DE."""
+        return VehicleSearchResult(
+            source="autoscout24",
+            external_id="ES-99001",
+            url="https://www.autoscout24.de/angebote/bmw/320d?xyz=ES-99001",
+            brand="BMW",
+            model="320d",
+            year=2021,
+            mileage=45000,
+            fuel_type="diesel",
+            transmission="automatic",
+            power_hp=190,
+            price=27500.0,
+            currency="EUR",
+            description="BMW 320d guter Zustand",
+            images=["as24_de_1.jpg"],
+        )
+
+    @pytest.mark.asyncio
+    async def test_es_provider_single_result(
+        self,
+        search_engine: SearchEngineService,
+        vehicle_service_mock: AsyncMock,
+        es_dto: VehicleSearchResult,
+    ) -> None:
+        """Un resultado de ES pasa por el pipeline completo."""
+        vehicle_service_mock.search_from_provider.return_value = [es_dto]
+        request = SearchRequest(
+            query="BMW 320",
+            max_results=10,
+            providers=["autoscout24_es"],
+        )
+        with patch.object(ProviderRegistry, "get", return_value=MagicMock()):
+            result = await search_engine.search(request)
+
+        assert result.summary.total_results == 1
+        assert result.results[0].vehicle.source == "autoscout24_es"
+        assert result.results[0].vehicle.brand == "BMW"
+        assert result.results[0].vehicle_score is not None
+        assert result.results[0].market_estimation is not None
+        assert result.results[0].profit_analysis is not None
+        assert result.results[0].opportunity is not None
+
+    @pytest.mark.asyncio
+    async def test_es_dedup_keeps_es_over_de(
+        self,
+        search_engine: SearchEngineService,
+        vehicle_service_mock: AsyncMock,
+        es_dto: VehicleSearchResult,
+        de_dto_same_vehicle: VehicleSearchResult,
+    ) -> None:
+        """Mismo coche en ES y DE → se conserva ES."""
+        vehicle_service_mock.search_from_provider.return_value = [es_dto, de_dto_same_vehicle]
+        request = SearchRequest(
+            query="BMW 320",
+            max_results=10,
+            providers=["autoscout24_es", "autoscout24"],
+        )
+        with patch.object(ProviderRegistry, "get", return_value=MagicMock()):
+            result = await search_engine.search(request)
+
+        # Solo 1 resultado: ES tiene prioridad sobre DE
+        assert result.summary.total_results == 1
+        assert result.results[0].vehicle.source == "autoscout24_es"
+        assert result.results[0].vehicle.external_id == "ES-99001"
+
+    @pytest.mark.asyncio
+    async def test_es_with_budget_filter(
+        self,
+        search_engine: SearchEngineService,
+        vehicle_service_mock: AsyncMock,
+        es_dto: VehicleSearchResult,
+    ) -> None:
+        """Filtro de presupuesto aplica a resultados ES."""
+        es_dto.price = 35000.0
+        vehicle_service_mock.search_from_provider.return_value = [es_dto]
+        request = SearchRequest(
+            query="BMW 320",
+            max_results=10,
+            budget_max=30000.0,
+            providers=["autoscout24_es"],
+        )
+        with patch.object(ProviderRegistry, "get", return_value=MagicMock()):
+            result = await search_engine.search(request)
+
+        assert result.summary.total_results == 0
+
+    @pytest.mark.asyncio
+    async def test_es_with_brand_filter(
+        self,
+        search_engine: SearchEngineService,
+        vehicle_service_mock: AsyncMock,
+    ) -> None:
+        """Filtro de marca aplica a resultados ES."""
+        dto = VehicleSearchResult(
+            source="autoscout24_es",
+            external_id="ES-99002",
+            url="https://www.autoscout24.es/lst/opel/corsa",
+            brand="Opel",
+            model="Corsa",
+            year=2020,
+            mileage=30000,
+            fuel_type="gasoline",
+            transmission="manual",
+            power_hp=75,
+            price=12000.0,
+            currency="EUR",
+            description="Opel Corsa",
+            images=[],
+        )
+        vehicle_service_mock.search_from_provider.return_value = [dto]
+        request = SearchRequest(
+            query="coche",
+            max_results=10,
+            brand="BMW",
+            providers=["autoscout24_es"],
+        )
+        with patch.object(ProviderRegistry, "get", return_value=MagicMock()):
+            result = await search_engine.search(request)
+
+        # Opel no pasa el filtro de BMW
+        assert result.summary.total_results == 0
+
+    @pytest.mark.asyncio
+    async def test_es_multiple_results_sorted(
+        self,
+        search_engine: SearchEngineService,
+        vehicle_service_mock: AsyncMock,
+    ) -> None:
+        """Múltiples resultados ES se ordenan por opportunity score."""
+        dtos = [
+            VehicleSearchResult(
+                source="autoscout24_es",
+                external_id=f"ES-{i}",
+                url=f"https://www.autoscout24.es/lst/vehicle/{i}",
+                brand="Volkswagen",
+                model="Golf",
+                year=2020,
+                mileage=50000,
+                fuel_type="diesel",
+                transmission="manual",
+                power_hp=110,
+                price=15000.0 + i * 1000,
+                currency="EUR",
+                description=f"Golf #{i}",
+                images=[],
+            )
+            for i in range(5)
+        ]
+        vehicle_service_mock.search_from_provider.return_value = dtos
+        request = SearchRequest(
+            query="Volkswagen Golf",
+            max_results=10,
+            providers=["autoscout24_es"],
+        )
+        with patch.object(ProviderRegistry, "get", return_value=MagicMock()):
+            result = await search_engine.search(request)
+
+        assert result.summary.total_results == 5
+        assert len(result.results) == 5
+
+    @pytest.mark.asyncio
+    async def test_es_provider_failure_recorded(
+        self,
+        search_engine: SearchEngineService,
+        vehicle_service_mock: AsyncMock,
+    ) -> None:
+        """Fallo de ES se registra en provider_issues."""
+        vehicle_service_mock.search_from_provider.side_effect = Exception(
+            "Connection timeout"
+        )
+        request = SearchRequest(
+            query="BMW",
+            max_results=10,
+            providers=["autoscout24_es"],
+        )
+        with patch.object(ProviderRegistry, "get", return_value=MagicMock()):
+            result = await search_engine.search(request)
+
+        assert result.summary.total_results == 0
+        assert len(result.provider_issues) == 1
+        assert result.provider_issues[0].provider == "autoscout24_es"
+        assert result.provider_issues[0].stage == "search"
