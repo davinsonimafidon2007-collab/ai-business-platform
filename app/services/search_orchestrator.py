@@ -203,12 +203,16 @@ class SearchOrchestrator:
                     )
                     continue
 
-        # Dedup por (source, external_id) o URL. external_id es namespaced
-        # por provider (mobile_de "12345" != autoscout24 "12345"), así que
-        # incluir source evita colapsar coches distintos entre providers.
-        deduped: list[SearchResult] = []
+        # Dedup cross-source para AutoScout24: el mismo coche puede aparecer
+        # en autoscout24 (DE) y autoscout24_es (ES) con el mismo external_id.
+        # Priorizamos ES para compradores españoles; guardamos ambos sources
+        # en un tag para trazabilidad.
+        deduped = self._dedup_autoscout24_cross_source(all_results)
+
+        # Dedup intra-source por (source, external_id) o URL.
         seen_keys: set[tuple[str, str]] = set()
-        for r in all_results:
+        final_deduped: list[SearchResult] = []
+        for r in deduped:
             vehicle = r.vehicle
             source = getattr(vehicle, "source", None) or ""
             ext_id = getattr(vehicle, "external_id", None)
@@ -221,12 +225,13 @@ class SearchOrchestrator:
             else:
                 key = None
             if key is None:
-                deduped.append(r)
+                final_deduped.append(r)
                 continue
             if key in seen_keys:
                 continue
             seen_keys.add(key)
-            deduped.append(r)
+            final_deduped.append(r)
+        deduped = final_deduped
 
         # Ordenar primero (oportunidad DESC) y luego limitar: limitar antes de
         # ordenar descartaba coches mejores que los que quedaban en el top.
@@ -410,6 +415,65 @@ class SearchOrchestrator:
             results_sorted = sorted(results_sorted, key=_alt_sort_key, reverse=reverse)
 
         return results_sorted
+
+    # ------------------------------------------------------------------
+    # Dedup cross-source AutoScout24
+    # ------------------------------------------------------------------
+
+    # Providers que comparten external_id entre países (AutoScout24 global)
+    _CROSS_SOURCE_FAMILIES: dict[str, set[str]] = {
+        "autoscout24": {"autoscout24", "autoscout24_es"},
+        "autoscout24_es": {"autoscout24", "autoscout24_es"},
+    }
+
+    @classmethod
+    def _dedup_autoscout24_cross_source(
+        cls, results: list[SearchResult]
+    ) -> list[SearchResult]:
+        """Detecta duplicados cross-source dentro de la familia AutoScout24.
+
+        AutoScout24 usa el mismo ``external_id`` en todos los países.
+        Si aparece el mismo ID en autoscout24 (DE) y autoscout24_es (ES),
+        se conserva la versión ES (más relevante para el mercado español)
+        y se descarta la DE.
+
+        Returns:
+            Lista filtrada manteniendo ES sobre DE para duplicados.
+        """
+        # Indexar por external_id, agrupando todas las fuentes
+        by_ext_id: dict[str, list[SearchResult]] = {}
+        no_ext_id: list[SearchResult] = []
+
+        for r in results:
+            ext_id = getattr(r.vehicle, "external_id", None)
+            source = getattr(r.vehicle, "source", None) or ""
+            if ext_id and source in cls._CROSS_SOURCE_FAMILIES:
+                by_ext_id.setdefault(ext_id, []).append(r)
+            else:
+                no_ext_id.append(r)
+
+        deduped: list[SearchResult] = []
+        for _ext_id, candidates in by_ext_id.items():
+            if len(candidates) == 1:
+                deduped.append(candidates[0])
+                continue
+
+            # Preferir ES sobre DE para el mismo external_id
+            preferred = None
+            for c in candidates:
+                src = getattr(c.vehicle, "source", None) or ""
+                if src == "autoscout24_es":
+                    preferred = c
+                    break
+            if preferred is None:
+                preferred = candidates[0]
+
+            # Tag con todos los sources donde apareció
+            sources_seen = {getattr(c.vehicle, "source", None) for c in candidates}
+            preferred.vehicle.available_in_sources = sorted(sources_seen)
+            deduped.append(preferred)
+
+        return deduped + no_ext_id
 
     # ------------------------------------------------------------------
     # Métodos internos

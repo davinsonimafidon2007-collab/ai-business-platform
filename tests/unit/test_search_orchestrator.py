@@ -1557,3 +1557,127 @@ class TestDefaultSortOrder:
         assert sorted_results[0].vehicle == "v1"
         assert sorted_results[1].vehicle == "v2"
         assert sorted_results[2].vehicle == "v3"
+
+
+# =============================================================================
+# Tests de dedup cross-source AutoScout24
+# =============================================================================
+
+
+def _make_vehicle_stub(source: str, ext_id: str, **kwargs: Any) -> MagicMock:
+    """Crea un stub de vehículo mock con source y external_id."""
+    v = MagicMock()
+    v.source = source
+    v.external_id = ext_id
+    v.url = kwargs.get("url", f"https://{source}.example.com/{ext_id}")
+    v.brand = kwargs.get("brand", "BMW")
+    v.model = kwargs.get("model", "320")
+    v.year = kwargs.get("year", 2020)
+    v.price = kwargs.get("price", 15000.0)
+    return v
+
+
+def _make_result(vehicle: MagicMock) -> SearchResult:
+    """Crea un SearchResult stub."""
+    return SearchResult(
+        vehicle=vehicle,
+        vehicle_score=MagicMock(score=70),
+        market_estimation=MagicMock(),
+        profit_analysis=MagicMock(roi_percentage=10.0, net_profit=1000.0),
+        opportunity=MagicMock(overall_score=75.0),
+    )
+
+
+class TestCrossSourceDedup:
+    """Tests para dedup cross-source entre autoscout24 y autoscout24_es."""
+
+    def test_same_ext_id_keeps_es(self) -> None:
+        """El mismo external_id en DE y ES → conserva ES."""
+        v_de = _make_vehicle_stub("autoscout24", "12345")
+        v_es = _make_vehicle_stub("autoscout24_es", "12345")
+        results = [_make_result(v_de), _make_result(v_es)]
+
+        deduped = SearchOrchestrator._dedup_autoscout24_cross_source(results)
+
+        assert len(deduped) == 1
+        assert deduped[0].vehicle.source == "autoscout24_es"
+        assert deduped[0].vehicle.available_in_sources == [
+            "autoscout24",
+            "autoscout24_es",
+        ]
+
+    def test_same_ext_id_only_de(self) -> None:
+        """Solo DE → se conserva sin tag."""
+        v_de = _make_vehicle_stub("autoscout24", "12345")
+        results = [_make_result(v_de)]
+
+        deduped = SearchOrchestrator._dedup_autoscout24_cross_source(results)
+
+        assert len(deduped) == 1
+        assert deduped[0].vehicle.source == "autoscout24"
+        # MagicMock crea atributos bajo demanda; verificar que no fue seteado explícitamente
+        assert "available_in_sources" not in deduped[0].vehicle.__dict__
+
+    def test_same_ext_id_only_es(self) -> None:
+        """Solo ES → se conserva sin tag."""
+        v_es = _make_vehicle_stub("autoscout24_es", "12345")
+        results = [_make_result(v_es)]
+
+        deduped = SearchOrchestrator._dedup_autoscout24_cross_source(results)
+
+        assert len(deduped) == 1
+        assert deduped[0].vehicle.source == "autoscout24_es"
+
+    def test_different_ext_ids_no_dedup(self) -> None:
+        """Diferentes external_ids → no se deduplica."""
+        v_de = _make_vehicle_stub("autoscout24", "11111")
+        v_es = _make_vehicle_stub("autoscout24_es", "22222")
+        results = [_make_result(v_de), _make_result(v_es)]
+
+        deduped = SearchOrchestrator._dedup_autoscout24_cross_source(results)
+
+        assert len(deduped) == 2
+
+    def test_mobile_de_not_affected(self) -> None:
+        """mobile.de no participa en dedup cross-source AS24."""
+        v_mobile = _make_vehicle_stub("mobile_de", "99999")
+        v_as24 = _make_vehicle_stub("autoscout24", "12345")
+        v_as24_es = _make_vehicle_stub("autoscout24_es", "12345")
+        results = [_make_result(v_mobile), _make_result(v_as24), _make_result(v_as24_es)]
+
+        deduped = SearchOrchestrator._dedup_autoscout24_cross_source(results)
+
+        assert len(deduped) == 2
+        sources = {r.vehicle.source for r in deduped}
+        assert "mobile_de" in sources
+        assert "autoscout24_es" in sources
+
+    def test_three_sources_same_id(self) -> None:
+        """Tres fuentes (DE, ES, mobile) con el mismo ID → dedup solo AS24."""
+        v_de = _make_vehicle_stub("autoscout24", "12345")
+        v_es = _make_vehicle_stub("autoscout24_es", "12345")
+        v_mobile = _make_vehicle_stub("mobile_de", "12345")
+        results = [_make_result(v_de), _make_result(v_es), _make_result(v_mobile)]
+
+        deduped = SearchOrchestrator._dedup_autoscout24_cross_source(results)
+
+        assert len(deduped) == 2
+        sources = {r.vehicle.source for r in deduped}
+        assert "autoscout24_es" in sources
+        assert "mobile_de" in sources
+
+    def test_empty_results(self) -> None:
+        """Lista vacía → lista vacía."""
+        deduped = SearchOrchestrator._dedup_autoscout24_cross_source([])
+        assert deduped == []
+
+    def test_es_preferred_over_de(self) -> None:
+        """Cuando hay DE y ES, siempre se prefiere ES."""
+        v_de = _make_vehicle_stub("autoscout24", "55555", price=10000.0)
+        v_es = _make_vehicle_stub("autoscout24_es", "55555", price=12000.0)
+        results = [_make_result(v_de), _make_result(v_es)]
+
+        deduped = SearchOrchestrator._dedup_autoscout24_cross_source(results)
+
+        assert len(deduped) == 1
+        assert deduped[0].vehicle.price == 12000.0
