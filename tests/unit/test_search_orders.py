@@ -1053,3 +1053,61 @@ async def test_job_es_empty_results(
     assert refreshed.status == "COMPLETED"
     assert refreshed.results_count == 0
     assert refreshed.new_count == 0
+
+
+# =============================================================================
+# Job — ES provider wiring
+# =============================================================================
+
+
+@pytest.mark.asyncio
+async def test_job_build_engine_wires_es_provider(
+    session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """_build_search_engine construye AutoScout24EsProvider y lo registra."""
+    from app.jobs.process_search_orders import ProcessSearchOrdersJob
+    from app.providers.autoscout24_es import AutoScout24EsProvider
+    from app.providers.registry import ProviderRegistry
+
+    ProviderRegistry.clear()
+    job = ProcessSearchOrdersJob()
+
+    engine = job._build_search_engine(session)
+
+    assert isinstance(engine._autoscout24_es_provider, AutoScout24EsProvider)
+    assert engine._autoscout24_es_provider.source_name == "autoscout24_es"
+    assert engine._autoscout24_es_provider._base_url == "https://www.autoscout24.es"
+
+    # El provider ES está en el registry
+    resolved = ProviderRegistry.get("autoscout24_es")
+    assert isinstance(resolved, AutoScout24EsProvider)
+
+    ProviderRegistry.clear()
+
+
+@pytest.mark.asyncio
+async def test_job_build_engine_es_http_config(
+    session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """_build_search_engine pasa la configuración HTTP al ProviderHttpClient de ES."""
+    from app.jobs.process_search_orders import ProcessSearchOrdersJob
+    from app.providers.registry import ProviderRegistry
+
+    monkeypatch.setattr("app.jobs.process_search_orders.settings", MagicMock(
+        provider_http_timeout=25.0,
+        provider_http_max_retries=2,
+        provider_http_min_delay_ms=0,
+        default_import_cost_profile="SPAIN",
+    ))
+
+    ProviderRegistry.clear()
+    job = ProcessSearchOrdersJob()
+
+    engine = job._build_search_engine(session)
+    es_provider = engine._autoscout24_es_provider
+
+    # El http_client del provider ES usa el timeout y retries de la configuración
+    assert es_provider._http_client.timeout == 25.0
+    assert es_provider._http_client.max_retries == 2
+
+    ProviderRegistry.clear()
