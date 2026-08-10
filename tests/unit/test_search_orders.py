@@ -65,6 +65,30 @@ async def test_repo_create_and_pending(session: AsyncSession) -> None:
 
 
 @pytest.mark.asyncio
+async def test_repo_count_active_by_user(session: AsyncSession) -> None:
+    """count_active_by_user cuenta PENDING/RUNNING/FAILED (P3), no COMPLETED."""
+    from app.core.limits import MAX_SEARCH_RESULTS
+
+    repo = SearchOrderRepository(session)
+    await repo.create(SearchOrder(user_id=TEST_USER_ID, query="Audi A4"))
+    running = await repo.create(SearchOrder(user_id=TEST_USER_ID, query="BMW 320d"))
+    failed = await repo.create(SearchOrder(user_id=TEST_USER_ID, query="VW Golf"))
+    completed = await repo.create(SearchOrder(user_id=TEST_USER_ID, query="Ford Fiesta"))
+
+    running.status = "RUNNING"
+    failed.status = "FAILED"
+    completed.status = "COMPLETED"
+    await repo.save(running)
+    await repo.save(failed)
+    await repo.save(completed)
+
+    assert await repo.count_active_by_user(TEST_USER_ID) == 3
+    # El usuario local de los tests no tiene órdenes
+    assert await repo.count_active_by_user("99999999-9999-9999-9999-999999999999") == 0
+    assert MAX_SEARCH_RESULTS == 100
+
+
+@pytest.mark.asyncio
 async def test_repo_pending_skips_failed_over_max_attempts(session: AsyncSession) -> None:
     """Una orden FAILED con attempts >= max_attempts se abandona (J1)."""
     from datetime import UTC, datetime, timedelta
@@ -366,6 +390,75 @@ async def test_create_order_rejects_budget_below_fixed_costs(
 
 
 @pytest.mark.asyncio
+async def test_create_order_clamps_max_results(
+    session: AsyncSession, client: AsyncClient
+) -> None:
+    """P3: max_results en filters (dict libre) se clamp a [1, 100]."""
+    from app.core.limits import MAX_SEARCH_RESULTS
+
+    huge = (
+        await client.post(
+            "/api/v1/search-orders",
+            json={"query": "BMW X5", "filters": {"max_results": 10000}},
+        )
+    ).json()
+    tiny = (
+        await client.post(
+            "/api/v1/search-orders",
+            json={"query": "BMW X5", "filters": {"max_results": 0}},
+        )
+    ).json()
+
+    repo = SearchOrderRepository(session)
+    huge_order = await repo.get_by_id(huge["id"])
+    tiny_order = await repo.get_by_id(tiny["id"])
+    assert huge_order is not None and tiny_order is not None
+    assert huge_order.filters_dict()["max_results"] == MAX_SEARCH_RESULTS
+    assert tiny_order.filters_dict()["max_results"] == 1
+
+
+@pytest.mark.asyncio
+async def test_create_order_409_when_pending_limit_reached(
+    session: AsyncSession, client: AsyncClient
+) -> None:
+    """P3: superar el tope de órdenes activas por usuario responde 409."""
+    from app.core.config import settings
+
+    limit = int(settings.search_order_max_pending_per_user)
+    repo = SearchOrderRepository(session)
+    for i in range(limit):
+        await repo.create(
+            SearchOrder(user_id=TEST_USER_ID, query=f"Audi A4 #{i}")
+        )
+
+    resp = await client.post(
+        "/api/v1/search-orders", json={"query": "BMW X5"}
+    )
+    assert resp.status_code == 409, resp.text
+    assert "límite" in resp.json()["error"]["message"].lower()
+
+
+@pytest.mark.asyncio
+async def test_list_search_orders_clamps_skip_and_limit_in_repo(
+    session: AsyncSession, client: AsyncClient
+) -> None:
+    """P5: el repo clamp skip (profundidad) y limit aunque la API lo deje pasar."""
+    from app.core.limits import MAX_LIST_DEPTH
+
+    repo = SearchOrderRepository(session)
+    await client.post("/api/v1/search-orders", json={"query": "BMW X5"})
+
+    # skip absurdo → clamp a MAX_LIST_DEPTH → sin resultados (no crashea)
+    deep = await repo.list_by_user(TEST_USER_ID, skip=999999)
+    assert deep == []
+
+    # limit absurdo → clamp a 100 → devuelve la orden
+    capped = await repo.list_by_user(TEST_USER_ID, limit=1000)
+    assert len(capped) == 1
+    assert MAX_LIST_DEPTH == 5000
+
+
+@pytest.mark.asyncio
 async def test_new_count_and_list_and_detail(
     session: AsyncSession, client: AsyncClient
 ) -> None:
@@ -479,3 +572,484 @@ async def test_job_completes_pending_order(
     links = await repo.list_order_vehicles(order.id)
     assert len(links) == 1
     assert links[0].vehicle_id == TEST_VEHICLE_ID
+
+
+# =============================================================================
+# Job — ES provider integration
+# =============================================================================
+
+
+def _make_result(
+    source: str, external_id: str, **kwargs: Any
+) -> SimpleNamespace:
+    """Crea un SearchResult stub con vehículo ES/mock."""
+    return SimpleNamespace(
+        vehicle=SimpleNamespace(
+            source=source,
+            external_id=external_id,
+            url=kwargs.get("url", f"https://{source}.example.com/{external_id}"),
+            brand=kwargs.get("brand", "BMW"),
+            model=kwargs.get("model", "320d"),
+        ),
+        vehicle_score=None,
+        market_estimation=None,
+        profit_analysis=None,
+        opportunity=None,
+        negotiation=None,
+    )
+
+
+def _make_fake_engine(
+    results: list[SimpleNamespace],
+) -> MagicMock:
+    """Crea un fake engine que devuelve los resultados dados."""
+    engine = MagicMock()
+    engine.search = AsyncMock(return_value=SimpleNamespace(results=results))
+    return engine
+
+
+@pytest.mark.asyncio
+async def test_job_es_provider_executes_and_persists(
+    session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """El job ejecuta autoscout24_es y persiste resultados en search_order_vehicles."""
+    from app.jobs.process_search_orders import ProcessSearchOrdersJob
+
+    repo = SearchOrderRepository(session)
+    order = await repo.create(SearchOrder(user_id=TEST_USER_ID, query="BMW 320d"))
+
+    es_results = [
+        _make_result("autoscout24_es", "ES-001", brand="BMW", model="320d"),
+        _make_result("autoscout24_es", "ES-002", brand="Audi", model="A4"),
+    ]
+
+    fake_engine = _make_fake_engine(es_results)
+
+    fake_persist = AsyncMock(
+        return_value={
+            "saved": 2,
+            "created": 2,
+            "updated": 0,
+            "links": {0: TEST_VEHICLE_ID, 1: "33333333-3333-3333-3333-333333333333"},
+        }
+    )
+
+    job = ProcessSearchOrdersJob()
+    monkeypatch.setattr(
+        "app.jobs.process_search_orders.SearchPersistenceService",
+        lambda _session: MagicMock(persist_engine_result=fake_persist),
+    )
+    monkeypatch.setattr(job, "_build_search_engine", lambda _session: fake_engine)
+    monkeypatch.setattr(job, "_snapshot_item", staticmethod(lambda _r: "{}"))
+
+    db_manager = MagicMock()
+
+    class _Ctx:
+        def __init__(self, s: AsyncSession) -> None:
+            self._s = s
+
+        async def __aenter__(self) -> AsyncSession:
+            return self._s
+
+        async def __aexit__(self, *_: Any) -> None:
+            return None
+
+    db_manager.get_session.return_value = _Ctx(session)
+    context = JobContext(
+        db_manager=db_manager,
+        settings=MagicMock(
+            search_orders_per_run=5,
+            search_order_max_attempts=5,
+            search_order_retry_cooldown_minutes=30,
+            search_order_stale_minutes=15,
+        ),
+        logger=logging.getLogger("test_search_orders"),
+    )
+
+    result = await job.execute(context)
+
+    assert result.success, result.message
+    assert result.data["completed"] == 1
+    assert result.data["found"] == 2
+
+    refreshed = await repo.get_by_id(order.id)
+    assert refreshed is not None
+    assert refreshed.status == "COMPLETED"
+    assert refreshed.results_count == 2
+    assert refreshed.new_count == 2
+
+    links = await repo.list_order_vehicles(order.id)
+    assert len(links) == 2
+
+
+@pytest.mark.asyncio
+async def test_job_es_and_fixture_dedup(
+    session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """El job deduplica resultados ES vs fixture con mismo external_id."""
+    from app.jobs.process_search_orders import ProcessSearchOrdersJob
+
+    repo = SearchOrderRepository(session)
+    order = await repo.create(SearchOrder(user_id=TEST_USER_ID, query="BMW"))
+
+    # Simula que el engine ya deduped: solo 1 resultado tras dedup
+    # (ES y fixture tuvieran el mismo external_id → el engine devuelve 1)
+    results = [
+        _make_result("autoscout24_es", "ES-007", brand="BMW", model="320d"),
+    ]
+    fake_engine = _make_fake_engine(results)
+
+    fake_persist = AsyncMock(
+        return_value={
+            "saved": 1,
+            "created": 1,
+            "updated": 0,
+            "links": {0: TEST_VEHICLE_ID},
+        }
+    )
+
+    job = ProcessSearchOrdersJob()
+    monkeypatch.setattr(
+        "app.jobs.process_search_orders.SearchPersistenceService",
+        lambda _session: MagicMock(persist_engine_result=fake_persist),
+    )
+    monkeypatch.setattr(job, "_build_search_engine", lambda _session: fake_engine)
+    monkeypatch.setattr(job, "_snapshot_item", staticmethod(lambda _r: "{}"))
+
+    db_manager = MagicMock()
+
+    class _Ctx:
+        def __init__(self, s: AsyncSession) -> None:
+            self._s = s
+
+        async def __aenter__(self) -> AsyncSession:
+            return self._s
+
+        async def __aexit__(self, *_: Any) -> None:
+            return None
+
+    db_manager.get_session.return_value = _Ctx(session)
+    context = JobContext(
+        db_manager=db_manager,
+        settings=MagicMock(
+            search_orders_per_run=5,
+            search_order_max_attempts=5,
+            search_order_retry_cooldown_minutes=30,
+            search_order_stale_minutes=15,
+        ),
+        logger=logging.getLogger("test_search_orders"),
+    )
+
+    result = await job.execute(context)
+
+    assert result.success
+    assert result.data["found"] == 1  # deduped a 1
+
+    refreshed = await repo.get_by_id(order.id)
+    assert refreshed is not None
+    assert refreshed.results_count == 1
+
+
+@pytest.mark.asyncio
+async def test_job_provider_failure_does_not_break(
+    session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Fallo de un provider (403) no rompe el job; otros providers continúan."""
+    from app.jobs.process_search_orders import ProcessSearchOrdersJob
+
+    repo = SearchOrderRepository(session)
+    order = await repo.create(SearchOrder(user_id=TEST_USER_ID, query="BMW"))
+
+    # El engine devuelve resultados (el fallo del provider está dentro del
+    # engine.search, registrado en provider_issues, pero no lanza)
+    engine_results = [
+        _make_result("autoscout24_es", "ES-003", brand="BMW"),
+    ]
+    fake_engine = _make_fake_engine(engine_results)
+    # Simular que el engine también reportó un provider issue (no fatal)
+    fake_engine.search.return_value = SimpleNamespace(
+        results=engine_results,
+        provider_issues=[
+            SimpleNamespace(
+                provider="mobile_de",
+                stage="search",
+                error_type="ProviderConnectionError",
+                message="403 anti-bot",
+            ),
+        ],
+    )
+
+    fake_persist = AsyncMock(
+        return_value={
+            "saved": 1,
+            "created": 1,
+            "updated": 0,
+            "links": {0: TEST_VEHICLE_ID},
+        }
+    )
+
+    job = ProcessSearchOrdersJob()
+    monkeypatch.setattr(
+        "app.jobs.process_search_orders.SearchPersistenceService",
+        lambda _session: MagicMock(persist_engine_result=fake_persist),
+    )
+    monkeypatch.setattr(job, "_build_search_engine", lambda _session: fake_engine)
+    monkeypatch.setattr(job, "_snapshot_item", staticmethod(lambda _r: "{}"))
+
+    db_manager = MagicMock()
+
+    class _Ctx:
+        def __init__(self, s: AsyncSession) -> None:
+            self._s = s
+
+        async def __aenter__(self) -> AsyncSession:
+            return self._s
+
+        async def __aexit__(self, *_: Any) -> None:
+            return None
+
+    db_manager.get_session.return_value = _Ctx(session)
+    context = JobContext(
+        db_manager=db_manager,
+        settings=MagicMock(
+            search_orders_per_run=5,
+            search_order_max_attempts=5,
+            search_order_retry_cooldown_minutes=30,
+            search_order_stale_minutes=15,
+        ),
+        logger=logging.getLogger("test_search_orders"),
+    )
+
+    result = await job.execute(context)
+
+    # El job continuó exitosamente con los resultados del provider que funcionó
+    assert result.success, result.message
+    assert result.data["completed"] == 1
+    assert result.data["found"] == 1
+
+    refreshed = await repo.get_by_id(order.id)
+    assert refreshed is not None
+    assert refreshed.status == "COMPLETED"
+
+
+@pytest.mark.asyncio
+async def test_job_new_count_badge(
+    session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """El badge new_count/reflected en total_new_by_user funciona para ES."""
+    from app.jobs.process_search_orders import ProcessSearchOrdersJob
+
+    repo = SearchOrderRepository(session)
+    order = await repo.create(SearchOrder(user_id=TEST_USER_ID, query="Audi A4"))
+
+    # 3 vehículos nuevos, 0 existentes → new_count = 3
+    results = [
+        _make_result("autoscout24_es", f"ES-10{i}", brand="Audi")
+        for i in range(3)
+    ]
+    fake_engine = _make_fake_engine(results)
+    fake_persist = AsyncMock(
+        return_value={
+            "saved": 3,
+            "created": 3,
+            "updated": 0,
+            "links": {0: TEST_VEHICLE_ID, 1: TEST_VEHICLE_ID, 2: TEST_VEHICLE_ID},
+        }
+    )
+
+    job = ProcessSearchOrdersJob()
+    monkeypatch.setattr(
+        "app.jobs.process_search_orders.SearchPersistenceService",
+        lambda _session: MagicMock(persist_engine_result=fake_persist),
+    )
+    monkeypatch.setattr(job, "_build_search_engine", lambda _session: fake_engine)
+    monkeypatch.setattr(job, "_snapshot_item", staticmethod(lambda _r: "{}"))
+
+    db_manager = MagicMock()
+
+    class _Ctx:
+        def __init__(self, s: AsyncSession) -> None:
+            self._s = s
+
+        async def __aenter__(self) -> AsyncSession:
+            return self._s
+
+        async def __aexit__(self, *_: Any) -> None:
+            return None
+
+    db_manager.get_session.return_value = _Ctx(session)
+    context = JobContext(
+        db_manager=db_manager,
+        settings=MagicMock(
+            search_orders_per_run=5,
+            search_order_max_attempts=5,
+            search_order_retry_cooldown_minutes=30,
+            search_order_stale_minutes=15,
+        ),
+        logger=logging.getLogger("test_search_orders"),
+    )
+
+    await job.execute(context)
+
+    refreshed = await repo.get_by_id(order.id)
+    assert refreshed is not None
+    assert refreshed.new_count == 3
+    assert await repo.total_new_by_user(TEST_USER_ID) == 3
+
+
+@pytest.mark.asyncio
+async def test_job_no_pending_orders(
+    session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Si no hay órdenes pending, el job devuelve éxito con mensaje."""
+    from app.jobs.process_search_orders import ProcessSearchOrdersJob
+
+    job = ProcessSearchOrdersJob()
+    monkeypatch.setattr(job, "_build_search_engine", lambda _session: MagicMock())
+
+    db_manager = MagicMock()
+
+    class _Ctx:
+        def __init__(self, s: AsyncSession) -> None:
+            self._s = s
+
+        async def __aenter__(self) -> AsyncSession:
+            return self._s
+
+        async def __aexit__(self, *_: Any) -> None:
+            return None
+
+    db_manager.get_session.return_value = _Ctx(session)
+    context = JobContext(
+        db_manager=db_manager,
+        settings=MagicMock(
+            search_orders_per_run=5,
+            search_order_max_attempts=5,
+            search_order_retry_cooldown_minutes=30,
+            search_order_stale_minutes=0,
+        ),
+        logger=logging.getLogger("test_search_orders"),
+    )
+
+    result = await job.execute(context)
+    assert result.success
+    assert "No pending" in result.message
+    assert result.data.get("processed", 0) == 0
+
+
+@pytest.mark.asyncio
+async def test_job_status_transitions(
+    session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Verifica la transición de estados: PENDING → RUNNING → COMPLETED."""
+    from app.jobs.process_search_orders import ProcessSearchOrdersJob
+
+    repo = SearchOrderRepository(session)
+    order = await repo.create(SearchOrder(user_id=TEST_USER_ID, query="VW Golf"))
+
+    # Estado inicial
+    initial = await repo.get_by_id(order.id)
+    assert initial is not None
+    assert initial.status == "PENDING"
+
+    fake_engine = _make_fake_engine([_make_result("autoscout24_es", "ES-200")])
+    fake_persist = AsyncMock(
+        return_value={"saved": 1, "created": 1, "updated": 0, "links": {0: TEST_VEHICLE_ID}}
+    )
+
+    job = ProcessSearchOrdersJob()
+    monkeypatch.setattr(
+        "app.jobs.process_search_orders.SearchPersistenceService",
+        lambda _session: MagicMock(persist_engine_result=fake_persist),
+    )
+    monkeypatch.setattr(job, "_build_search_engine", lambda _session: fake_engine)
+    monkeypatch.setattr(job, "_snapshot_item", staticmethod(lambda _r: "{}"))
+
+    db_manager = MagicMock()
+
+    class _Ctx:
+        def __init__(self, s: AsyncSession) -> None:
+            self._s = s
+
+        async def __aenter__(self) -> AsyncSession:
+            return self._s
+
+        async def __aexit__(self, *_: Any) -> None:
+            return None
+
+    db_manager.get_session.return_value = _Ctx(session)
+    context = JobContext(
+        db_manager=db_manager,
+        settings=MagicMock(
+            search_orders_per_run=5,
+            search_order_max_attempts=5,
+            search_order_retry_cooldown_minutes=30,
+            search_order_stale_minutes=15,
+        ),
+        logger=logging.getLogger("test_search_orders"),
+    )
+
+    await job.execute(context)
+
+    # El claim_order pone RUNNING, la COMPLETED al final
+    final = await repo.get_by_id(order.id)
+    assert final is not None
+    assert final.status == "COMPLETED"
+    assert final.last_run_at is not None
+
+
+@pytest.mark.asyncio
+async def test_job_es_empty_results(
+    session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """El ES provider puede devolver 0 resultados → orden COMPLETED con 0."""
+    from app.jobs.process_search_orders import ProcessSearchOrdersJob
+
+    repo = SearchOrderRepository(session)
+    order = await repo.create(SearchOrder(user_id=TEST_USER_ID, query="Tesla Model X"))
+
+    # El engine devuelve resultados vacíos (no hay Teslas en ES)
+    fake_engine = _make_fake_engine([])
+    fake_persist = AsyncMock(return_value={"saved": 0, "created": 0, "updated": 0, "links": {}})
+
+    job = ProcessSearchOrdersJob()
+    monkeypatch.setattr(
+        "app.jobs.process_search_orders.SearchPersistenceService",
+        lambda _session: MagicMock(persist_engine_result=fake_persist),
+    )
+    monkeypatch.setattr(job, "_build_search_engine", lambda _session: fake_engine)
+    monkeypatch.setattr(job, "_snapshot_item", staticmethod(lambda _r: "{}"))
+
+    db_manager = MagicMock()
+
+    class _Ctx:
+        def __init__(self, s: AsyncSession) -> None:
+            self._s = s
+
+        async def __aenter__(self) -> AsyncSession:
+            return self._s
+
+        async def __aexit__(self, *_: Any) -> None:
+            return None
+
+    db_manager.get_session.return_value = _Ctx(session)
+    context = JobContext(
+        db_manager=db_manager,
+        settings=MagicMock(
+            search_orders_per_run=5,
+            search_order_max_attempts=5,
+            search_order_retry_cooldown_minutes=30,
+            search_order_stale_minutes=15,
+        ),
+        logger=logging.getLogger("test_search_orders"),
+    )
+
+    result = await job.execute(context)
+    assert result.success
+    assert result.data["found"] == 0
+
+    refreshed = await repo.get_by_id(order.id)
+    assert refreshed is not None
+    assert refreshed.status == "COMPLETED"
+    assert refreshed.results_count == 0
+    assert refreshed.new_count == 0
