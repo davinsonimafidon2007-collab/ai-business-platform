@@ -29,6 +29,7 @@ from app.models.search import (
     SearchSummary,
 )
 from app.providers.autoscout24 import AutoScout24Provider
+from app.providers.autoscout24_es import AutoScout24EsProvider
 from app.providers.mobile_de import MobileDeProvider
 from app.providers.registry import ProviderRegistry
 from app.services.market_estimator import MarketEstimator
@@ -73,13 +74,14 @@ class SearchEngineService:
         orchestrator: SearchOrchestrator | None = None,
         provider_registry: type[ProviderRegistry] = ProviderRegistry,
         import_cost_profile: str | None = None,
+        autoscout24_es_provider: AutoScout24EsProvider | None = None,
     ) -> None:
         """Inicializa el SearchEngineService con todas las dependencias.
 
         Args:
             vehicle_service: Servicio de vehículos para búsquedas.
             mobile_de_provider: Provider de mobile.de.
-            autoscout24_provider: Provider de AutoScout24.
+            autoscout24_provider: Provider de AutoScout24 (DE).
             vehicle_scorer: Motor de puntuación de vehículos.
             market_estimator: Estimador de mercado (implementa MarketEstimator protocol).
             profit_analyzer: Analizador de rentabilidad.
@@ -87,10 +89,12 @@ class SearchEngineService:
             negotiation_engine: Motor de estrategia de negociación (opcional).
             orchestrator: Orquestador de búsqueda (opcional, se crea uno por defecto).
             provider_registry: Registro de providers (clase, no instancia).
+            autoscout24_es_provider: Provider de AutoScout24 España (opcional).
         """
         self._vehicle_service = vehicle_service
         self._mobile_de_provider = mobile_de_provider
         self._autoscout24_provider = autoscout24_provider
+        self._autoscout24_es_provider = autoscout24_es_provider
         self._vehicle_scorer = vehicle_scorer
         self._market_estimator = market_estimator
         self._profit_analyzer = profit_analyzer
@@ -178,18 +182,23 @@ class SearchEngineService:
             try:
                 registry.get("autoscout24_es")
             except KeyError:
-                from app.providers.autoscout24_es import AutoScout24EsProvider
-                from app.providers.http_client import ProviderHttpClient
+                if self._autoscout24_es_provider is not None:
+                    registry.register(self._autoscout24_es_provider)
+                else:
+                    from app.providers.autoscout24_es import AutoScout24EsProvider
+                    from app.providers.http_client import ProviderHttpClient
 
-                client = ProviderHttpClient(
-                    provider_name="autoscout24_es",
-                    base_url="https://www.autoscout24.es",
-                    timeout=settings.provider_http_timeout,
-                    max_retries=settings.provider_http_max_retries,
-                )
-                registry.register(
-                    AutoScout24EsProvider(http_client=client, base_url="https://www.autoscout24.es")
-                )
+                    client = ProviderHttpClient(
+                        provider_name="autoscout24_es",
+                        base_url="https://www.autoscout24.es",
+                        timeout=settings.provider_http_timeout,
+                        max_retries=settings.provider_http_max_retries,
+                    )
+                    registry.register(
+                        AutoScout24EsProvider(
+                            http_client=client, base_url="https://www.autoscout24.es"
+                        )
+                    )
 
         # Asegurar fixtures ES (auto-registro por perfil SPAIN)
         registry.ensure_es_market_fixture()

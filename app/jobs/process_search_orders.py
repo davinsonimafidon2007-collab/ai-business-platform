@@ -185,6 +185,7 @@ class ProcessSearchOrdersJob(Job):
     def _build_search_engine(self, session: Any) -> Any:
         """Construye SearchEngineService con sus dependencias (mismo wiring que DI)."""
         from app.providers.autoscout24 import AutoScout24Provider
+        from app.providers.autoscout24_es import AutoScout24EsProvider
         from app.providers.http_client import ProviderHttpClient
         from app.providers.mobile_de import MobileDeProvider
         from app.repositories.cached_market_repository import CachedMarketRepository
@@ -211,6 +212,12 @@ class ProcessSearchOrdersJob(Job):
             timeout=settings.provider_http_timeout,
             max_retries=settings.provider_http_max_retries,
         )
+        autoscout_es_client = ProviderHttpClient(
+            provider_name="autoscout24_es",
+            base_url="https://www.autoscout24.es",
+            timeout=settings.provider_http_timeout,
+            max_retries=settings.provider_http_max_retries,
+        )
         market_estimator = ComparableMarketEstimator(
             vehicle_service=vehicle_service,
             cached_market_repository=CachedMarketRepository(session),
@@ -224,6 +231,10 @@ class ProcessSearchOrdersJob(Job):
             autoscout24_provider=AutoScout24Provider(
                 http_client=autoscout_client,
                 base_url="https://www.autoscout24.de",
+            ),
+            autoscout24_es_provider=AutoScout24EsProvider(
+                http_client=autoscout_es_client,
+                base_url="https://www.autoscout24.es",
             ),
             vehicle_scorer=VehicleScorer(),
             market_estimator=market_estimator,
