@@ -43,9 +43,9 @@ class BudgetSearchAgent:
             + profile.paperwork_cost
             + profile.miscellaneous_cost
         )
-        # Reservar 20% del precio de compra para variables (tax, commission, repair)
-        # Formula: budget = price + fixed_costs + price * 0.20
-        # => price = (budget - fixed_costs) / 1.20
+        # Reservar un buffer para variables (impuestos + comisión + reparación).
+        # Formula: budget = price + fixed_costs + price * (tax + commission + repair)
+        # => price = (budget - fixed_costs) / (1 + tax + commission + repair)
         available = max(0.0, total_budget - fixed_costs)
         variable_buffer = 1.0 + (
             profile.tax_rate + profile.commission_rate + profile.repair_estimate_rate
