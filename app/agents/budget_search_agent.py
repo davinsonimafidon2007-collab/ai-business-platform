@@ -5,8 +5,10 @@ from typing import Any
 
 from app.agents.search_agent import SearchAgent
 from app.config.import_costs import get_profile
+from app.models.search import SearchRequest
 from app.services.opportunity_finder import OpportunityFinder
 from app.services.profit_analyzer import ProfitAnalyzer
+from app.services.search_engine import SearchEngineService
 
 
 class BudgetSearchAgent:
@@ -22,11 +24,13 @@ class BudgetSearchAgent:
         search_agent: SearchAgent | None = None,
         profit_analyzer: ProfitAnalyzer | None = None,
         opportunity_finder: OpportunityFinder | None = None,
+        search_engine: SearchEngineService | None = None,
         profile_name: str = "SPAIN",
     ) -> None:
         self.search_agent = search_agent or SearchAgent("budget_search")
         self.profit_analyzer = profit_analyzer or ProfitAnalyzer()
         self.opportunity_finder = opportunity_finder or OpportunityFinder()
+        self.search_engine = search_engine
         self.profile_name = profile_name
 
     def calculate_max_purchase_price(self, total_budget: float) -> float:
@@ -53,23 +57,65 @@ class BudgetSearchAgent:
         return round(available / variable_buffer, 2)
 
     async def search_by_budget(
-        self, total_budget: float, profit_margin_min: float = 500.0
-    ) -> list[dict[str, Any]]:
+        self,
+        total_budget: float,
+        query: str = "*",
+        max_results: int = 30,
+        profit_margin_min: float = 500.0,
+        engine: SearchEngineService | None = None,
+    ) -> dict[str, Any]:
         """Busca vehículos cuyo precio encaje en el capital disponible.
+
+        Ejecuta una búsqueda real con el SearchEngineService usando el precio
+        máximo de compra derivado del capital total como ``budget_max``.
 
         Args:
             total_budget: Capital total del usuario (EUR).
+            query: Término de búsqueda.
+            max_results: Número máximo de resultados a devolver.
             profit_margin_min: Beneficio mínimo postventa para considerar oportunidad (EUR).
+            engine: SearchEngineService para ejecutar la búsqueda. Si no se
+                pasa, se usa el inyectado en el constructor.
 
         Returns:
-            Lista de vehículos que encajan en presupuesto + son oportunidades.
+            Dict con el cálculo de presupuesto, la búsqueda real y sus resultados.
+
+        Raises:
+            ValueError: Si no hay motor de búsqueda disponible.
         """
+        engine = engine or self.search_engine
+        if engine is None:
+            raise ValueError(
+                "No hay SearchEngineService disponible: la búsqueda por presupuesto "
+                "requiere un motor de búsqueda real (pasa 'engine' o inyéctalo)."
+            )
+
         max_price = self.calculate_max_purchase_price(total_budget)
-        return [
-            {
-                "max_purchase_price": max_price,
+
+        if max_price <= 0:
+            return {
+                "status": "budget_too_low",
                 "total_budget": total_budget,
-                "profit_margin_min": profit_margin_min,
-                "status": "search_ready",
+                "max_purchase_price": max_price,
+                "query": query,
+                "results": [],
+                "provider_issues": [],
             }
-        ]
+
+        request = SearchRequest(
+            query=query,
+            max_results=max_results,
+            budget_max=max_price,
+            country="ES",
+        )
+        engine_result = await engine.search(request)
+
+        return {
+            "status": "ok",
+            "total_budget": total_budget,
+            "max_purchase_price": max_price,
+            "query": query,
+            "results": engine_result.results,
+            "summary": engine_result.summary,
+            "provider_issues": engine_result.provider_issues,
+        }

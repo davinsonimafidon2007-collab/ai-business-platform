@@ -7,6 +7,7 @@ smoke de cableado: detecta imports rotos o firmas cambiadas.
 
 import pytest
 
+from app.agents.alert_agent import AlertAgent
 from app.agents.opportunity_agent import OpportunityAgent
 from app.agents.scoring_agent import ScoringAgent
 from app.agents.search_agent import SearchAgent
@@ -24,6 +25,40 @@ def test_agents_are_instantiable_and_expose_entrypoints():
     assert callable(SearchAgent("test").run)
     assert callable(OpportunityAgent().evaluate)
     assert callable(ScoringAgent().score)
+    assert callable(AlertAgent().check_and_alert)
+
+
+@pytest.mark.asyncio
+async def test_scoring_agent_delegates_to_real_scorer():
+    """El ScoringAgent devuelve un score real (no un stub 0.0)."""
+    agent = ScoringAgent()
+    score = await agent.score(
+        {"price": 10000, "mileage": 50000, "year": 2019, "fuel_type": "diesel"}
+    )
+    assert 0 < score <= 100
+
+
+@pytest.mark.asyncio
+async def test_alert_agent_returns_alerts_when_rules_met():
+    agent = AlertAgent()
+
+    no_alerts = await agent.check_and_alert(
+        {"opportunity_level": "AVERAGE", "recommendation": "WATCH", "estimated_profit": 200},
+        {"min_profit": 500},
+    )
+    assert no_alerts == []
+
+    alerts = await agent.check_and_alert(
+        {
+            "opportunity_level": "EXCELLENT",
+            "recommendation": "BUY_NOW",
+            "estimated_profit": 1200,
+            "roi": 18.0,
+        },
+        {"min_level": "GOOD", "min_profit": 1000, "min_roi": 15.0},
+    )
+    assert any("EXCELLENT" in a for a in alerts)
+    assert any("BUY_NOW" in a for a in alerts)
 
 
 def test_integration_services_are_wired():

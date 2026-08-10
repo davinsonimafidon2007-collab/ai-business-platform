@@ -16,6 +16,31 @@ export interface SetSessionParams {
   user: User;
 }
 
+// Decodifica el payload (parte 2) de un JWT sin verificar la firma.
+// Devuelve null si el token no parece un JWT de 3 segmentos o su payload
+// no es JSON válido. Solo se usa para leer `exp`, nunca para validar.
+export function decodeJwtPayload(token: string): Record<string, unknown> | null {
+  try {
+    const parts = token.split(".");
+    if (parts.length !== 3) return null;
+    const base64url = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const padded = base64url.padEnd(Math.ceil(base64url.length / 4) * 4, "=");
+    const json = atob(padded);
+    const payload = JSON.parse(json);
+    return typeof payload === "object" && payload !== null ? payload : null;
+  } catch {
+    return null;
+  }
+}
+
+// Devuelve la fecha de expiración (`exp`, segundos epoch) del token,
+// o null si no es un JWT o no expone `exp`.
+export function getTokenExpiry(token: string): number | null {
+  const payload = decodeJwtPayload(token);
+  if (!payload || typeof payload.exp !== "number") return null;
+  return payload.exp;
+}
+
 interface AuthState {
   user: User | null;
   isAuthenticated: boolean;
@@ -80,6 +105,19 @@ export const useAuthStore = create<AuthState>((set) => ({
     try {
       const token = storage.get(TOKEN_KEYS.accessToken);
       const userStr = storage.get(TOKEN_KEYS.user);
+      // FE-001: validar la expiración del access token. Si el token expone
+      // `exp` y ya venció, no hidratar la sesión: se limpia storage y se
+      // marca no autenticado (el API client reintentará refresh si se usa).
+      if (token) {
+        const exp = getTokenExpiry(token);
+        if (exp !== null && exp * 1000 <= Date.now()) {
+          storage.remove(TOKEN_KEYS.accessToken);
+          storage.remove(TOKEN_KEYS.refreshToken);
+          storage.remove(TOKEN_KEYS.user);
+          set({ user: null, isAuthenticated: false, isLoading: false });
+          return;
+        }
+      }
       // Protección básica: no aceptar tokens vacíos o corruptos
       if (token && token.trim().length > 0 && userStr) {
         const user = JSON.parse(userStr) as User;
@@ -90,8 +128,5 @@ export const useAuthStore = create<AuthState>((set) => ({
     } catch {
       set({ isLoading: false });
     }
-    // TODO(FE-001): opcional — validar expiración del access token (payload `exp`)
-    // y, si parece expirado, intentar refresh una vez o marcar no autenticado.
-    // No implementado aquí para mantener el cambio mínimo y testeable.
   },
 }));

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { useAuthStore, TOKEN_KEYS } from "@/app/store/auth-store";
+import { useAuthStore, TOKEN_KEYS, getTokenExpiry, decodeJwtPayload } from "@/app/store/auth-store";
 import type { User } from "@/app/types/auth";
 
 const user: User = {
@@ -10,6 +10,11 @@ const user: User = {
   role: "user",
   created_at: "2024-01-01T00:00:00Z",
 };
+
+// JWT de prueba: header.payload.signature (payload base64url, sin verificar).
+const b64url = (obj: object) =>
+  btoa(JSON.stringify(obj)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+const makeJwt = (payload: object) => `header.${b64url(payload)}.signature`;
 
 describe("auth-store", () => {
   beforeEach(() => {
@@ -82,5 +87,45 @@ describe("auth-store", () => {
     expect(window.localStorage.getItem(TOKEN_KEYS.accessToken)).toBeNull();
     expect(window.localStorage.getItem(TOKEN_KEYS.refreshToken)).toBeNull();
     expect(window.localStorage.getItem(TOKEN_KEYS.user)).toBeNull();
+  });
+
+  it("initialize no hidrata sesión con access token expirado y limpia storage", () => {
+    const expiredToken = makeJwt({ exp: Math.floor(Date.now() / 1000) - 1000 });
+    window.localStorage.setItem(TOKEN_KEYS.accessToken, expiredToken);
+    window.localStorage.setItem(TOKEN_KEYS.refreshToken, "rt");
+    window.localStorage.setItem(TOKEN_KEYS.user, JSON.stringify(user));
+
+    useAuthStore.getState().initialize();
+
+    const state = useAuthStore.getState();
+    expect(state.isAuthenticated).toBe(false);
+    expect(state.isLoading).toBe(false);
+    expect(window.localStorage.getItem(TOKEN_KEYS.accessToken)).toBeNull();
+    expect(window.localStorage.getItem(TOKEN_KEYS.refreshToken)).toBeNull();
+    expect(window.localStorage.getItem(TOKEN_KEYS.user)).toBeNull();
+  });
+
+  it("initialize hidrata sesión cuando el token no está expirado", () => {
+    const validToken = makeJwt({ exp: Math.floor(Date.now() / 1000) + 3600 });
+    window.localStorage.setItem(TOKEN_KEYS.accessToken, validToken);
+    window.localStorage.setItem(TOKEN_KEYS.user, JSON.stringify(user));
+
+    useAuthStore.getState().initialize();
+
+    const state = useAuthStore.getState();
+    expect(state.isAuthenticated).toBe(true);
+    expect(state.user?.email).toBe("user@example.com");
+  });
+
+  it("getTokenExpiry devuelve null para tokens no JWT o sin exp", () => {
+    expect(getTokenExpiry("at")).toBeNull();
+    expect(getTokenExpiry(makeJwt({ sub: "user-1" }))).toBeNull();
+    expect(getTokenExpiry("a.b")).toBeNull();
+  });
+
+  it("decodeJwtPayload no rompe con payload corrupto", () => {
+    expect(decodeJwtPayload("a.b.c")).toBeNull();
+    expect(decodeJwtPayload("header.%%%.sig")).toBeNull();
+    expect(decodeJwtPayload(makeJwt({ exp: 123 }))).toEqual({ exp: 123 });
   });
 });
