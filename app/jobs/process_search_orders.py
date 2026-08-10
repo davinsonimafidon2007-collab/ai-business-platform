@@ -88,8 +88,6 @@ class ProcessSearchOrdersJob(Job):
 
                     try:
 
-                        existing_ids = await order_repo.vehicle_ids_for_order(order.id)
-
                         domain_request = self._build_request(order)
                         engine_result = await engine.search(domain_request)
 
@@ -101,6 +99,13 @@ class ProcessSearchOrdersJob(Job):
                         # persist_engine_result devuelve el vehicle_id por índice:
                         # vincula sin re-consultar por source/external_id (J3).
                         links = persist_info.get("links", {})
+
+                        # Check only the batch's vehicle IDs instead of loading
+                        # ALL IDs (AUDIT.PARALLEL.1 — badge optimization).
+                        candidate_ids = set(links.values())
+                        existing_ids = await order_repo.existing_vehicle_ids_batch(
+                            order.id, candidate_ids
+                        )
 
                         new_count = 0
                         unlinked = 0
@@ -265,7 +270,7 @@ class ProcessSearchOrdersJob(Job):
             from app.api.v1.routes.search import _build_search_result_item
 
             return _build_search_result_item(search_result).model_dump_json()
-        except Exception:
+        except Exception:  # noqa: BLE001 — snapshot is best-effort
             vehicle = getattr(search_result, "vehicle", None)
             ext_id = getattr(vehicle, "external_id", None) if vehicle is not None else None
             logger.exception(

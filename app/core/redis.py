@@ -53,7 +53,7 @@ async def close_redis() -> None:
     if _client is not None:
         try:
             await _client.aclose()
-        except Exception:
+        except redis.RedisError:
             logger.exception("Error closing Redis")
         _client = None
 
@@ -69,7 +69,7 @@ async def cache_get(key: str) -> str | None:
         return None
     try:
         return await client.get(key)
-    except Exception:
+    except redis.RedisError:
         logger.warning("Redis GET failed for key=%s", key, exc_info=True)
         return None
 
@@ -80,7 +80,7 @@ async def cache_set(key: str, value: str, ttl_seconds: int) -> None:
         return
     try:
         await client.set(key, value, ex=max(1, int(ttl_seconds)))
-    except Exception:
+    except redis.RedisError:
         logger.warning("Redis SET failed for key=%s", key, exc_info=True)
 
 
@@ -90,7 +90,7 @@ async def cache_delete(key: str) -> None:
         return
     try:
         await client.delete(key)
-    except Exception:
+    except redis.RedisError:
         logger.warning("Redis DELETE failed for key=%s", key, exc_info=True)
 
 
@@ -130,6 +130,6 @@ async def rate_limit_hit(key: str, limit: int, window_seconds: int) -> tuple[boo
         if count > limit:
             return False, max(1, ttl)
         return True, 0
-    except Exception:
+    except redis.RedisError:
         logger.warning("Redis rate_limit_hit failed for key=%s", key, exc_info=True)
         raise

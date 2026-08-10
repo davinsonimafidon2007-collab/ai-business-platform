@@ -5,6 +5,7 @@ import time
 from collections import defaultdict
 from typing import Any
 
+import redis as redis_lib
 from fastapi import Request
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
@@ -198,7 +199,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 allowed, _retry = await rate_limit_hit(redis_key, limit, window)
                 self._mode = "redis"
                 return allowed
-            except Exception:
+            except (redis_lib.RedisError, RuntimeError):
                 # Fallback a memoria local (fail-soft) — log visible in prod.
                 self._mode = "memory"
                 self._log_fallback()

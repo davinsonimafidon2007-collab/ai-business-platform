@@ -162,7 +162,7 @@ class SearchOrchestrator:
                 vehicle_dtos = await self._vehicle_service.search_from_provider(
                     provider, request.query, **kwargs
                 )
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 — multi-provider: must continue
                 logger.exception("Error al buscar en provider %s", provider_name)
                 self._last_provider_issues.append(
                     ProviderIssue(
@@ -187,7 +187,7 @@ class SearchOrchestrator:
                         ),
                     )
                     all_results.append(result)
-                except Exception as exc:
+                except Exception as exc:  # noqa: BLE001 — analysis can raise diverse errors
                     external_id = getattr(dto, "external_id", None)
                     logger.exception(
                         "Error al analizar vehículo %s", external_id or "unknown"

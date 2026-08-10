@@ -12,9 +12,9 @@ const config: CapacitorConfig = {
       permissions: true,
     },
     GoogleAuth: {
-      clientId: '983773208764-oevega4uglktmrisjrh41teq5mjb270n.apps.googleusercontent.com',
-      androidClientId: '983773208764-7i0hfifq4ni324qnugvj0a79bu09fh4t.apps.googleusercontent.com',
-      iosClientId: '983773208764-oevega4uglktmrisjrh41teq5mjb270n.apps.googleusercontent.com',
+      clientId: process.env.GOOGLE_WEB_CLIENT_ID || 'REPLACE_ME',
+      androidClientId: process.env.GOOGLE_ANDROID_CLIENT_ID || 'REPLACE_ME',
+      iosClientId: process.env.GOOGLE_IOS_CLIENT_ID || 'REPLACE_ME',
     },
   },
 };

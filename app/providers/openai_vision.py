@@ -268,7 +268,8 @@ class OpenAIVisionProvider:
                 },
             )
             return response.status_code == 200
-        except Exception:
+        except (httpx.HTTPError, OSError, ValueError) as exc:
+            logger.warning("openai is_available check failed: %s", exc)
             return False
 
     # ------------------------------------------------------------------

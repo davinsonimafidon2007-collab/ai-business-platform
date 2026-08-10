@@ -19,6 +19,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+import httpx
 from bs4 import BeautifulSoup
 
 from app.providers.base import VehicleProvider
@@ -61,18 +62,23 @@ class MobileDeProvider(VehicleProvider):
         """Descarga HTML; convierte 403 anti-bot en ProviderConnectionError."""
         try:
             return await super()._download_url(url)
-        except Exception as exc:
-            status = getattr(getattr(exc, "response", None), "status_code", None)
-            msg = str(exc)
-            if status == 403 or "403" in msg:
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 403:
                 logger.error("mobile_de: HTTP 403 anti-bot (url=%s)", url)
                 raise ProviderConnectionError(
                     "mobile.de bloqueó la petición (HTTP 403). "
                     "Configura un proxy residencial o cookies de navegador real.",
                     provider=self.source_name,
-                    original_error=exc if isinstance(exc, Exception) else None,
+                    original_error=exc,
                 ) from exc
             raise
+        except httpx.RequestError as exc:
+            logger.error("mobile_de: request error (url=%s): %s", url, exc)
+            raise ProviderConnectionError(
+                f"mobile.de: error de red: {exc}",
+                provider=self.source_name,
+                original_error=exc,
+            ) from exc
 
     async def get_vehicle(self, external_id: str) -> VehicleDetail:
         if external_id.startswith("http"):

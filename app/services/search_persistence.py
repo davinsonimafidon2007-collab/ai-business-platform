@@ -8,6 +8,7 @@ dashboard los muestre al usuario sin volver a buscarlos (PERSONAL.NOAUTH).
 
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime
 from typing import Any
 
@@ -17,6 +18,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.opportunity import Opportunity
 from app.models.vehicle import Vehicle
 from app.models.vehicle_evaluation import VehicleEvaluation
+
+logger = logging.getLogger(__name__)
 
 
 def _stringify(value: Any) -> str | None:
@@ -42,6 +45,10 @@ class SearchPersistenceService:
     ) -> dict[str, Any]:
         """Persiste vehículos + evaluaciones + oportunidades de un resultado.
 
+        Cada vehículo se procesa dentro de un savepoint (``begin_nested``) para
+        que un fallo en evaluación/opportunidad **no** deshaga los vehículos
+        ya flusheados con éxito en el mismo batch.
+
         Args:
             user_id: Dueño (en modo personal, el usuario local).
             engine_result: ``SearchEngineResult`` con ``results: list[SearchResult]``.
@@ -55,31 +62,39 @@ class SearchPersistenceService:
         results = list(getattr(engine_result, "results", []) or [])
         saved = created = updated = 0
         links: dict[int, str] = {}
+        failed = 0
 
         for idx, search_result in enumerate(results):
             dto = getattr(search_result, "vehicle", None)
             if dto is None:
                 continue
 
-            vehicle = await self._upsert_vehicle(user_id, dto)
-            if vehicle is None:
+            try:
+                async with self.session.begin_nested():
+                    vehicle = await self._upsert_vehicle(user_id, dto)
+                    if vehicle is None:
+                        continue
+                    links[idx] = vehicle.id
+                    saved += 1
+
+                    await self._upsert_evaluation(vehicle.id, search_result)
+                    await self._upsert_opportunity(vehicle.id, search_result)
+            except Exception:
+                failed += 1
+                logger.warning(
+                    "Failed to persist vehicle idx=%d, skipping",
+                    idx,
+                    exc_info=True,
+                )
                 continue
-            links[idx] = vehicle.id
-            saved += 1
-
-            try:
-                await self._upsert_evaluation(vehicle.id, search_result)
-            except Exception:
-                self.session.rollback()
-                raise
-
-            try:
-                await self._upsert_opportunity(vehicle.id, search_result)
-            except Exception:
-                self.session.rollback()
-                raise
 
         await self.session.commit()
+        if failed:
+            logger.warning(
+                "persist_engine_result: %d/%d vehicles failed in batch",
+                failed,
+                len(results),
+            )
         return {
             "saved": saved,
             "created": created,

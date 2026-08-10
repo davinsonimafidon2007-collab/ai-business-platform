@@ -5,9 +5,10 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
-from sqlalchemy import and_, or_, select, update
+from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.limits import clamp_limit, clamp_skip
 from app.models.search_order import SearchOrder, SearchOrderVehicle
 
 
@@ -21,6 +22,21 @@ class SearchOrderRepository:
         await self.session.refresh(order)
         return order
 
+    async def count_active_by_user(self, user_id: str) -> int:
+        """Órdenes activas del usuario (PENDING/RUNNING/FAILED) (P3).
+
+        Estas son las que consumen capacidad del job (las COMPLETED no).
+        Sin tope, un usuario encola cientos de búsquedas que el job procesa
+        una a una contra providers live.
+        """
+        result = await self.session.execute(
+            select(func.count(SearchOrder.id)).where(
+                SearchOrder.user_id == str(user_id),
+                SearchOrder.status.in_(["PENDING", "RUNNING", "FAILED"]),
+            )
+        )
+        return int(result.scalar() or 0)
+
     async def get_by_id(
         self, order_id: str | UUID, user_id: str | None = None
     ) -> SearchOrder | None:
@@ -33,6 +49,8 @@ class SearchOrderRepository:
     async def list_by_user(
         self, user_id: str, skip: int = 0, limit: int = 100
     ) -> list[SearchOrder]:
+        skip = clamp_skip(skip)
+        limit = clamp_limit(limit)
         result = await self.session.execute(
             select(SearchOrder)
             .where(SearchOrder.user_id == str(user_id))
@@ -173,6 +191,25 @@ class SearchOrderRepository:
         result = await self.session.execute(
             select(SearchOrderVehicle.vehicle_id).where(
                 SearchOrderVehicle.search_order_id == str(order_id)
+            )
+        )
+        return set(result.scalars().all())
+
+    async def existing_vehicle_ids_batch(
+        self, order_id: str | UUID, candidate_ids: set[str]
+    ) -> set[str]:
+        """Solo los ``candidate_ids`` que ya están vinculados a la orden.
+
+        Más eficiente que ``vehicle_ids_for_order`` cuando se conoce el
+        conjunto candidato (batch de resultados). Evita cargar TODOS los
+        ids de órdenes con miles de vehículos (AUDIT.PARALLEL.1 — badge).
+        """
+        if not candidate_ids:
+            return set()
+        result = await self.session.execute(
+            select(SearchOrderVehicle.vehicle_id).where(
+                SearchOrderVehicle.search_order_id == str(order_id),
+                SearchOrderVehicle.vehicle_id.in_(candidate_ids),
             )
         )
         return set(result.scalars().all())

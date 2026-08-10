@@ -196,7 +196,8 @@ class GeminiVisionProvider:
                 f"https://generativelanguage.googleapis.com/v1beta/models?key={self._api_key}",
             )
             return response.status_code == 200
-        except Exception:
+        except (httpx.HTTPError, OSError, ValueError) as exc:
+            logger.warning("gemini is_available check failed: %s", exc)
             return False
 
     # ------------------------------------------------------------------
