@@ -132,6 +132,15 @@ async def create_search_order(
             ) from exc
         agent = BudgetSearchAgent(profile_name=profile_name)
         max_purchase_price = agent.calculate_max_purchase_price(request.total_budget)
+        if max_purchase_price <= 0:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Presupuesto insuficiente: {request.total_budget:.0f} € no cubre "
+                    f"los costes fijos de importación del perfil '{profile_name}'. "
+                    f"Sin ese margen no puede comprarse ningún vehículo."
+                ),
+            )
 
     filters = dict(request.filters or {})
     filters.setdefault("max_results", 30)

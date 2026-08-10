@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.schemas.opportunity import (
@@ -14,7 +13,6 @@ from app.api.v1.schemas.opportunity import (
 from app.database import get_db_session
 from app.dependencies.auth import get_current_user
 from app.models.user import User
-from app.models.vehicle import Vehicle
 from app.repositories.opportunity_repository import OpportunityRepository
 from app.services.recommendation_labels import recommendation_label_es, risk_label_es
 
@@ -49,18 +47,9 @@ async def list_opportunities(
         offset=offset,
     )
 
-    # Cargar vehículos asociados para el resumen
-    vehicle_ids = [opp.vehicle_id for opp in items]
-    vehicles: dict[str, Vehicle] = {}
-    if vehicle_ids:
-        result = await session.execute(
-            select(Vehicle).where(Vehicle.id.in_(vehicle_ids))
-        )
-        vehicles = {v.id: v for v in result.scalars().all()}
-
     mapped: list[OpportunityRead] = []
     for opp in items:
-        vehicle = vehicles.get(opp.vehicle_id)
+        vehicle = opp.vehicle  # ya eager-loaded por list_filtered
         vehicle_summary = None
         if vehicle is not None:
             vehicle_summary = OpportunityVehicleSummary(

@@ -203,12 +203,37 @@ class SearchOrchestrator:
                     )
                     continue
 
-        # Limitar resultados
-        if request.max_results > 0:
-            all_results = all_results[: request.max_results]
+        # Dedup por (source, external_id) o URL. external_id es namespaced
+        # por provider (mobile_de "12345" != autoscout24 "12345"), así que
+        # incluir source evita colapsar coches distintos entre providers.
+        deduped: list[SearchResult] = []
+        seen_keys: set[tuple[str, str]] = set()
+        for r in all_results:
+            vehicle = r.vehicle
+            source = getattr(vehicle, "source", None) or ""
+            ext_id = getattr(vehicle, "external_id", None)
+            url = getattr(vehicle, "url", None)
+            key: tuple[str, str] | None
+            if ext_id:
+                key = (source, ext_id)
+            elif url:
+                key = (source, url)
+            else:
+                key = None
+            if key is None:
+                deduped.append(r)
+                continue
+            if key in seen_keys:
+                continue
+            seen_keys.add(key)
+            deduped.append(r)
 
-        # Ordenar por defecto: opportunity score DESC
-        return self.sort(all_results)
+        # Ordenar primero (oportunidad DESC) y luego limitar: limitar antes de
+        # ordenar descartaba coches mejores que los que quedaban en el top.
+        ordered = self.sort(deduped)
+        if request.max_results > 0:
+            ordered = ordered[: request.max_results]
+        return ordered
 
     @property
     def last_provider_issues(self) -> list[ProviderIssue]:

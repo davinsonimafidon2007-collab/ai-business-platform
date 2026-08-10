@@ -216,6 +216,18 @@ async def test_create_order_rejects_unknown_profile(
 
 
 @pytest.mark.asyncio
+async def test_create_order_rejects_budget_below_fixed_costs(
+    client: AsyncClient,
+) -> None:
+    resp = await client.post(
+        "/api/v1/search-orders",
+        json={"query": "Audi A4", "total_budget": 1500, "profile": "SPAIN"},
+    )
+    assert resp.status_code == 400, resp.text
+    assert "Presupuesto insuficiente" in resp.json()["error"]["message"]
+
+
+@pytest.mark.asyncio
 async def test_new_count_and_list_and_detail(
     session: AsyncSession, client: AsyncClient
 ) -> None:

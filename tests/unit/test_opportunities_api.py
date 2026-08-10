@@ -80,6 +80,7 @@ def test_opportunities_returns_200_shape(auth_override: None) -> None:
     """Con auth + repo mock → 200 con shape items/total/limit/offset."""
     opp = _make_opportunity()
     vehicle = _make_vehicle()
+    opp.vehicle = vehicle
 
     async def _fake_list_filtered(self, **kwargs):
         return [opp], 1

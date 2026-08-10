@@ -15,7 +15,7 @@ Casos mínimos requeridos:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -527,7 +527,10 @@ class TestMultipleProviders:
         vehicle_service_mock: AsyncMock,
         sample_dto: VehicleSearchResult,
     ) -> None:
-        vehicle_service_mock.search_from_provider.return_value = [sample_dto]
+        def _dto_for(provider: str, query: str, **kwargs: object) -> list[VehicleSearchResult]:
+            return [replace(sample_dto, source=provider)]
+
+        vehicle_service_mock.search_from_provider.side_effect = _dto_for
 
         request = SearchRequest(
             query="BMW",
@@ -1459,7 +1462,7 @@ class TestEdgeCases:
         sample_dto: VehicleSearchResult,
     ) -> None:
         """max_results grande no debe causar problemas."""
-        many_dtos = [sample_dto] * 50
+        many_dtos = [replace(sample_dto, external_id=f"12345-{i}") for i in range(50)]
         vehicle_service_mock.search_from_provider.return_value = many_dtos
 
         request = SearchRequest(query="BMW", max_results=100, providers=["mobile_de"])

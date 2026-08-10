@@ -61,7 +61,9 @@ class OpportunityRepository:
             The Opportunity if found, None otherwise.
         """
         result = await self.session.execute(
-            select(Opportunity).where(Opportunity.id == str(opportunity_id))
+            select(Opportunity)
+            .where(Opportunity.id == str(opportunity_id))
+            .options(selectinload(Opportunity.vehicle))
         )
         return result.scalar_one_or_none()
 
