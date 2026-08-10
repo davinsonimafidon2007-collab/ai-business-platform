@@ -284,7 +284,7 @@ class Settings(BaseSettings):
     # AutoScout24 España (comparables destino HTTP)
     # =========================================================================
     # Sigue requiriendo flag explícito: no se auto-registra por perfil SPAIN.
-    enable_autoscout24_es: bool = False
+    enable_autoscout24_es: bool = True
     """Si True, registra provider autoscout24_es en ProviderRegistry."""
 
     # =========================================================================
