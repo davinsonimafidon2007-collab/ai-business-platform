@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
 
+from app.core.config import settings
 from app.database import get_db_session
 from app.dependencies.auth import get_current_user
 from app.main import app
@@ -72,8 +73,9 @@ def auth_override() -> None:
 
 def test_opportunities_requires_auth() -> None:
     """Sin token → 401."""
-    response = client.get("/api/v1/opportunities")
-    assert response.status_code == 401
+    with patch.object(settings, "auth_disabled", False):
+        response = client.get("/api/v1/opportunities")
+        assert response.status_code == 401
 
 
 def test_opportunities_returns_200_shape(auth_override: None) -> None:

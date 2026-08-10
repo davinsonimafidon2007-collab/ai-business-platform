@@ -6,8 +6,15 @@ import pytest
 from fastapi import FastAPI, Request
 from starlette.responses import Response
 
+from app.core.config import settings
 from app.exceptions import AuthenticationError
 from app.middleware.authentication_middleware import AuthenticationMiddleware
+
+
+@pytest.fixture(autouse=True)
+def _auth_disabled_false() -> None:
+    with patch.object(settings, "auth_disabled", False):
+        yield
 
 
 @pytest.fixture
