@@ -12,9 +12,12 @@ from datetime import UTC, datetime
 from typing import Any
 
 from app.core.config import settings
+from app.core.logging import get_logger
 from app.jobs.base import Job, JobContext, JobResult
 from app.repositories.search_order_repository import SearchOrderRepository
 from app.services.search_persistence import SearchPersistenceService
+
+logger = get_logger(__name__)
 
 
 class ProcessSearchOrdersJob(Job):
@@ -33,20 +36,45 @@ class ProcessSearchOrdersJob(Job):
                 order_repo = SearchOrderRepository(session)
                 persistence = SearchPersistenceService(session)
 
+                # Recovery: órdenes RUNNING huérfanas (crash/OOM/reinicio) se
+                # reencolan a PENDING para reprocesarlas (AUDIT.PARALLEL.1).
+                stale_minutes = int(getattr(settings, "search_order_stale_minutes", 15) or 0)
+                recovered = 0
+                if stale_minutes > 0:
+                    stale_orders = await order_repo.stale_running_orders(stale_minutes)
+                    for stale in stale_orders:
+                        await order_repo.reset_to_pending(stale)
+                        recovered += 1
+                    if recovered:
+                        logger.warning(
+                            "Recovered %d stale RUNNING search order(s) back to PENDING",
+                            recovered,
+                        )
+
                 orders = await order_repo.pending_orders(limit=settings.search_orders_per_run)
                 if not orders:
-                    return JobResult(success=True, message="No pending search orders")
+                    return JobResult(
+                        success=True,
+                        message=(
+                            "No pending search orders"
+                            + (f" ({recovered} recovered)" if recovered else "")
+                        ),
+                        data={"recovered": recovered},
+                    )
 
                 engine = self._build_search_engine(session)
                 processed = 0
                 completed = 0
                 failed = 0
+                skipped = 0
                 total_found = 0
 
                 for order in orders:
-                    order.status = "RUNNING"
-                    order.updated_at = datetime.now(UTC)
-                    await order_repo.save(order)
+                    # Claim atómico: evita doble procesado si dos instancias
+                    # del job corren a la vez (AUDIT.PARALLEL.1).
+                    if not await order_repo.claim_order(order):
+                        skipped += 1
+                        continue
                     processed += 1
 
                     try:
@@ -109,12 +137,15 @@ class ProcessSearchOrdersJob(Job):
                     success=failed == 0,
                     message=(
                         f"Processed {processed} search orders: {completed} completed, "
-                        f"{failed} failed, {total_found} vehicles found"
+                        f"{failed} failed, {skipped} skipped (claimed elsewhere), "
+                        f"{recovered} recovered, {total_found} vehicles found"
                     ),
                     data={
                         "processed": processed,
                         "completed": completed,
                         "failed": failed,
+                        "skipped": skipped,
+                        "recovered": recovered,
                         "found": total_found,
                     },
                 )
@@ -188,7 +219,14 @@ class ProcessSearchOrdersJob(Job):
         return SearchRequest(
             query=query,
             max_results=int(filters.get("max_results", 30)),
-            providers=filters.get("providers") or ["mobile_de", "autoscout24"],
+            providers=filters.get("providers")
+            or [
+                "mobile_de",
+                "autoscout24",
+                "autoscout24_es",
+                "es_market_fixture",
+                "coches_net_fixture",
+            ],
             country=filters.get("country") or "ES",
             budget_max=order.max_purchase_price,
             brand=filters.get("brand"),
@@ -210,6 +248,7 @@ class ProcessSearchOrdersJob(Job):
 
             return _build_search_result_item(search_result).model_dump_json()
         except Exception:
+            logger.exception("No se pudo serializar el snapshot del resultado")
             return None
 
     async def _find_vehicle_id(self, session: Any, user_id: str, dto: Any) -> str | None:

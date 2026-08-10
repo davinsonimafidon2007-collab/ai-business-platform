@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from sqlalchemy import select, update
@@ -51,6 +51,69 @@ class SearchOrderRepository:
             .limit(limit)
         )
         return list(result.scalars().all())
+
+    async def stale_running_orders(
+        self, stale_minutes: int, limit: int = 100
+    ) -> list[SearchOrder]:
+        """Órdenes RUNNING que no se actualizan hace ``stale_minutes`` min.
+
+        Un proceso puede morir a mitad de procesar una orden (crash, OOM,
+        reinicio) y dejar la orden en RUNNING para siempre. Estas son
+        candidatas a recuperación: se resetean a PENDING para reprocesar.
+        """
+        # SQLite almacena DateTime(timezone=True) como naive UTC; usar un
+        # cutoff naive evita que la comparación SQL devuelva vacío. En
+        # Postgres (timestamptz) también es correcto: se asume sesión UTC.
+        cutoff = (datetime.now(UTC) - timedelta(minutes=stale_minutes)).replace(
+            tzinfo=None
+        )
+        result = await self.session.execute(
+            select(SearchOrder)
+            .where(
+                SearchOrder.status == "RUNNING",
+                SearchOrder.updated_at < cutoff,
+            )
+            .order_by(SearchOrder.updated_at.asc())
+            .limit(limit)
+        )
+        return list(result.scalars().all())
+
+    async def claim_order(self, order: SearchOrder) -> bool:
+        """Claim atómico de una orden para evitar doble procesado (race).
+
+        Transición PENDING/FAILED -> RUNNING con un UPDATE condicional.
+        Si otra instancia del job ya la reclamó (status != PENDING/FAILED),
+        el UPDATE no toca filas y devolvemos False: no procesar dos veces.
+        """
+        from sqlalchemy import update
+
+        result = await self.session.execute(
+            update(SearchOrder)
+            .where(
+                SearchOrder.id == str(order.id),
+                SearchOrder.status.in_(["PENDING", "FAILED"]),
+            )
+            .values(
+                status="RUNNING",
+                updated_at=datetime.now(UTC),
+            )
+        )
+        await self.session.commit()
+        if result.rowcount == 0:
+            return False
+        await self.session.refresh(order)
+        return True
+
+    async def reset_to_pending(self, order: SearchOrder) -> None:
+        """Devuelve una orden RUNNING huérfana a PENDING (recovery)."""
+        order.status = "PENDING"
+        order.error_message = (
+            f"Reencolada tras quedarse en RUNNING (stale). "
+            f"Último error: {order.error_message or 'ninguno'}"
+        )[:2000]
+        order.updated_at = datetime.now(UTC)
+        await self.session.commit()
+        await self.session.refresh(order)
 
     async def add_vehicle(
         self,

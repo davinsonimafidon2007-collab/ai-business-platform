@@ -115,11 +115,22 @@ class SearchResultAnalyzer:
             if market_estimation and market_estimation.market_price > 0
             else None
         )
-        profit_analysis = self._profit_analyzer.analyze(
-            vehicle,
-            profile_name=self._import_cost_profile,
-            estimated_sale_price=estimated_sale_price,
-        )
+        try:
+            profit_analysis = self._profit_analyzer.analyze(
+                vehicle,
+                profile_name=self._import_cost_profile,
+                estimated_sale_price=estimated_sale_price,
+            )
+        except ValueError as exc:
+            # Null-safety (AUDIT.PARALLEL.1): vehículo sin precio/0 no debe
+            # reventar el pipeline como si fuera un fallo de provider. Se
+            # degrada a REJECT con análisis vacío y se sigue.
+            logger.warning(
+                "Vehículo sin precio válido; análisis de rentabilidad degradado "
+                "a REJECT: %s",
+                exc,
+            )
+            profit_analysis = self._fallback_profit_analysis(vehicle, exc)
 
         # 4. Oportunidad
         opportunity = self._opportunity_finder.analyze(
@@ -228,6 +239,51 @@ class SearchResultAnalyzer:
             target_margin=15.0,
             profit_analysis_data=profit_data,
             vehicle_score_data=vehicle_data,
+        )
+
+    @staticmethod
+    def _fallback_profit_analysis(vehicle: Any, reason: BaseException) -> Any:
+        """ProfitAnalysis degradado para vehículos sin precio válido.
+
+        Todos los valores a 0 y recomendación REJECT para que el vehículo
+        aparezca en resultados como "no rentable" en vez de reventar el
+        pipeline o clasificarse como fallo de provider.
+        """
+        from app.services.profit_analyzer import (
+            CostBreakdown,
+            ProfitAnalysis,
+            Recommendation,
+            RiskLevel,
+        )
+
+        return ProfitAnalysis(
+            purchase_price=0.0,
+            transport_cost=0.0,
+            registration_cost=0.0,
+            taxes=0.0,
+            inspection_cost=0.0,
+            repair_estimate=0.0,
+            commission_cost=0.0,
+            miscellaneous_cost=0.0,
+            total_cost=0.0,
+            estimated_sale_price=0.0,
+            gross_profit=0.0,
+            net_profit=0.0,
+            roi_percentage=0.0,
+            profit_margin_percentage=0.0,
+            risk_level=RiskLevel.HIGH,
+            recommendation=Recommendation.REJECT,
+            cost_breakdown=CostBreakdown(
+                purchase_price=0.0,
+                transport_cost=0.0,
+                registration_cost=0.0,
+                taxes=0.0,
+                inspection_cost=0.0,
+                repair_estimate=0.0,
+                commission_cost=0.0,
+                miscellaneous_cost=0.0,
+            ),
+            warnings=[f"Sin precio válido: {reason}"],
         )
 
     def run_negotiation(

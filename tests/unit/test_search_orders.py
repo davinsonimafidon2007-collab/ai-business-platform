@@ -95,6 +95,58 @@ async def test_repo_mark_seen_resets_badge(session: AsyncSession) -> None:
     assert all(link.seen for link in links)
 
 
+@pytest.mark.asyncio
+async def test_repo_stale_running_recovery(session: AsyncSession) -> None:
+    """Una orden RUNNING huérfana (crash) se detecta y reencola a PENDING."""
+    from datetime import UTC, datetime, timedelta
+
+    from sqlalchemy import update
+
+    repo = SearchOrderRepository(session)
+    order = await repo.create(SearchOrder(user_id=TEST_USER_ID, query="Audi A3"))
+    # save() sobrescribe updated_at a now; simulamos el crash con UPDATE directo
+    await session.execute(
+        update(SearchOrder)
+        .where(SearchOrder.id == order.id)
+        .values(
+            status="RUNNING",
+            updated_at=datetime.now(UTC) - timedelta(minutes=60),
+        )
+    )
+    await session.commit()
+
+    stale = await repo.stale_running_orders(stale_minutes=15)
+    assert [o.id for o in stale] == [order.id]
+
+    await repo.reset_to_pending(stale[0])
+    refreshed = await repo.get_by_id(order.id)
+    assert refreshed is not None
+    assert refreshed.status == "PENDING"
+
+
+@pytest.mark.asyncio
+async def test_repo_claim_order_atomic(session: AsyncSession) -> None:
+    """El claim atómico evita que dos instancias procesen la misma orden."""
+    repo = SearchOrderRepository(session)
+    order = await repo.create(SearchOrder(user_id=TEST_USER_ID, query="BMW 1"))
+    order.status = "RUNNING"
+    await repo.save(order)
+
+    # Ya está RUNNING → no se puede reclamar
+    assert await repo.claim_order(order) is False
+
+    # Al reencolar a PENDING sí se puede reclamar una vez
+    order.status = "PENDING"
+    await repo.save(order)
+    assert await repo.claim_order(order) is True
+    refreshed = await repo.get_by_id(order.id)
+    assert refreshed is not None
+    assert refreshed.status == "RUNNING"
+
+    # Segundo claim falla (ya RUNNING)
+    assert await repo.claim_order(order) is False
+
+
 # =============================================================================
 # API
 # =============================================================================

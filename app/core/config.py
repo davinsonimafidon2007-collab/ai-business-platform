@@ -232,6 +232,10 @@ class Settings(BaseSettings):
     search_orders_per_run: int = 5
     """Maximum search orders processed per scheduler run."""
 
+    search_order_stale_minutes: int = 15
+    """Orden RUNNING más vieja que esto (min) se resetea a PENDING en el
+    siguiente run (recovery de crashes/OOM). 0 = disabled."""
+
     job_failure_alert_enabled: bool = True
     """Master toggle for job consecutive-failure alerts (Task J.1)."""
 
