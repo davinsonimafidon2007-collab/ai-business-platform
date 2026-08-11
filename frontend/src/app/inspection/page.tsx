@@ -37,12 +37,12 @@ function InspectionRouteContent() {
               placeholder="ID del vehículo"
               value={vehicleId ?? ""}
               onChange={(e) => setVehicleId(e.target.value)}
-              className="block flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="block flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
             />
             <button
               onClick={() => vehicleId && setShowForm(true)}
               disabled={!vehicleId}
-              className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+              className="rounded-md bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-500 disabled:opacity-50"
             >
               Comenzar
             </button>
