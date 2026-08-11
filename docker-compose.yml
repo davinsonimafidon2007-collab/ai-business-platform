@@ -10,6 +10,7 @@ services:
       - "8000:8000"
     volumes:
       - .:/app
+      - uploads_data:/app/uploads/inspection_photos
     environment:
       PYTHONUNBUFFERED: "1"
       DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/ai_business_platform
@@ -18,7 +19,7 @@ services:
       ENVIRONMENT: "${ENVIRONMENT:-development}"
       APP_URL: "${APP_URL:-http://localhost:3000}"
       ENABLE_SCHEDULER: "${ENABLE_SCHEDULER:-true}"
-      ENABLE_MOBILE_DE: "${ENABLE_MOBILE_DE:-true}"
+      ENABLE_MOBILE_DE: "${ENABLE_MOBILE_DE:-false}"
       PROVIDER_HTTP_PROXY: "${PROVIDER_HTTP_PROXY:-}"
       FIREBASE_CREDENTIALS_JSON: "${FIREBASE_CREDENTIALS_JSON}"
       # Uso personal (PERS.CLOSE.1): sin este passthrough el contenedor arranca
@@ -91,4 +92,6 @@ volumes:
     name: ai_platform_postgres_data
   redis_data:
     name: ai_platform_redis_data
+  uploads_data:
+    name: ai_platform_uploads_data
 
