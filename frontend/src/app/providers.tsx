@@ -6,6 +6,7 @@ import { useAuthStore } from "@/app/store/auth-store";
 import { useThemeStore } from "@/app/store/theme-store";
 import { initGoogleAuth } from "@/app/services/google-auth";
 import { isAuthDisabled } from "@/app/config/app-mode";
+import { useAndroidBackButton } from "@/app/hooks/useAndroidBackButton";
 
 function ThemeInitializer({ children }: { children: React.ReactNode }) {
   const initialize = useThemeStore((state) => state.initialize);
@@ -50,6 +51,16 @@ function GoogleAuthInitializer({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+/**
+ * Mounts native-app navigation effects (Android hardware back button) a single
+ * time, at the top of the provider tree. Do NOT re-mount per page to avoid
+ * duplicate listeners.
+ */
+function NativeNavigationEffects({ children }: { children: React.ReactNode }) {
+  useAndroidBackButton();
+  return <>{children}</>;
+}
+
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
     () =>
@@ -68,7 +79,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
     <QueryClientProvider client={queryClient}>
       <ThemeInitializer>
         <AuthInitializer>
-          <GoogleAuthInitializer>{children}</GoogleAuthInitializer>
+          <GoogleAuthInitializer>
+            <NativeNavigationEffects>{children}</NativeNavigationEffects>
+          </GoogleAuthInitializer>
         </AuthInitializer>
       </ThemeInitializer>
     </QueryClientProvider>

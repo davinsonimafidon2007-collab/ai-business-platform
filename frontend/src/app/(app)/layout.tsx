@@ -1,9 +1,14 @@
-import { AppShell } from "@/app/layout/app-shell";
+import { AuthGuard } from "@/app/components/auth/auth-guard";
+import { AppShell } from "@/app/layout/AppShell";
 
 export default function AppLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  return <AppShell>{children}</AppShell>;
+  return (
+    <AuthGuard>
+      <AppShell>{children}</AppShell>
+    </AuthGuard>
+  );
 }

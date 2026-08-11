@@ -1,3 +1,51 @@
+# TODO — MOBILE.NAV.1: atrás Android in-app ✅
+- [x] @capacitor/app + useAndroidBackButton
+- [x] docs/MOBILE_PRODUCT_CONTEXT.md
+
+HANDOFF: foco actual = móvil-first; ver `docs/MOBILE_PRODUCT_CONTEXT.md`.
+
+# TODO — MOBILE.API.1: API alcanzable desde el dispositivo real ✅
+- [x] Diagnosticar: `/api/v1/health` OK en PC (127.0.0.1:8000) y conocer IP LAN
+      del PC (192.168.1.138).
+- [x] Documentar URLs por entorno (Web PC / emulador / móvil real):
+      `docs/MOBILE_PRODUCT_CONTEXT.md` + `frontend/.env.local`.
+- [x] Backend ya escucha en `0.0.0.0` (docker-compose / `uvicorn --host 0.0.0.0`).
+- [x] Cleartext HTTP de desarrollo para el móvil físico:
+      `network_security_config.xml` permite el IP LAN del PC (además de
+      `10.0.2.2` y `localhost`). Correcto: `out/` seguía apuntando a
+      `localhost:8000` (inservible en teléfono); documentado el rebuild.
+- [x] CORS: los defaults ya cubren el `Origin` del WebView
+      (`androidScheme=http` → `http://localhost` / `capacitor://localhost`).
+- [x] Cliente axios (`api/client.ts`) prioriza `NEXT_PUBLIC_API_URL`, sin
+      hardcodear `10.0.2.2` ni duplicar `/api/v1`.
+- [x] Aclarada la precedencia de `.env.local` sobre `.env.production` (Next.js)
+      para que no vuelva a horneársele la URL equivocada al APK.
+
+## Verificación pendiente (en el dispositivo del dueño)
+- [ ] Chrome del móvil (misma WiFi):
+      `http://192.168.1.138:8000/api/v1/health` → `{"status":"ok",...}`
+- [ ] Rebuild del APK con el móvil a mano:
+      `cd frontend && npm run build && npx cap sync android` (con `.env.local`
+      con la IP LAN activa) y abrir Dashboard / Historial / Oportunidades sin
+      “Network Error”.
+
+---
+# TODO — MOBILE.SHELL.1: bottom tabs + layout sin sidebar en móvil ✅
+- [x] `useIsMobile` (viewport < 768px o Capacitor nativo → shell móvil)
+- [x] `AppShell` compartido: móvil = cabecera compacta + tabs abajo sin Sidebar;
+      desktop = Sidebar + Navbar como antes (doble red en CSS `hidden md:flex`).
+- [x] `MobileTabBar` (5 tabs: dashboard / search / opportunities / deals / more)
+- [x] `/more` agrega el resto de destinos (vehículos, inspección, historial,
+      API keys y Admin si rol ADMIN o modo personal).
+- [x] Layouts autenticados migrados a `AppShell` (dashboard, search,
+      opportunities, deals, vehicles, inspection, history, more, admin, api-keys).
+- [x] Safe area inferior (`pb-[env(safe-area-inset-bottom)]`) y `pb-24` en `main`
+      móvil para que el último card no quede bajo la barra.
+- [x] Desktop intacto: mantiene Sidebar; tema morado queda para MOBILE.THEME.1.
+
+Paleta/premium quedan fuera de alcance → MOBILE.THEME.1.
+
+---
 # TODO — Modo personal (sin login) — PERS.CLOSE.1 ✅
 
 Estado: **cerrado**. La app funciona en local sin registro ni login.

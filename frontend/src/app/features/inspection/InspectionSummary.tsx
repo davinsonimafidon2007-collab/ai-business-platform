@@ -275,7 +275,7 @@ export function InspectionSummary({
           {onExport && (
             <button
               onClick={onExport}
-              className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+              className="rounded-md bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-500"
             >
               Exportar resumen
             </button>

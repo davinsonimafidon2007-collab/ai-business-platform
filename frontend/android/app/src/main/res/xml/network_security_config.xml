@@ -1,8 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  MOBILE.API.1: cleartext HTTP solo para el backend local de desarrollo.
+
+  Como el backend va en http:// (sin TLS), hay que permitir cleartext para los
+  hosts a los que la app habla en desarrollo:
+    - 10.0.2.2        : emulador Android Studio  (alias del host del PC)
+    - localhost       : WebView Capacitor (androidScheme=http, capacitor.config.ts)
+    - 192.168.1.138   : PC de desarrollo accedido por WiFi desde un móvil real
+
+  Si el IP LAN del PC cambia, añádelo aquí (o usa android:usesCleartextTraffic="true"
+  solo en una build de dev). El resto del tráfico debe ir por HTTPS
+  (base-config=false).
+-->
 <network-security-config>
     <domain-config cleartextTrafficPermitted="true">
         <domain includeSubdomains="true">10.0.2.2</domain>
         <domain includeSubdomains="true">localhost</domain>
+        <domain includeSubdomains="true">192.168.1.138</domain>
     </domain-config>
     <base-config cleartextTrafficPermitted="false" />
 </network-security-config>
