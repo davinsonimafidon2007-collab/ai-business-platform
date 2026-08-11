@@ -198,8 +198,7 @@ class SearchPersistenceService:
             )
         if profit is not None:
             evaluation.estimated_import_cost = (
-                getattr(profit, "transport_cost", None)
-                or evaluation.estimated_import_cost
+                getattr(profit, "total_cost", None) or evaluation.estimated_import_cost
             )
             evaluation.estimated_registration_cost = (
                 getattr(profit, "registration_cost", None)

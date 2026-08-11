@@ -31,10 +31,11 @@ class VehicleRepository:
         )
         return result.scalar_one_or_none()
 
-    async def get_by_external_id(self, source: str, external_id: str) -> Vehicle | None:
-        result = await self.session.execute(
-            select(Vehicle).where(Vehicle.source == source, Vehicle.external_id == external_id)
-        )
+    async def get_by_external_id(self, source: str, external_id: str, user_id: str | None = None) -> Vehicle | None:
+        query = select(Vehicle).where(Vehicle.source == source, Vehicle.external_id == external_id)
+        if user_id is not None:
+            query = query.where(Vehicle.user_id == str(user_id))
+        result = await self.session.execute(query)
         return result.scalar_one_or_none()
 
     async def list_all(self, skip: int = 0, limit: int = 100) -> list[Vehicle]:

@@ -589,7 +589,7 @@ async def test_search_from_vehicle_service(search_html: str) -> None:
 async def test_import_from_provider_result(search_html: str) -> None:
     """Test que VehicleService puede importar resultados de MobileDeProvider."""
     from app.services.vehicle_service import VehicleService
-    from tests.unit.test_vehicle_service_providers import MockVehicleRepository
+    from tests.unit.test_vehicle_service_providers import MockVehicleRepository, TEST_USER_ID
 
     provider = MobileDeProvider()
     service = VehicleService(MockVehicleRepository())
@@ -603,7 +603,7 @@ async def test_import_from_provider_result(search_html: str) -> None:
     with patch.object(provider, "_get_client", new_callable=AsyncMock, return_value=mock_client):
         results = await service.search_from_provider(provider, "https://www.mobile.de/search")
 
-    vehicle = await service.import_from_provider_result(results[0])
+    vehicle = await service.import_from_provider_result(results[0], user_id=TEST_USER_ID)
 
     assert vehicle.source == "mobile_de"
     assert vehicle.external_id == "21000001"

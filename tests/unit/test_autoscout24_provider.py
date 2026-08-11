@@ -613,7 +613,7 @@ async def test_search_from_vehicle_service(search_html: str) -> None:
 async def test_import_from_provider_result(search_html: str) -> None:
     """Test que VehicleService puede importar resultados de AutoScout24Provider."""
     from app.services.vehicle_service import VehicleService
-    from tests.unit.test_vehicle_service_providers import MockVehicleRepository
+    from tests.unit.test_vehicle_service_providers import MockVehicleRepository, TEST_USER_ID
 
     provider = AutoScout24Provider()
     service = VehicleService(MockVehicleRepository())
@@ -627,7 +627,7 @@ async def test_import_from_provider_result(search_html: str) -> None:
     with patch.object(provider, "_get_client", new_callable=AsyncMock, return_value=mock_client):
         results = await service.search_from_provider(provider, "https://www.autoscout24.de/search")
 
-    vehicle = await service.import_from_provider_result(results[0])
+    vehicle = await service.import_from_provider_result(results[0], user_id=TEST_USER_ID)
 
     assert vehicle.source == "autoscout24"
     assert vehicle.external_id == "31000001"
