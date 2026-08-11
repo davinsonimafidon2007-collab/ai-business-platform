@@ -2,6 +2,9 @@
 
 The API rejects ``limit > 100`` with 422 (Query validation with ``le=100``),
 and repositories clamp ``limit`` defensively via ``clamp_limit``.
+
+Also covers P5 (pagination depth): ``skip`` above ``MAX_LIST_DEPTH`` is
+rejected with 422 and clamped at the repository via ``clamp_skip``.
 """
 
 from __future__ import annotations
@@ -11,7 +14,12 @@ from unittest.mock import AsyncMock
 import pytest
 from fastapi.testclient import TestClient
 
-from app.core.limits import MAX_LIST_LIMIT, clamp_limit
+from app.core.limits import (
+    MAX_LIST_DEPTH,
+    MAX_LIST_LIMIT,
+    clamp_limit,
+    clamp_skip,
+)
 from app.database import get_db_session
 from app.dependencies.auth import get_current_user
 from app.main import app
@@ -61,6 +69,27 @@ def test_clamp_limit_handles_bogus_input() -> None:
 
 
 # ---------------------------------------------------------------------------
+# clamp_skip (P5: profundidad de paginación en repositorios)
+# ---------------------------------------------------------------------------
+
+
+def test_clamp_skip_caps_deep_offset() -> None:
+    assert clamp_skip(999999) == MAX_LIST_DEPTH
+    assert clamp_skip(MAX_LIST_DEPTH) == MAX_LIST_DEPTH
+
+
+def test_clamp_skip_preserves_valid_and_floors() -> None:
+    assert clamp_skip(0) == 0
+    assert clamp_skip(25) == 25
+    assert clamp_skip(-10) == 0
+
+
+def test_clamp_skip_handles_bogus_input() -> None:
+    assert clamp_skip("abc") == 0
+    assert clamp_skip(None) == 0
+
+
+# ---------------------------------------------------------------------------
 # API validation: limit > 100 → 422
 # ---------------------------------------------------------------------------
 
@@ -77,6 +106,25 @@ def test_clamp_limit_handles_bogus_input() -> None:
 def test_listing_rejects_limit_above_max(url: str, auth_override) -> None:
     app.dependency_overrides[get_db_session] = _db
     response = client.get(f"{url}?limit=1000")
+    assert response.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# API validation: skip > MAX_LIST_DEPTH → 422 (P5, pagination depth)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "/api/v1/vehicles",
+        "/api/v1/searches",
+        "/api/v1/search-orders",
+    ],
+)
+def test_listing_rejects_skip_above_max_depth(url: str, auth_override) -> None:
+    app.dependency_overrides[get_db_session] = _db
+    response = client.get(f"{url}?skip={MAX_LIST_DEPTH + 1}")
     assert response.status_code == 422
 
 

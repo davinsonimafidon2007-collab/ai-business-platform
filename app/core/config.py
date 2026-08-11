@@ -197,6 +197,13 @@ class Settings(BaseSettings):
     # Delay mínimo entre peticiones (ms). 0 = off. Prod: 800–1500
     provider_http_min_delay_ms: int = 0
 
+    # mobile.de (CRIT.001). Opcional: sin proxy residencial la mayoría de IPs
+    # datacenter reciben 403 anti-bot. Default True (compatibilidad), pero se
+    # recomienda ENABLE_MOBILE_DE=false si no hay PROVIDER_HTTP_PROXY, para que
+    # las búsquedas no gasten tiempo/retries en una fuente caída. AutoScout24 DE
+    # es la fuente primaria (AS24-first).
+    enable_mobile_de: bool = True
+
     # =========================================================================
     # Scheduler / Jobs configuration
     # =========================================================================

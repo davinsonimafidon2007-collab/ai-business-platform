@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.v1.dependencies import get_evaluation_engine, get_profit_analyzer
 from app.api.v1.schemas.common import CostLineSchema
 from app.api.v1.schemas.vehicle import SimulateProfitRequest, SimulateProfitResponse
+from app.core.limits import MAX_LIST_DEPTH
 from app.database import get_db_session
 from app.dependencies.auth import get_current_user
 from app.models.user import User
@@ -59,7 +60,7 @@ async def create_vehicle(
 
 @router.get("", response_model=list[VehicleRead])
 async def list_vehicles(
-    skip: int = Query(0, ge=0),
+    skip: int = Query(0, ge=0, le=MAX_LIST_DEPTH),
     limit: int = Query(100, ge=1, le=100),
     service: VehicleService = Depends(get_vehicle_service),
     current_user: User = Depends(get_current_user),

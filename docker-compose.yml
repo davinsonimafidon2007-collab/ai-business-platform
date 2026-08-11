@@ -18,6 +18,8 @@ services:
       ENVIRONMENT: "${ENVIRONMENT:-development}"
       APP_URL: "${APP_URL:-http://localhost:3000}"
       ENABLE_SCHEDULER: "${ENABLE_SCHEDULER:-true}"
+      ENABLE_MOBILE_DE: "${ENABLE_MOBILE_DE:-true}"
+      PROVIDER_HTTP_PROXY: "${PROVIDER_HTTP_PROXY:-}"
       FIREBASE_CREDENTIALS_JSON: "${FIREBASE_CREDENTIALS_JSON}"
       # Uso personal (PERS.CLOSE.1): sin este passthrough el contenedor arranca
       # con AUTH_DISABLED vacío (=false) y la API responde 401 aunque el .env
@@ -45,7 +47,9 @@ services:
     ports:
       - "3000:3000"
     environment:
-      NEXT_PUBLIC_API_URL: "${NEXT_PUBLIC_API_URL:-http://api:8000}"
+      # GRAVE.004: el frontend se sirve desde el HOST (puerto 3000), así que
+      # el navegador no puede resolver 'api'; apuntamos a localhost:8000.
+      NEXT_PUBLIC_API_URL: "${NEXT_PUBLIC_API_URL:-http://localhost:8000}"
       NEXT_PUBLIC_AUTH_DISABLED: "${NEXT_PUBLIC_AUTH_DISABLED:-false}"
     depends_on:
       - api

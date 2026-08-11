@@ -258,14 +258,34 @@ class TestModelStructure:
     """Verifica que las estructuras de datos son correctas."""
 
     def test_search_request_defaults(self) -> None:
+        from app.core.config import settings
+
+        # CRIT.001: el default de providers depende de enable_mobile_de.
+        old_value = settings.enable_mobile_de
+        settings.enable_mobile_de = True
+        try:
+            request = SearchRequest(query="test")
+            assert request.query == "test"
+            assert request.max_results == 20
+            assert "mobile_de" in request.providers
+            assert "autoscout24" in request.providers
+            assert request.country == "ES"
+            assert request.budget_min is None
+            assert request.budget_max is None
+        finally:
+            settings.enable_mobile_de = old_value
+
+    def test_search_request_defaults_skip_mobile_when_disabled(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from app.core.config import settings
+
+        # CRIT.001: con enable_mobile_de=false, mobile_de no entra en los defaults
+        # y AutoScout24 sigue siendo la fuente primaria.
+        monkeypatch.setattr(settings, "enable_mobile_de", False)
         request = SearchRequest(query="test")
-        assert request.query == "test"
-        assert request.max_results == 20
-        assert "mobile_de" in request.providers
+        assert "mobile_de" not in request.providers
+        assert request.providers[0] == "autoscout24"
         assert "autoscout24" in request.providers
         assert request.country == "ES"
-        assert request.budget_min is None
-        assert request.budget_max is None
 
     def test_search_request_custom_values(self) -> None:
         request = SearchRequest(

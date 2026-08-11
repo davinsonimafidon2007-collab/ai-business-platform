@@ -149,7 +149,9 @@ class ProviderRegistry:
 
         Idempotente. No hace HTTP al construir las instancias (el cliente
         HTTP se crea lazy y solo abre conexión en el primer ``search`` real).
-        - mobile_de, autoscout24: siempre
+        - mobile_de: solo si settings.enable_mobile_de (CRIT.001: opcional,
+          requiere proxy residencial anti-bot)
+        - autoscout24: siempre (fuente primaria, AS24-first)
         - autoscout24_es: solo si settings.enable_autoscout24_es
         - es_market_fixture: flag o auto-registro si perfil SPAIN/ES
         - coches_net_fixture: flag o auto-registro si perfil SPAIN/ES
@@ -160,20 +162,22 @@ class ProviderRegistry:
         """
         if "mobile_de" not in cls._providers:
             from app.core.config import settings
-            from app.providers.http_client import ProviderHttpClient
-            from app.providers.mobile_de import MobileDeProvider
 
-            client = ProviderHttpClient(
-                provider_name="mobile_de",
-                base_url="https://suchen.mobile.de",
-                timeout=settings.provider_http_timeout,
-                max_retries=settings.provider_http_max_retries,
-            )
-            cls.register(
-                MobileDeProvider(
-                    http_client=client, base_url="https://suchen.mobile.de"
+            if getattr(settings, "enable_mobile_de", True):
+                from app.providers.http_client import ProviderHttpClient
+                from app.providers.mobile_de import MobileDeProvider
+
+                client = ProviderHttpClient(
+                    provider_name="mobile_de",
+                    base_url="https://suchen.mobile.de",
+                    timeout=settings.provider_http_timeout,
+                    max_retries=settings.provider_http_max_retries,
                 )
-            )
+                cls.register(
+                    MobileDeProvider(
+                        http_client=client, base_url="https://suchen.mobile.de"
+                    )
+                )
 
         if "autoscout24" not in cls._providers:
             from app.core.config import settings

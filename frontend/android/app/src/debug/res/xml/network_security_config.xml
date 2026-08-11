@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Override SOLO para buildType debug (res/merge del source set src/debug/).
+
+  En un dispositivo físico (o emulador) se prueba contra la API del PC por
+  HTTP en la IP de la LAN (p. ej. http://192.168.x.x:8000), y Android
+  bloquea el cleartext fuera de 10.0.2.2/localhost (ver src/main).
+
+  Este override permite cleartext a cualquier host SOLO en el APK debug
+  (gradlew assembleDebug / cap:build:android). El release conserva el
+  network_security_config estricto de src/main.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

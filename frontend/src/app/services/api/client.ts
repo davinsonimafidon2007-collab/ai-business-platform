@@ -1,43 +1,20 @@
-import { Capacitor } from "@capacitor/core";
 import axios, {
   AxiosError,
   AxiosInstance,
   InternalAxiosRequestConfig,
 } from "axios";
 import { isAuthDisabled } from "@/app/config/app-mode";
-
-// Detecta el protocolo desde la variable de entorno o desde el contexto del navegador
-// para evitar errores de Mixed Content en Android/WebView
-const getApiBaseUrl = (): string => {
-  const envUrl = process.env.NEXT_PUBLIC_API_URL;
-
-  if (envUrl) {
-    return envUrl;
-  }
-
-  // En Android nativo (Capacitor WebView) sin NEXT_PUBLIC_API_URL, el emulador
-  // expone el host en 10.0.2.2. El network_security_config ya permite cleartext
-  // a ese host en desarrollo (evita generar un https://localhost:8000 inválido).
-  if (Capacitor.isNativePlatform() && Capacitor.getPlatform() === "android") {
-    return "http://10.0.2.2:8000";
-  }
-
-  // En desarrollo, usar el mismo protocolo que la página actual
-  if (typeof window !== "undefined") {
-    const protocol = window.location.protocol;
-    const host = window.location.hostname;
-    const port = window.location.port;
-
-    if (host === "localhost" || host === "127.0.0.1") {
-      return `${protocol}//${host}:8000`;
-    }
-  }
-
-  // Fallback para desarrollo local
-  return "http://localhost:8000";
-};
+import { getApiBaseUrl } from "@/app/config/api-url";
 
 const API_BASE_URL = getApiBaseUrl();
+
+// P6: retry con backoff exponencial + jitter para fallos transitorios
+// (errores de red/timeout, 429, 5xx). Solo peticiones idempotentes.
+const RETRY_MAX_ATTEMPTS = 2; // reintentos adicionales (máx. 3 intentos totales)
+const RETRY_BASE_DELAY_MS = 500;
+const RETRY_MAX_DELAY_MS = 4000;
+
+const RETRYABLE_METHODS = new Set(["get", "head", "delete", "options"]);
 
 class ApiClient {
   private client: AxiosInstance;
@@ -72,10 +49,56 @@ class ApiClient {
     return config;
   }
 
+  private isRetryable(error: AxiosError): boolean {
+    // Sin respuesta → error de red/timeout (transitorio por definición).
+    if (!error.response) {
+      return true;
+    }
+    const status = error.response.status;
+    // 401 se gestiona con el refresh (abajo); el resto de 4xx no se reintenta.
+    return status === 429 || status >= 500;
+  }
+
+  private async retryDelay(error: AxiosError, attempt: number): Promise<void> {
+    // Backoff exponencial con full jitter: delay en [0, base*2^attempt).
+    let delay = Math.floor(
+      Math.random() * RETRY_BASE_DELAY_MS * Math.pow(2, attempt)
+    );
+    // Respetar Retry-After de 429 (formato segundos) si viene.
+    const retryAfter = error.response?.headers?.["retry-after"];
+    if (error.response?.status === 429 && retryAfter) {
+      const secs = Number.parseInt(String(retryAfter), 10);
+      if (!Number.isNaN(secs)) {
+        delay = Math.max(delay, secs * 1000);
+      }
+    }
+    await new Promise((resolve) =>
+      setTimeout(resolve, Math.min(delay, RETRY_MAX_DELAY_MS))
+    );
+  }
+
   private async handleError(error: AxiosError): Promise<never> {
     const originalRequest = error.config as InternalAxiosRequestConfig & {
       _retry?: boolean;
+      _retryCount?: number;
     };
+
+    if (originalRequest) {
+      // P6: reintentar fallos transitorios (red/timeout, 429, 5xx) en métodos
+      // idempotentes. No reintentar 401 (lo gestiona el refresh más abajo).
+      const method = (originalRequest.method ?? "get").toLowerCase();
+      const retryCount = originalRequest._retryCount ?? 0;
+      if (
+        RETRYABLE_METHODS.has(method) &&
+        error.response?.status !== 401 &&
+        this.isRetryable(error) &&
+        retryCount < RETRY_MAX_ATTEMPTS
+      ) {
+        originalRequest._retryCount = retryCount + 1;
+        await this.retryDelay(error, retryCount);
+        return this.client(originalRequest);
+      }
+    }
 
     // Auth desactivada (uso personal): no hay sesión que refrescar ni a la que
     // redirigir. No entrar en el loop de 401 → logout → login.

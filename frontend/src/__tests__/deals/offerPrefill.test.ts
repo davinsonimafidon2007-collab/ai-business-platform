@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { offerPricePrefill } from "@/app/deals/offerPrefill";
+import { offerPricePrefill } from "@/app/(app)/deals/offerPrefill";
 
 describe("offerPricePrefill", () => {
   it("devuelve string del last_sim_purchase_price", () => {

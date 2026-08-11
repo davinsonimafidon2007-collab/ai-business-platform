@@ -74,7 +74,7 @@ export default function OrdersPage() {
   const list = orders ?? [];
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-secondary-900 dark:text-secondary-100">
@@ -110,7 +110,7 @@ export default function OrdersPage() {
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <Link
-                    href={`/orders/${order.id}`}
+                    href={`/orders/detail/?id=${order.id}`}
                     className="truncate font-medium text-secondary-900 hover:text-blue-600 dark:text-secondary-100"
                   >
                     {order.query}
@@ -140,7 +140,7 @@ export default function OrdersPage() {
 
               <div className="flex shrink-0 items-center gap-2">
                 <Link
-                  href={`/orders/${order.id}`}
+                  href={`/orders/detail/?id=${order.id}`}
                   className="rounded-md border border-secondary-300 bg-white px-3 py-1.5 text-sm font-medium text-secondary-700 hover:bg-secondary-50 dark:border-secondary-600 dark:bg-secondary-700 dark:text-secondary-100"
                 >
                   Ver

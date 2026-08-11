@@ -15,7 +15,7 @@ from app.api.v1.schemas.common import (
     VehicleScoreSchema,
 )
 from app.api.v1.schemas.negotiation import NegotiationResultSchema
-from app.models.search import SearchRequest
+from app.models.search import SearchRequest, _default_search_providers
 
 # =============================================================================
 # Request
@@ -35,7 +35,7 @@ class SearchAPIRequest(BaseModel):
 
     query: str = Field(..., min_length=1, description="Término de búsqueda")
     providers: list[str] = Field(
-        default_factory=lambda: ["mobile_de", "autoscout24"],
+        default_factory=_default_search_providers,
         description="Proveedores a consultar",
     )
     max_results: int = Field(

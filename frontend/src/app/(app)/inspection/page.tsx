@@ -2,7 +2,7 @@
 
 import React, { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { InspectionPage } from "../features/inspection/InspectionPage";
+import { InspectionPage } from "@/app/features/inspection/InspectionPage";
 
 function InspectionRouteContent() {
   const searchParams = useSearchParams();

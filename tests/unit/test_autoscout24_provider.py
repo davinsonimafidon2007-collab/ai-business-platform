@@ -14,6 +14,7 @@ import pytest
 
 from app.providers.autoscout24 import AutoScout24Provider
 from app.providers.dto import VehicleDetail, VehicleSearchResult
+from app.providers.exceptions import ProviderParsingError
 
 FIXTURES_DIR = Path(__file__).resolve().parent.parent / "fixtures"
 
@@ -22,6 +23,28 @@ def _load_fixture(name: str) -> str:
     """Carga un archivo HTML de fixtures como texto."""
     path = FIXTURES_DIR / name
     return path.read_text(encoding="utf-8")
+
+
+def _html_with_next_data(payload: str, body: str = "") -> str:
+    """Construye una página con un script ``__NEXT_DATA__`` con el payload dado."""
+    return (
+        "<html><head>"
+        f'<script id="__NEXT_DATA__" type="application/json">{payload}</script>'
+        "</head><body>"
+        f"{body}"
+        "</body></html>"
+    )
+
+
+def _corrupt_next_data(html: str) -> str:
+    """Reemplaza el contenido del script ``__NEXT_DATA__`` por basura.
+
+    Mantiene intactos los nodos ``<article>`` para ejercitar el fallback HTML.
+    """
+    start = html.index('<script id="__NEXT_DATA__"')
+    end = html.index("</script>", start)
+    open_tag_end = html.index(">", start) + 1
+    return html[:open_tag_end] + "NOT_VALID_JSON" + html[end:]
 
 
 # ---------------------------------------------------------------------------
@@ -627,6 +650,65 @@ def test_parse_search_results_no_listings(provider: AutoScout24Provider) -> None
     html = "<html><body><p>No hay nada</p></body></html>"
     results = provider._parse_search_results(html, "https://www.autoscout24.de/search")
     assert results == []
+
+
+# ---------------------------------------------------------------------------
+# P2: resiliencia ante cambios de estructura en AS24
+# ---------------------------------------------------------------------------
+
+
+def test_next_data_invalid_json_raises_when_html_empty(
+    provider: AutoScout24Provider,
+) -> None:
+    """JSON roto en __NEXT_DATA__ + sin nodos HTML → ProviderParsingError (no 0 silencioso)."""
+    html = _html_with_next_data("NOT_VALID_JSON")
+    with pytest.raises(ProviderParsingError):
+        provider._parse_search_results(
+            html, "https://www.autoscout24.de/search"
+        )
+
+
+def test_next_data_missing_listings_key_raises_when_html_empty(
+    provider: AutoScout24Provider,
+) -> None:
+    """Clave 'listings' ausente (AS24 cambió el JSON) + sin nodos HTML → error."""
+    html = _html_with_next_data('{"props":{"pageProps":{}}}')
+    with pytest.raises(ProviderParsingError):
+        provider._parse_search_results(
+            html, "https://www.autoscout24.de/search"
+        )
+
+
+def test_next_data_valid_empty_returns_no_results(provider: AutoScout24Provider) -> None:
+    """listings: [] es 0 resultados legítimos → [] sin lanzar."""
+    html = _html_with_next_data('{"props":{"pageProps":{"listings":[]}}}')
+    results = provider._parse_search_results(
+        html, "https://www.autoscout24.de/search"
+    )
+    assert results == []
+
+
+def test_next_data_absent_falls_back_to_html_without_raising(
+    provider: AutoScout24Provider,
+) -> None:
+    """Sin __NEXT_DATA__ ni nodos HTML → [] sin lanzar (página no reconocible ≠ cambio estructural)."""
+    html = "<html><body><p>No hay nada</p></body></html>"
+    results = provider._parse_search_results(
+        html, "https://www.autoscout24.de/search"
+    )
+    assert results == []
+
+
+def test_next_data_structural_error_uses_html_fallback(
+    provider: AutoScout24Provider,
+) -> None:
+    """JSON roto pero HTML con artículos → parsea por HTML (resiliencia, sin 0 silencioso)."""
+    html = _corrupt_next_data(_load_fixture("autoscout24_search_results.html"))
+    results = provider._parse_search_results(
+        html, "https://www.autoscout24.de/search"
+    )
+    assert len(results) == 3
+    assert results[0].external_id == "31000001"
 
 
 def test_parse_vehicle_detail_no_data(provider: AutoScout24Provider) -> None:

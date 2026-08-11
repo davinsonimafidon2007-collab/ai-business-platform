@@ -326,7 +326,10 @@ Contexto: [docs/CONTEXT_PERSONAL_USE.md](docs/CONTEXT_PERSONAL_USE.md).
   (exit 0 con ≥1 listing; exit 1 si 0 listings o error). Añade `--json` para ops.
 - **mobile.de**: opcional. Un **403 sin proxy es lo esperado** y no bloquea: el
   canary lo marca `warn_antibot`. Solo pasa a ser estricto si configuras
-  `PROVIDER_HTTP_PROXY` / `PROVIDER_HTTP_COOKIES`.
+  `PROVIDER_HTTP_PROXY` / `PROVIDER_HTTP_COOKIES`. Además, si no tienes proxy
+  puedes apagar el provider por completo con `ENABLE_MOBILE_DE=false`
+  (CRIT.001): deja de registrarse y las búsquedas no pierden tiempo en una
+  fuente caída (AutoScout24 sigue siendo la primaria).
 - **ES**: fixtures offline, `python scripts/smoke_es_providers.py`.
 
 El `ProviderCanaryJob` aplica la misma política: falla si AS24 devuelve 0
@@ -367,6 +370,28 @@ Abre `http://localhost:3000` → entra directo al dashboard, sin registro ni log
 > en Next.js. Si apunta a `10.0.2.2:8000` (emulador Android) o a la IP de la
 > LAN, desde el navegador del PC la app carga **en blanco, sin datos y sin
 > error visible**. Para el navegador local tiene que ser `localhost`.
+
+#### Android en dispositivo físico (no emulador)
+
+Sin `NEXT_PUBLIC_API_URL`, la app Android nativa asume `http://10.0.2.2:8000`
+(alias del PC **solo válido en el emulador**). En un móvil físico la API no es
+alcanzable salvo que apuntes a la IP LAN del PC:
+
+1. Averigua la IP del PC en tu red: `ipconfig` (ej. `192.168.1.50`).
+2. El backend debe escuchar en `0.0.0.0:8000` (no solo `127.0.0.1`).
+3. Opción A (sin rebuild, recomendada): abre la app → icono de engranaje
+   (Configuración) e introduce `http://192.168.1.50:8000`. También puedes usar
+   `localStorage.setItem("api_base_url", "http://192.168.1.50:8000")` desde una
+   consola. El override en runtime **tiene prioridad** sobre
+   `NEXT_PUBLIC_API_URL` (en un APK la URL de build suele ser localhost/
+   10.0.2.2, no válida en un móvil real) y tiene efecto en el próximo arranque.
+4. Opción B (rebuild): `set NEXT_PUBLIC_API_URL=http://192.168.1.50:8000` y
+   `npm run cap:build:android`.
+
+Los APK **debug** (`assembleDebug` / `cap:build:android`) permiten HTTP
+(cleartext) a cualquier host vía `android/app/src/debug/res/xml/
+network_security_config.xml`; los releases siguen bloqueando cleartext fuera de
+`10.0.2.2`/`localhost` (`src/main/...`).
 
 El backend inyecta un usuario local ADMIN persistente (`local@example.com`, UUID
 fijo `00000000-0000-4000-8000-000000000001`), así que los datos se guardan con

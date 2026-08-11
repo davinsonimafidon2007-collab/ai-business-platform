@@ -64,7 +64,7 @@ export default function VehiclesPage() {
   const items = (vehicles ?? []).map(toSearchResultItem);
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-secondary-900 dark:text-secondary-100">
           Mis vehículos

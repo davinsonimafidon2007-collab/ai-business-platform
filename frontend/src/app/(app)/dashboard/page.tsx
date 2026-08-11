@@ -39,7 +39,7 @@ function formatEur(value: number | null | undefined): string {
 function OrderRow({ order }: { order: DashboardRecentOrder }) {
   return (
     <Link
-      href={`/orders/${order.id}`}
+      href={`/orders/detail/?id=${order.id}`}
       className="flex items-center gap-4 rounded-xl border border-secondary-100 bg-white p-4 transition-all hover:border-secondary-200 hover:shadow-sm dark:border-secondary-800 dark:bg-secondary-800/50 dark:hover:border-secondary-700"
     >
       <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary-50 dark:bg-primary-900/20">
@@ -158,7 +158,7 @@ export default function DashboardPage() {
   const newSearchResults = stats?.new_search_results ?? 0;
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-secondary-900 dark:text-white">
@@ -192,7 +192,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-2 lg:grid-cols-4">
         <StatCard
           title="Vehículos"
           value={stats?.total_vehicles ?? 0}

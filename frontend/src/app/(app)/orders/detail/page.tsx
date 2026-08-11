@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
-import { useParams } from "next/navigation";
+import { Suspense, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { searchOrdersService } from "@/app/services/search-orders";
 import { VehicleTable } from "@/app/features/vehicle/VehicleTable";
@@ -29,23 +29,22 @@ function formatEur(value: number | null | undefined): string {
   return `${new Intl.NumberFormat("es-ES").format(Math.round(value))} €`;
 }
 
-export default function OrderDetailPage() {
-  const params = useParams<{ id: string }>();
+function OrderDetailContent({ id }: { id: string }) {
   const queryClient = useQueryClient();
   const [selectedVehicle, setSelectedVehicle] = useState<SearchResultItem | null>(
     null,
   );
 
   const { data: order, isLoading, error } = useQuery<SearchOrderDetail>({
-    queryKey: ["search-order", params.id],
-    queryFn: () => searchOrdersService.get(params.id),
+    queryKey: ["search-order", id],
+    queryFn: () => searchOrdersService.get(id),
     refetchInterval: 15000,
   });
 
   const markSeenMutation = useMutation({
-    mutationFn: () => searchOrdersService.markSeen(params.id),
+    mutationFn: () => searchOrdersService.markSeen(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["search-order", params.id] });
+      queryClient.invalidateQueries({ queryKey: ["search-order", id] });
       queryClient.invalidateQueries({ queryKey: ["search-orders"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard", "stats"] });
     },
@@ -74,16 +73,19 @@ export default function OrderDetailPage() {
     .map((v) => v.result as SearchResultItem);
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <Link
             href="/orders"
-            className="text-sm text-blue-600 hover:underline"
+            className="inline-flex items-center gap-1 text-sm text-blue-600 hover:underline"
           >
-            ← Volver a búsquedas
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
+            </svg>
+            Volver a búsquedas
           </Link>
-          <h1 className="mt-1 text-2xl font-bold text-secondary-900 dark:text-secondary-100">
+          <h1 className="mt-2 text-xl font-bold text-secondary-900 dark:text-secondary-100 md:text-2xl">
             {order.query}
           </h1>
           <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-secondary-500 dark:text-secondary-400">
@@ -133,5 +135,34 @@ export default function OrderDetailPage() {
         onClose={() => setSelectedVehicle(null)}
       />
     </div>
+  );
+}
+
+function OrderDetailPageInner() {
+  const params = useSearchParams();
+  const id = params.get("id");
+
+  if (!id) {
+    return (
+      <div className="p-6">
+        <p className="text-red-600">Falta el identificador de la búsqueda.</p>
+        <Link
+          href="/orders"
+          className="mt-2 inline-block text-sm text-blue-600 hover:underline"
+        >
+          ← Volver a búsquedas
+        </Link>
+      </div>
+    );
+  }
+
+  return <OrderDetailContent id={id} />;
+}
+
+export default function OrderDetailPage() {
+  return (
+    <Suspense fallback={<div className="p-6">Cargando búsqueda...</div>}>
+      <OrderDetailPageInner />
+    </Suspense>
   );
 }

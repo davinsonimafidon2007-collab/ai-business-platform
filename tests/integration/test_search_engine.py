@@ -267,7 +267,12 @@ class TestSearchEngineInitialization:
         market_estimator: MarketEstimatorStub,
         profit_analyzer: ProfitAnalyzerStub,
         opportunity_finder: OpportunityFinderStub,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
+        from app.core.config import settings
+
+        # CRIT.001: mobile_de se registra solo si enable_mobile_de.
+        monkeypatch.setattr(settings, "enable_mobile_de", True)
         ProviderRegistry.clear()
         engine = SearchEngineService(
             vehicle_service=vehicle_service_mock,
@@ -291,7 +296,11 @@ class TestSearchEngineInitialization:
         market_estimator: MarketEstimatorStub,
         profit_analyzer: ProfitAnalyzerStub,
         opportunity_finder: OpportunityFinderStub,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
+        from app.core.config import settings
+
+        monkeypatch.setattr(settings, "enable_mobile_de", True)
         ProviderRegistry.clear()
         engine1 = SearchEngineService(
             vehicle_service=vehicle_service_mock,
@@ -303,7 +312,10 @@ class TestSearchEngineInitialization:
             opportunity_finder=opportunity_finder,
         )
         providers_after_first = ProviderRegistry.list_providers()
-        assert len(providers_after_first) == 2
+        # mobile_de y autoscout24 siempre presentes; el resto depende del entorno
+        # (fixtures ES auto-registrados por perfil SPAIN, autoscout24_es).
+        assert "mobile_de" in providers_after_first
+        assert "autoscout24" in providers_after_first
 
         engine2 = SearchEngineService(
             vehicle_service=vehicle_service_mock,
@@ -315,7 +327,8 @@ class TestSearchEngineInitialization:
             opportunity_finder=opportunity_finder,
         )
         providers_after_second = ProviderRegistry.list_providers()
-        assert len(providers_after_second) == 2
+        # Idempotente: no se duplican ni cambia el set de providers.
+        assert sorted(providers_after_second) == sorted(providers_after_first)
 
     def test_dependency_injection(
         self,

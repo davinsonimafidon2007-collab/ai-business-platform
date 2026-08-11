@@ -86,6 +86,7 @@ async def test_no_proxy_403_blocked_warns_success():
         patch(
             "app.jobs.provider_canary.settings.provider_http_cookies", ""
         ),
+        patch("app.jobs.provider_canary.settings.enable_mobile_de", True),
     ):
         job = ProviderCanaryJob()
         result = await job.execute(_make_context())
@@ -125,6 +126,7 @@ async def test_with_proxy_403_blocked_fails():
         patch(
             "app.jobs.provider_canary.settings.provider_http_cookies", ""
         ),
+        patch("app.jobs.provider_canary.settings.enable_mobile_de", True),
     ):
         job = ProviderCanaryJob()
         result = await job.execute(_make_context())
@@ -159,6 +161,7 @@ async def test_with_proxy_listings_success():
         patch(
             "app.jobs.provider_canary.settings.provider_http_cookies", ""
         ),
+        patch("app.jobs.provider_canary.settings.enable_mobile_de", True),
     ):
         job = ProviderCanaryJob()
         result = await job.execute(_make_context())
@@ -193,6 +196,7 @@ async def test_with_proxy_zero_listings_fails():
         patch(
             "app.jobs.provider_canary.settings.provider_http_cookies", ""
         ),
+        patch("app.jobs.provider_canary.settings.enable_mobile_de", True),
     ):
         job = ProviderCanaryJob()
         result = await job.execute(_make_context())
@@ -275,6 +279,7 @@ async def test_as24_ok_mobile_antibot_is_warn_not_fail():
         patch("app.jobs.provider_canary.MobileDeProvider", mobile_provider_cls),
         patch("app.jobs.provider_canary.settings.provider_http_proxy", ""),
         patch("app.jobs.provider_canary.settings.provider_http_cookies", ""),
+        patch("app.jobs.provider_canary.settings.enable_mobile_de", True),
     ):
         result = await ProviderCanaryJob().execute(_make_context())
 
@@ -304,6 +309,7 @@ async def test_mobile_generic_error_without_proxy_does_not_fail_job():
         patch("app.jobs.provider_canary.MobileDeProvider", mobile_provider_cls),
         patch("app.jobs.provider_canary.settings.provider_http_proxy", ""),
         patch("app.jobs.provider_canary.settings.provider_http_cookies", ""),
+        patch("app.jobs.provider_canary.settings.enable_mobile_de", True),
     ):
         result = await ProviderCanaryJob().execute(_make_context())
 

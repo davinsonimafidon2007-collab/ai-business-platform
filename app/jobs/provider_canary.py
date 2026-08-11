@@ -92,66 +92,78 @@ class ProviderCanaryJob(Job):
         # --- mobile.de (warn si anti-bot) ---
         strict_mobile = _anti_bot_configured()
         mobile = MobileDeProvider()
-        try:
-            results = await mobile.search(MOBILE_SEARCH_URL)
-            count = len(results) if results else 0
-            mobile_status = "ok" if count > 0 else "empty"
-            if count == 0:
-                # Sin proxy no es concluyente (anti-bot); con proxy sí.
+        mobile_enabled = getattr(settings, "enable_mobile_de", True)
+        if not mobile_enabled:
+            # CRIT.001: mobile.de desactivado por config (sin proxy residencial).
+            # Se reporta como skip; no hace red ni contribuye al estado del job.
+            mobile_status = "skip"
+            data["mobile_de"] = {
+                "status": "skip",
+                "count": 0,
+                "reason": "enable_mobile_de=false (opcional sin proxy)",
+            }
+            await mobile.close()
+        else:
+            try:
+                results = await mobile.search(MOBILE_SEARCH_URL)
+                count = len(results) if results else 0
+                mobile_status = "ok" if count > 0 else "empty"
+                if count == 0:
+                    # Sin proxy no es concluyente (anti-bot); con proxy sí.
+                    status = "fail" if strict_mobile else "warn_antibot"
+                    if strict_mobile:
+                        logger.error(
+                            "canary mobile.de FAIL: 0 listings with proxy configured"
+                            " (possible selector drift)"
+                        )
+                    else:
+                        logger.warning("canary mobile.de: 0 listings (no proxy; WARN)")
+                else:
+                    status = "ok"
+                    logger.info("canary mobile.de OK: %d listings", count)
+                data["mobile_de"] = {"status": status, "count": count}
+            except ProviderConnectionError as exc:
+                mobile_status = "blocked"
+                # 403 sin proxy es el resultado esperado: WARN, no error.
                 status = "fail" if strict_mobile else "warn_antibot"
+                data["mobile_de"] = {
+                    "status": status,
+                    "count": 0,
+                    "legacy_status": "blocked",
+                    "error": str(exc),
+                }
                 if strict_mobile:
                     logger.error(
-                        "canary mobile.de FAIL: 0 listings with proxy configured"
-                        " (possible selector drift)"
+                        "canary mobile.de FAIL: still blocked with proxy configured: %s",
+                        exc,
                     )
                 else:
-                    logger.warning("canary mobile.de: 0 listings (no proxy; WARN)")
-            else:
-                status = "ok"
-                logger.info("canary mobile.de OK: %d listings", count)
-            data["mobile_de"] = {"status": status, "count": count}
-        except ProviderConnectionError as exc:
-            mobile_status = "blocked"
-            # 403 sin proxy es el resultado esperado: WARN, no error.
-            status = "fail" if strict_mobile else "warn_antibot"
-            data["mobile_de"] = {
-                "status": status,
-                "count": 0,
-                "legacy_status": "blocked",
-                "error": str(exc),
-            }
-            if strict_mobile:
-                logger.error(
-                    "canary mobile.de FAIL: still blocked with proxy configured: %s",
-                    exc,
-                )
-            else:
-                logger.warning("canary mobile.de blocked (no proxy; WARN): %s", exc)
-        except ProviderError as exc:
-            data["mobile_de"] = {"status": "error", "count": 0, "error": str(exc)}
-            mobile_status = "error"
-            # No contribuye a FAIL si no hay proxy: WARN es suficiente.
-            if strict_mobile:
-                logger.error("canary mobile.de ERROR: %s", exc)
-            else:
-                logger.warning("canary mobile.de error (no proxy; WARN): %s", exc)
-        except Exception as exc:  # noqa: BLE001
-            data["mobile_de"] = {
-                "status": "error",
-                "count": 0,
-                "error": f"{type(exc).__name__}: {exc}",
-            }
-            mobile_status = "error"
-            if strict_mobile:
-                logger.exception("canary mobile.de unexpected: %s", exc)
-            else:
-                logger.warning(
-                    "canary mobile.de unexpected (no proxy; WARN): %s: %s",
-                    type(exc).__name__,
-                    exc,
-                )
-        finally:
-            await mobile.close()
+                    logger.warning("canary mobile.de blocked (no proxy; WARN): %s", exc)
+            except ProviderError as exc:
+                data["mobile_de"] = {"status": "error", "count": 0, "error": str(exc)}
+                mobile_status = "error"
+                # No contribuye a FAIL si no hay proxy: WARN es suficiente.
+                if strict_mobile:
+                    logger.error("canary mobile.de ERROR: %s", exc)
+                else:
+                    logger.warning("canary mobile.de error (no proxy; WARN): %s", exc)
+            except Exception as exc:  # noqa: BLE001
+                data["mobile_de"] = {
+                    "status": "error",
+                    "count": 0,
+                    "error": f"{type(exc).__name__}: {exc}",
+                }
+                mobile_status = "error"
+                if strict_mobile:
+                    logger.exception("canary mobile.de unexpected: %s", exc)
+                else:
+                    logger.warning(
+                        "canary mobile.de unexpected (no proxy; WARN): %s: %s",
+                        type(exc).__name__,
+                        exc,
+                    )
+            finally:
+                await mobile.close()
 
         data["mobile_status"] = mobile_status
         data["strict_mobile"] = strict_mobile

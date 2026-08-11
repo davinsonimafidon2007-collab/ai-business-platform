@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { fetchDeals, updateDealStatus } from "@/app/services/deals";
 import type { Deal, DealStatus } from "@/app/services/deals";
-import { offerPricePrefill } from "@/app/deals/offerPrefill";
+import { offerPricePrefill } from "@/app/(app)/deals/offerPrefill";
 import { Button } from "@/app/components/ui/button";
 
 const eur = (n?: number | null) =>
