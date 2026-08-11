@@ -400,6 +400,30 @@ class Settings(BaseSettings):
     """Do not re-send an alert for the same vehicle_id within N hours."""
 
     # =========================================================================
+    # Telegram alerts (notification task)
+    # =========================================================================
+    telegram_bot_token: str = ""
+    """Telegram Bot API token. Empty -> Telegram alerts disabled (log-only)."""
+
+    telegram_chat_id: str = ""
+    """Telegram chat_id (o @canal) where opportunity alerts are sent."""
+
+    telegram_alert_enabled: bool = True
+    """Master toggle for Telegram opportunity alerts."""
+
+    telegram_alert_min_recommendation: str = "BUY"
+    """Minimum recommendation to trigger a Telegram alert (BUY | CONSIDER)."""
+
+    telegram_alert_min_margin_percent: float = 0.0
+    """Minimum net profit margin (%) to trigger a Telegram alert (0 = solo por recomendación)."""
+
+    telegram_alert_min_score: float = 0.0
+    """Minimum opportunity_score to trigger a Telegram alert (0 = only by recommendation)."""
+
+    telegram_alert_cooldown_hours: int = 6
+    """Do not re-send a Telegram alert for the same vehicle_id within N hours."""
+
+    # =========================================================================
     # Redis configuration
     # =========================================================================
     redis_url: str = "redis://localhost:6379/0"

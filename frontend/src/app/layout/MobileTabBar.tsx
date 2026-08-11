@@ -10,9 +10,10 @@ import {
   LayoutGrid,
   type LucideIcon,
 } from "lucide-react";
+import { useDashboardStats } from "@/app/hooks/use-search";
 
-const TABS: { href: string; label: string; Icon: LucideIcon }[] = [
-  { href: "/dashboard/", label: "Inicio", Icon: Home },
+const TABS: { href: string; label: string; Icon: LucideIcon; badge?: boolean }[] = [
+  { href: "/dashboard/", label: "Inicio", Icon: Home, badge: true },
   { href: "/search/", label: "Buscar", Icon: Search },
   { href: "/opportunities/", label: "Oport.", Icon: Sparkles },
   { href: "/deals/", label: "Deals", Icon: Handshake },
@@ -25,6 +26,8 @@ const TABS: { href: string; label: string; Icon: LucideIcon }[] = [
  */
 export function MobileTabBar() {
   const pathname = usePathname();
+  const { data: stats } = useDashboardStats();
+  const newResults = stats?.new_search_results ?? 0;
 
   return (
     <nav
@@ -35,8 +38,9 @@ export function MobileTabBar() {
         {TABS.map((tab) => {
           const active =
             pathname === tab.href || pathname.startsWith(tab.href);
+          const showBadge = tab.badge && newResults > 0;
           return (
-            <li key={tab.href} className="flex-1">
+            <li key={tab.href} className="relative flex-1">
               <Link
                 href={tab.href}
                 aria-current={active ? "page" : undefined}
@@ -56,6 +60,11 @@ export function MobileTabBar() {
                 />
                 {tab.label}
               </Link>
+              {showBadge && (
+                <span className="absolute top-1 rounded-full bg-red-500 px-1.5 py-0.5 text-[9px] font-bold leading-tight text-white">
+                  {newResults > 99 ? "99+" : newResults}
+                </span>
+              )}
             </li>
           );
         })}

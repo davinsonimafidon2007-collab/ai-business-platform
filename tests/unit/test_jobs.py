@@ -329,6 +329,144 @@ class TestRefreshOpportunityJob:
         assert result.data["failed_count"] == 0
 
     @pytest.mark.asyncio
+    async def test_execute_calls_telegram_alert_service(self, context: JobContext) -> None:
+        """El job dispara TelegramAlertService.send_opportunity_alert con la opp."""
+        mock_session = AsyncMock()
+        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session.__aexit__ = AsyncMock(return_value=None)
+        context.db_manager.get_session.return_value = mock_session
+
+        with (
+            patch(
+                "app.repositories.vehicle_repository.VehicleRepository"
+            ) as mock_vehicle_repo,
+            patch(
+                "app.repositories.opportunity_repository.OpportunityRepository"
+            ) as mock_opp_repo,
+            patch(
+                "app.services.evaluation_engine.EvaluationEngine"
+            ) as mock_engine_class,
+            patch(
+                "app.repositories.user_repository.UserRepository"
+            ) as mock_user_repo,
+            patch(
+                "app.services.opportunity_alert_service.OpportunityAlertService"
+            ) as mock_alert_svc,
+            patch(
+                "app.services.telegram_alert_service.TelegramAlertService"
+            ) as mock_tg_svc,
+        ):
+            mock_vehicle = MagicMock(id="v1", user_id="u1")
+            mock_vehicle_repo_instance = AsyncMock()
+            mock_vehicle_repo_instance.list_all = AsyncMock(return_value=[mock_vehicle])
+            mock_vehicle_repo.return_value = mock_vehicle_repo_instance
+
+            mock_opp_repo_instance = AsyncMock()
+            mock_opp_repo_instance.get_by_vehicle_id = AsyncMock(return_value=[])
+            mock_opp_repo_instance.save = AsyncMock(return_value=MagicMock())
+            mock_opp_repo.return_value = mock_opp_repo_instance
+
+            mock_result = MagicMock()
+            mock_result.score = 75
+            mock_result.classification = "verde"
+            mock_result.recommendation = "Buena oportunidad"
+            mock_result.profit_margin_percent = 20.0
+            mock_result.gross_profit = 1500.0
+            mock_engine_instance = MagicMock()
+            mock_engine_instance.evaluate = MagicMock(return_value=mock_result)
+            mock_engine_class.return_value = mock_engine_instance
+
+            mock_user_repo_instance = AsyncMock()
+            mock_user_repo_instance.get_by_id = AsyncMock(
+                return_value=MagicMock(email="a@b.com")
+            )
+            mock_user_repo.return_value = mock_user_repo_instance
+
+            mock_alert_svc.return_value.maybe_notify = AsyncMock(return_value=True)
+            tg_instance = AsyncMock()
+            tg_instance.send_opportunity_alert = AsyncMock(return_value=True)
+            mock_tg_svc.return_value = tg_instance
+
+            job = RefreshOpportunityJob()
+            result = await job.execute(context)
+
+        assert result.success is True
+        assert result.data["updated_count"] == 1
+        tg_instance.send_opportunity_alert.assert_awaited_once()
+        call = tg_instance.send_opportunity_alert.await_args
+        assert call.kwargs["opportunity"].vehicle_id == "v1"
+        assert call.kwargs["vehicle"] is mock_vehicle
+        assert call.kwargs["evaluation"] is mock_result
+
+    @pytest.mark.asyncio
+    async def test_execute_continues_if_telegram_fails(self, context: JobContext) -> None:
+        """Un fallo en TelegramAlertService no debe romper el job (Task C.3)."""
+        mock_session = AsyncMock()
+        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session.__aexit__ = AsyncMock(return_value=None)
+        context.db_manager.get_session.return_value = mock_session
+
+        with (
+            patch(
+                "app.repositories.vehicle_repository.VehicleRepository"
+            ) as mock_vehicle_repo,
+            patch(
+                "app.repositories.opportunity_repository.OpportunityRepository"
+            ) as mock_opp_repo,
+            patch(
+                "app.services.evaluation_engine.EvaluationEngine"
+            ) as mock_engine_class,
+            patch(
+                "app.repositories.user_repository.UserRepository"
+            ) as mock_user_repo,
+            patch(
+                "app.services.opportunity_alert_service.OpportunityAlertService"
+            ) as mock_alert_svc,
+            patch(
+                "app.services.telegram_alert_service.TelegramAlertService"
+            ) as mock_tg_svc,
+        ):
+            mock_vehicle = MagicMock(id="v1", user_id="u1")
+            mock_vehicle_repo_instance = AsyncMock()
+            mock_vehicle_repo_instance.list_all = AsyncMock(return_value=[mock_vehicle])
+            mock_vehicle_repo.return_value = mock_vehicle_repo_instance
+
+            mock_opp_repo_instance = AsyncMock()
+            mock_opp_repo_instance.get_by_vehicle_id = AsyncMock(return_value=[])
+            mock_opp_repo_instance.save = AsyncMock(return_value=MagicMock())
+            mock_opp_repo.return_value = mock_opp_repo_instance
+
+            mock_engine_class.return_value.evaluate = MagicMock(
+                return_value=MagicMock(
+                    score=75,
+                    classification="verde",
+                    recommendation="BUY",
+                    profit_margin_percent=20.0,
+                    gross_profit=1500.0,
+                )
+            )
+
+            mock_user_repo.return_value.get_by_id = AsyncMock(
+                return_value=MagicMock(email="a@b.com")
+            )
+
+            mock_alert_svc.return_value.maybe_notify = AsyncMock(return_value=True)
+            tg_instance = AsyncMock()
+            tg_instance.send_opportunity_alert = AsyncMock(
+                side_effect=RuntimeError("telegram exploded")
+            )
+            mock_tg_svc.return_value = tg_instance
+
+            job = RefreshOpportunityJob()
+            result = await job.execute(context)
+
+        # El job atrapa la excepción del alerta y sigue exitoso.
+        assert result.success is True
+        assert result.data["updated_count"] == 1
+        assert result.data["failed_count"] == 0
+        tg_instance.send_opportunity_alert.assert_awaited_once()
+
+    @pytest.mark.asyncio
     async def test_execute_empty(self, context: JobContext) -> None:
         """Executes successfully with no vehicles."""
         mock_session = AsyncMock()

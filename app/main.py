@@ -9,6 +9,7 @@ from app.api.v1.admin_api_keys import router as admin_api_keys_router
 from app.api.v1.admin_status import router as admin_status_router
 from app.api.v1.api_keys import router as api_keys_router
 from app.api.v1.auth import router as auth_router
+from app.api.v1.dashboard import router as dashboard_router
 from app.api.v1.router import api_router
 from app.api.v1.routes.health import router as health_router
 from app.api.v1.search_orders import router as search_orders_router
@@ -132,6 +133,7 @@ app.include_router(auth_router, prefix="/api/v1")
 app.include_router(api_keys_router, prefix="/api/v1")
 app.include_router(admin_api_keys_router, prefix="/api/v1")
 app.include_router(admin_status_router, prefix="/api/v1")
+app.include_router(dashboard_router, prefix="/api/v1")
 app.include_router(searches_router, prefix="/api/v1")
 app.include_router(search_orders_router, prefix="/api/v1")
 app.include_router(users_router, prefix="/api/v1")
