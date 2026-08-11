@@ -187,4 +187,6 @@ export interface VisionSuggestion {
 export interface VisionAnalysis {
   summary: string;
   suggestions: VisionSuggestion[];
+  provider: string;
+  simulated: boolean;
 }

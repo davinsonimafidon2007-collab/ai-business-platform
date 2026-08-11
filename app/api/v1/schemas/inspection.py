@@ -102,6 +102,11 @@ class VisionSuggestionResponse(BaseModel):
 class VisionAnalysisResponse(BaseModel):
     summary: str
     suggestions: list[VisionSuggestionResponse] = []
+    # GRAVE.006: identifica el backend de vision usado. `simulated=True`
+    # significa que el análisis es un Mock local (observaciones inventadas) y
+    # la UI debe avisarlo para no tomar decisiones de negocio sobre datos falsos.
+    provider: str = "mock"
+    simulated: bool = True
 
 
 class CatalogItemResponse(BaseModel):

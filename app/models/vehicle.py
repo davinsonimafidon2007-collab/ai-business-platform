@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text, Uuid
+from sqlalchemy import JSON, DateTime, Float, ForeignKey, Integer, String, Text, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
@@ -47,7 +47,10 @@ class Vehicle(Base):
     currency: Mapped[str | None] = mapped_column(String(10), nullable=True)
     vin: Mapped[str | None] = mapped_column(String(50), nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    images: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # CRIT.004/GRAVE.005: alineado con la migración k3l4m5n6o7p8 (JSON array).
+    # En Postgres la columna es JSON; SQLAlchemy la serializa a JSON en SQLite.
+    # `equipment` sigue siendo Text (CSV) porque no hay migración que lo convierta.
+    images: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
     equipment: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

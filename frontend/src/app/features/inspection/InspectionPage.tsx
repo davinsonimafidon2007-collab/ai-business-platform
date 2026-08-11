@@ -40,6 +40,7 @@ export function InspectionPage({
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [visionSuggestions, setVisionSuggestions] = useState<VisionSuggestion[]>([]);
+  const [visionSimulated, setVisionSimulated] = useState<boolean | null>(null);
 
   // Initialize session
   useEffect(() => {
@@ -226,6 +227,7 @@ export function InspectionPage({
     try {
       const result = await inspectionService.analyzePhotos(session.id);
       setVisionSuggestions(result.suggestions);
+      setVisionSimulated(result.simulated);
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudieron analizar las fotografías");
     } finally {
@@ -395,6 +397,16 @@ export function InspectionPage({
         >
           {isAnalyzing ? "Analizando fotografías..." : "Analizar fotografías"}
         </button>
+        {visionSimulated && (
+          <div className="mt-3 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
+            <p className="font-medium">Análisis simulado (Mock)</p>
+            <p className="mt-1">
+              No hay <code>GEMINI_API_KEY</code> ni <code>OPENAI_API_KEY</code> configuradas.
+              Las sugerencias mostradas son genéricas e inventadas: revísalas manualmente
+              y no las trates como una inspección real.
+            </p>
+          </div>
+        )}
         {visionSuggestions.length > 0 && (
           <div className="mt-4 space-y-3">
             <p className="text-sm font-medium text-gray-800">Sugerencias (no aplicadas)</p>

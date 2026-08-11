@@ -19,7 +19,16 @@ class VisionProvider(Protocol):
 
 
 class MockVisionProvider:
-    """Deterministic local provider used while no real vision backend is configured."""
+    """Deterministic local provider used while no real vision backend is configured.
+
+    GRAVE.006: el análisis es simulado (observaciones inventadas). El campo
+    ``simulated`` permite a la API y a la UI avisar claramente de que los
+    resultados NO provienen de un modelo real, para no tomar decisiones de
+    negocio basadas en datos falsos.
+    """
+
+    provider_name = "mock"
+    simulated = True
 
     async def analyze_images(self, images: list[VisionImage]) -> VisionInspectionResult:
         return VisionInspectionResult(

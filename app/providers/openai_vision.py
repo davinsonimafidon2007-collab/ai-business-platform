@@ -103,6 +103,9 @@ class OpenAIVisionProvider:
             If None, a default client is created.
     """
 
+    provider_name = "openai"
+    simulated = False
+
     def __init__(
         self,
         api_key: str,

@@ -164,7 +164,7 @@ class SearchPersistenceService:
 
         images = getattr(dto, "images", None)
         if images:
-            vehicle.images = ",".join(_stringify(i) for i in images if i)
+            vehicle.images = [str(i) for i in images if i]
 
         equipment = getattr(dto, "equipment", None)
         if equipment:

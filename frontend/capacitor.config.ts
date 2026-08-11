@@ -1,6 +1,14 @@
 import type { CapacitorConfig } from '@capacitor/cli';
+import {
+  GOOGLE_ANDROID_CLIENT_ID,
+  GOOGLE_IOS_CLIENT_ID,
+  GOOGLE_WEB_CLIENT_ID,
+} from './src/app/config/google-clients';
 
-// Google OAuth client IDs reales del proyecto (mismos que google-auth.ts).
+// Google OAuth client IDs reales del proyecto, centralizados en
+// src/app/config/google-clients.ts (MED.008). Capacitor CLI compila este
+// fichero en Node y resuelve los import relativos, así que google-auth.ts y
+// capacitor.config.ts siempre usan los mismos valores.
 // CRIT.002: el guard scripts/check-capacitor-config.mjs (y pre-build-check.sh)
 // falla el build a proposito si se conserva un valor placeholder sin rellenar.
 
@@ -23,15 +31,9 @@ const config: CapacitorConfig = {
       permissions: true,
     },
     GoogleAuth: {
-      clientId:
-        process.env.GOOGLE_WEB_CLIENT_ID ||
-        '983773208764-oevega4uglktmrisjrh41teq5mjb270n.apps.googleusercontent.com',
-      androidClientId:
-        process.env.GOOGLE_ANDROID_CLIENT_ID ||
-        '983773208764-7i0hfifq4ni324qnugvj0a79bu09fh4t.apps.googleusercontent.com',
-      iosClientId:
-        process.env.GOOGLE_IOS_CLIENT_ID ||
-        '983773208764-oevega4uglktmrisjrh41teq5mjb270n.apps.googleusercontent.com',
+      clientId: GOOGLE_WEB_CLIENT_ID,
+      androidClientId: GOOGLE_ANDROID_CLIENT_ID,
+      iosClientId: GOOGLE_IOS_CLIENT_ID,
     },
   },
 };

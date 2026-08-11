@@ -159,7 +159,7 @@ export interface Vehicle {
   currency: string | null;
   vin: string | null;
   description: string | null;
-  images: string | null;
+  images: string[] | null;
   equipment: string | null;
   created_at: string;
   updated_at: string;

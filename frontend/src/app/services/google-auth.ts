@@ -7,20 +7,21 @@ import {
   GoogleAuthProvider,
   signOut,
 } from "firebase/auth";
-import { auth, googleProvider } from "@/app/config/firebase";
+import { auth, googleProvider, firebaseConfigured } from "@/app/config/firebase";
+import {
+  GOOGLE_ANDROID_CLIENT_ID,
+  GOOGLE_IOS_CLIENT_ID,
+  GOOGLE_WEB_CLIENT_ID,
+} from "@/app/config/google-clients";
 import { api } from "@/app/services/api/client";
 import { useAuthStore } from "@/app/store/auth-store";
 import type { AuthResponse, User } from "@/app/types/auth";
 
 // Web client ID from google-services.json (client_type: 3)
-const WEB_CLIENT_ID =
-  process.env.NEXT_PUBLIC_GOOGLE_WEB_CLIENT_ID ||
-  "983773208764-oevega4uglktmrisjrh41teq5mjb270n.apps.googleusercontent.com";
+const WEB_CLIENT_ID = GOOGLE_WEB_CLIENT_ID;
 
 // Android client ID from google-services.json (client_type: 1)
-const ANDROID_CLIENT_ID =
-  process.env.NEXT_PUBLIC_GOOGLE_ANDROID_CLIENT_ID ||
-  "983773208764-7i0hfifq4ni324qnugvj0a79bu09fh4t.apps.googleusercontent.com";
+const ANDROID_CLIENT_ID = GOOGLE_ANDROID_CLIENT_ID;
 
 // The plugin requires initialize() to be called once before signIn() will
 // work on native Android/iOS — without it, signIn() fails silently at the
@@ -52,12 +53,19 @@ export async function signInWithGoogle(): Promise<void> {
     const response = await GoogleAuth.signIn({
       clientId: WEB_CLIENT_ID,
       androidClientId: ANDROID_CLIENT_ID,
-      iosClientId: WEB_CLIENT_ID,
+      iosClientId: GOOGLE_IOS_CLIENT_ID,
     });
 
     const nativeIdToken = response.authentication?.idToken ?? null;
     if (!nativeIdToken) {
       throw new Error("No se recibió el token nativo de Google");
+    }
+
+    if (!auth || !firebaseConfigured) {
+      throw new Error(
+        "Google login requiere NEXT_PUBLIC_FIREBASE_* configuradas " +
+          "(ver frontend/.env.example)",
+      );
     }
 
     // Intercambiamos el token nativo de Google por una sesión de Firebase,
@@ -67,6 +75,12 @@ export async function signInWithGoogle(): Promise<void> {
     idToken = await firebaseResult.user.getIdToken();
   } else {
     // Web – use Firebase Auth popup
+    if (!auth || !googleProvider || !firebaseConfigured) {
+      throw new Error(
+        "Google login requiere NEXT_PUBLIC_FIREBASE_* configuradas " +
+          "(ver frontend/.env.example)",
+      );
+    }
     const result = await signInWithPopup(auth, googleProvider);
     idToken = await result.user.getIdToken();
   }
@@ -96,7 +110,7 @@ export async function signOutOfGoogle(): Promise<void> {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { GoogleAuth } = require("@codetrix-studio/capacitor-google-auth");
     await GoogleAuth.signOut();
-  } else {
+  } else if (auth) {
     await signOut(auth);
   }
 }

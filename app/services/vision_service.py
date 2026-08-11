@@ -13,6 +13,16 @@ class VisionService:
     def __init__(self, provider: VisionProvider) -> None:
         self._provider = provider
 
+    @property
+    def provider_name(self) -> str:
+        """Nombre del backend de vision activo (mock/gemini/openai)."""
+        return str(getattr(self._provider, "provider_name", "mock"))
+
+    @property
+    def simulated(self) -> bool:
+        """True si el análisis es simulado (MockVisionProvider), no real."""
+        return bool(getattr(self._provider, "simulated", True))
+
     async def analyze_photos(
         self,
         photos: list[InspectionPhoto],
@@ -39,4 +49,9 @@ class VisionService:
                     "suggested_repair_cost": detected.suggested_repair_cost,
                 }
             )
-        return {"summary": result.summary, "suggestions": suggestions}
+        return {
+            "summary": result.summary,
+            "suggestions": suggestions,
+            "provider": self.provider_name,
+            "simulated": self.simulated,
+        }

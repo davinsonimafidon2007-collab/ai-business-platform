@@ -151,7 +151,7 @@ async def test_import_from_provider_creates_new_vehicle(vehicle_service):
     assert vehicle.fuel_type == "Diesel"
     assert vehicle.transmission == "Automatic"
     assert vehicle.mileage == 15000
-    assert vehicle.images == "img1.jpg,img2.jpg"
+    assert vehicle.images == ["img1.jpg", "img2.jpg"]
     assert vehicle.equipment == "GPS,Leather seats"
 
 

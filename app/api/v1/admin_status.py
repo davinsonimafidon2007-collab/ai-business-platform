@@ -15,6 +15,8 @@ en la dependencia de ruta).
 
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter, Depends, Request
 
 from app.core.config import settings
@@ -25,6 +27,8 @@ from app.jobs.base import JobContext
 from app.jobs.canary_state import get_last_canary_result
 from app.jobs.provider_canary import ProviderCanaryJob
 from app.models.user import User
+
+logger = logging.getLogger(__name__)
 from app.providers.registry import ProviderRegistry
 from app.schemas.admin_status import (
     AdminSystemStatus,
@@ -77,7 +81,8 @@ async def _build_admin_system_status(request: Request) -> AdminSystemStatus:
         try:
             await client.ping()
             redis_ok = True
-        except Exception:
+        except Exception as exc:  # noqa: BLE001 — fail-soft health reporting
+            logger.warning("Redis ping failed for admin status: %s", exc)
             redis_ok = False
 
     raw = get_last_canary_result()

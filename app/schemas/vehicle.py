@@ -29,9 +29,8 @@ class VehicleBase(BaseModel):
     currency: str | None = Field(default=None, max_length=10)
     vin: str | None = Field(default=None, max_length=50)
     description: str | None = None
-    images: str | None = None
+    images: list[str] | None = None
     equipment: str | None = None
-
 
 class VehicleCreate(VehicleBase):
     pass
@@ -67,5 +66,5 @@ class VehicleUpdate(BaseModel):
     currency: str | None = None
     vin: str | None = None
     description: str | None = None
-    images: str | None = None
+    images: list[str] | None = None
     equipment: str | None = None

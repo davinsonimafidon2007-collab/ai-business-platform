@@ -34,9 +34,16 @@ function toSearchResultItem(vehicle: Vehicle): SearchResultItem {
     price: vehicle.price,
     currency: vehicle.currency,
     location: vehicle.location,
-    // El backend guarda images como string (URL o lista separada); el
-    // frontend espera un array. Si viene vacío, devolvemos [].
-    images: vehicle.images ? vehicle.images.split(",").map((s) => s.trim()).filter(Boolean) : [],
+    // El backend guarda images como JSON (array) desde la migración k3l4m5n6o7p8;
+    // soportamos también el legacy string (CSV) por si quedó alguna fila antigua.
+    images: (() => {
+      const imgs = vehicle.images;
+      if (Array.isArray(imgs)) return imgs.filter(Boolean);
+      if (typeof imgs === "string") {
+        return (imgs as string).split(",").map((s) => s.trim()).filter(Boolean);
+      }
+      return [];
+    })(),
     description: vehicle.description,
     vehicle_score: null,
     market_estimation: null,

@@ -96,7 +96,7 @@ class VehicleService:
             "currency": result.currency,
             "vin": result.vin,
             "description": result.description,
-            "images": ",".join(result.images) if result.images else None,
+            "images": list(result.images) if result.images else None,
             "equipment": ",".join(result.equipment) if result.equipment else None,
         }
         vehicle = Vehicle(**data)
@@ -148,7 +148,7 @@ class VehicleService:
         if result.description is not None:
             update_data["description"] = result.description
         if result.images:
-            update_data["images"] = ",".join(result.images)
+            update_data["images"] = list(result.images)
         if result.equipment:
             update_data["equipment"] = ",".join(result.equipment)
 
