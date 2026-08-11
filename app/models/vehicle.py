@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
-from sqlalchemy import JSON, DateTime, Float, ForeignKey, Integer, String, Text, Uuid
+from sqlalchemy import JSON, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
@@ -19,6 +19,14 @@ if TYPE_CHECKING:
 
 class Vehicle(Base):
     __tablename__ = "vehicles"
+    # GRAVE.007/MED.009: el unique es por usuario, no global. Cada usuario puede
+    # guardar el mismo anuncio (source + external_id) que otro; un mismo usuario
+    # solo lo guarda una vez. Alineado con la migración l2m3n4o5p6q7.
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id", "source", "external_id", name="ix_vehicles_user_source_external"
+        ),
+    )
 
     id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True, default=lambda: str(uuid4()))
     user_id: Mapped[str] = mapped_column(

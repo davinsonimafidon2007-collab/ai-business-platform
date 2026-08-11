@@ -385,10 +385,12 @@ class ProfitAnalyzer:
         paperwork_cost = profile.paperwork_cost
         base_miscellaneous = profile.miscellaneous_cost
 
-        # IEDMT: impuesto especial por CO₂ (solo España, co2 disponible)
+        # IEDMT: impuesto especial por CO₂ (solo España, co2 disponible).
+        # GRAVE.008: es un % de la base imponible (purchase_price), no un
+        # importe fijo por tramo.
         from app.services.iedmt import iedmt_tax
 
-        iedmt = iedmt_tax(co2_gkm) if co2_gkm else 0.0
+        iedmt = iedmt_tax(co2_gkm, purchase_price) if co2_gkm else 0.0
 
         # Costes variables (porcentaje sobre el precio de compra)
         # Si hay IEDMT, se suma al tax_rate base

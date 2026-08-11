@@ -27,11 +27,14 @@ def upgrade() -> None:
     )
 
     # search_history: keep nullable (SET NULL on user delete is intentional)
-    # but add an index for query performance
-    op.create_index(
-        "ix_search_history_user_id",
-        "search_history",
-        ["user_id"],
+    # but add an index for query performance. e7f8a9b0c1d2 ya creó
+    # ix_search_history_user_id; la guardamos aquí para que la cadena sea
+    # idempotente en BD que ya tienen el índice (evita DuplicateTableError).
+    op.execute(
+        """
+        CREATE INDEX IF NOT EXISTS ix_search_history_user_id
+        ON search_history (user_id)
+        """
     )
 
 
