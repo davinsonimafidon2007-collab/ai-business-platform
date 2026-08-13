@@ -232,6 +232,7 @@ def pytest_configure(config: Any) -> None:
     import os
     import socket
     from urllib.parse import urlparse
+
     from app.core.config import settings
 
     db_url = os.environ.get("DATABASE_URL") or settings.database_url

@@ -74,8 +74,10 @@ async def scheduler_lifespan(app: FastAPI) -> AsyncGenerator[None]:
     # TASK-009: Reconciliar y recuperar proactivamente órdenes de búsqueda atascadas en RUNNING al iniciar la aplicación
     try:
         async with db_manager.get_session() as session:
-            from app.repositories.search_order_repository import SearchOrderRepository
             import logging
+
+            from app.repositories.search_order_repository import SearchOrderRepository
+
             logger_main = logging.getLogger("app.main")
             order_repo = SearchOrderRepository(session)
             # Recupera todas las órdenes RUNNING (stale_minutes=0) y las vuelve a PENDING
