@@ -29,16 +29,23 @@ const ANDROID_CLIENT_ID = GOOGLE_ANDROID_CLIENT_ID;
 // startup (see Providers in app/providers.tsx).
 export function initGoogleAuth(): void {
   if (Capacitor.getPlatform() === "web") return;
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { GoogleAuth } = require("@codetrix-studio/capacitor-google-auth");
-  GoogleAuth.initialize({
-    clientId: WEB_CLIENT_ID,
-    scopes: ["profile", "email"],
-    grantOfflineAccess: true,
-  }).catch((err: unknown) => {
-    // eslint-disable-next-line no-console
-    console.error("GoogleAuth.initialize() failed:", err);
-  });
+  try {
+    const { GoogleAuth } = require("@codetrix-studio/capacitor-google-auth");
+    GoogleAuth.initialize({
+      clientId: WEB_CLIENT_ID,
+      scopes: ["profile", "email"],
+      grantOfflineAccess: true,
+    }).catch((err: unknown) => {
+      console.error("GoogleAuth.initialize() failed:", err);
+    });
+  } catch (err: unknown) {
+    // Plugin nativo no instalado: Google Login no funcionará en Android/iOS.
+    console.error(
+      "Capacitor GoogleAuth plugin not available. Google Login will not work on native. " +
+        "Install @codetrix-studio/capacitor-google-auth and run cap sync.",
+      err,
+    );
+  }
 }
 
 export async function signInWithGoogle(): Promise<void> {
@@ -48,8 +55,17 @@ export async function signInWithGoogle(): Promise<void> {
   if (platform !== "web") {
     // Android / iOS – el plugin nativo devuelve un ID token de Google
     // (emitido por accounts.google.com), NO un ID token de Firebase.
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { GoogleAuth } = require("@codetrix-studio/capacitor-google-auth");
+    let GoogleAuth: {
+      signIn: (opts: Record<string, string>) => Promise<{ authentication?: { idToken?: string } }>;
+    };
+    try {
+      GoogleAuth = require("@codetrix-studio/capacitor-google-auth").GoogleAuth;
+    } catch {
+      throw new Error(
+        "Capacitor GoogleAuth plugin not installed. " +
+          "Run: npm i @codetrix-studio/capacitor-google-auth && npx cap sync",
+      );
+    }
     const response = await GoogleAuth.signIn({
       clientId: WEB_CLIENT_ID,
       androidClientId: ANDROID_CLIENT_ID,
@@ -107,9 +123,12 @@ export async function signInWithGoogle(): Promise<void> {
 export async function signOutOfGoogle(): Promise<void> {
   const platform = Capacitor.getPlatform();
   if (platform !== "web") {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { GoogleAuth } = require("@codetrix-studio/capacitor-google-auth");
-    await GoogleAuth.signOut();
+    try {
+      const { GoogleAuth } = require("@codetrix-studio/capacitor-google-auth");
+      await GoogleAuth.signOut();
+    } catch {
+      // Plugin not available — sign out is a no-op on native.
+    }
   } else if (auth) {
     await signOut(auth);
   }

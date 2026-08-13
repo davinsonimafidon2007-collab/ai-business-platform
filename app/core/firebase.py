@@ -125,7 +125,8 @@ async def verify_google_id_token(id_token: str) -> dict:
     if app is None:
         raise ValueError(
             "Firebase is not configured. Set FIREBASE_CREDENTIALS_JSON "
-            "or FIREBASE_CREDENTIALS_PATH environment variable."
+            "or FIREBASE_CREDENTIALS_PATH environment variable, or configure "
+            "Application Default Credentials (ADC)."
         )
 
     from firebase_admin import auth as firebase_auth
@@ -140,8 +141,13 @@ async def verify_google_id_token(id_token: str) -> dict:
             "picture": decoded.get("picture", ""),
         }
     except firebase_auth.ExpiredIdTokenError as exc:
-        raise ValueError("Firebase ID token has expired") from exc
+        raise ValueError(
+            "Firebase ID token has expired. Ask the user to sign in again."
+        ) from exc
     except firebase_auth.RevokedIdTokenError as exc:
-        raise ValueError("Firebase ID token has been revoked") from exc
+        raise ValueError(
+            "Firebase ID token has been revoked. Token may have been invalidated "
+            "server-side."
+        ) from exc
     except firebase_auth.InvalidIdTokenError as exc:
         raise ValueError(f"Invalid Firebase ID token: {exc}") from exc

@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/app/components/ui/button";
 import { ScoreBadge, OpportunityBadge, RecommendationBadge, NegotiationBadge } from "@/app/components/ui/ScoreBadge";
+import { useIsMobile } from "@/app/hooks/useIsMobile";
 import type { SearchResultItem } from "@/app/types/vehicle";
 
 interface VehicleDrawerProps {
@@ -14,6 +15,7 @@ interface VehicleDrawerProps {
 export function VehicleDrawer({ vehicle, onClose }: VehicleDrawerProps) {
   const drawerRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
+  const isMobile = useIsMobile();
 
   useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => {
@@ -38,8 +40,17 @@ export function VehicleDrawer({ vehicle, onClose }: VehicleDrawerProps) {
       <div className="fixed inset-0 z-40 bg-black/50" onClick={onClose} />
       <div
         ref={drawerRef}
-        className="fixed right-0 top-0 z-50 h-full w-full max-w-lg overflow-y-auto border-l border-secondary-200 bg-white shadow-xl dark:border-secondary-700 dark:bg-secondary-900"
+        className={
+          isMobile
+            ? "fixed inset-x-0 bottom-0 z-50 max-h-[85vh] overflow-y-auto rounded-t-2xl border-t border-secondary-200 bg-white shadow-xl dark:border-secondary-700 dark:bg-secondary-900"
+            : "fixed right-0 top-0 z-50 h-full w-full max-w-lg overflow-y-auto border-l border-secondary-200 bg-white shadow-xl dark:border-secondary-700 dark:bg-secondary-900"
+        }
       >
+        {isMobile && (
+          <div className="sticky top-0 flex justify-center pt-2 pb-1">
+            <div className="h-1 w-10 rounded-full bg-secondary-300 dark:bg-secondary-600" />
+          </div>
+        )}
         <div className="sticky top-0 flex items-center justify-between border-b border-secondary-200 bg-white px-6 py-4 dark:border-secondary-700 dark:bg-secondary-900">
           <h2 className="text-lg font-bold text-secondary-900 dark:text-secondary-100">
             Detalle del vehículo

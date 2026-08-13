@@ -7,6 +7,7 @@ import { SearchHistoryTable } from "@/app/features/history/SearchHistoryTable";
 import { SearchFilters } from "@/app/features/search/SearchFilters";
 import { VehicleTable } from "@/app/features/vehicle/VehicleTable";
 import { VehicleDrawer } from "@/app/features/vehicle/VehicleDrawer";
+import { ErrorDisplay } from "@/app/components/ui/ErrorDisplay";
 import { useState } from "react";
 import type { SearchFilters as SearchFiltersType, SearchResultItem } from "@/app/types/vehicle";
 
@@ -53,17 +54,7 @@ export default function HistoryPage() {
 
       {/* Error */}
       {isError && (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-6 text-center dark:border-red-800 dark:bg-red-900/20">
-          <p className="text-red-600 dark:text-red-400">
-            Error al cargar el historial: {error?.message}
-          </p>
-          <button
-            onClick={() => refetch()}
-            className="mt-3 text-sm font-medium text-primary-600 hover:text-primary-700 dark:text-primary-400"
-          >
-            Intentar de nuevo
-          </button>
-        </div>
+        <ErrorDisplay error={error} onRetry={() => refetch()} />
       )}
 
       {/* Success */}

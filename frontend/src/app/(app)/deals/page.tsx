@@ -6,6 +6,7 @@ import { fetchDeals, updateDealStatus } from "@/app/services/deals";
 import type { Deal, DealStatus } from "@/app/services/deals";
 import { offerPricePrefill } from "@/app/(app)/deals/offerPrefill";
 import { Button } from "@/app/components/ui/button";
+import { ErrorDisplay } from "@/app/components/ui/ErrorDisplay";
 
 const eur = (n?: number | null) =>
   n == null
@@ -368,19 +369,7 @@ function DealsContent() {
 
       {/* Error */}
       {isError && (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-6 text-center dark:border-red-800 dark:bg-red-900/20">
-          <p className="text-red-600 dark:text-red-400">
-            Error al cargar los deals: {error?.message}
-          </p>
-          <Button
-            variant="outline"
-            size="sm"
-            className="mt-3"
-            onClick={() => refetch()}
-          >
-            Intentar de nuevo
-          </Button>
-        </div>
+        <ErrorDisplay error={error} onRetry={() => refetch()} />
       )}
 
       {/* Empty */}

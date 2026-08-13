@@ -8,6 +8,7 @@ import {
   fetchOpportunities,
   type Opportunity,
 } from "@/app/services/opportunities";
+import { fetchHealth } from "@/app/services/health";
 import { useAuthStore } from "@/app/store/auth-store";
 import { HomeGreeting } from "@/app/features/home/HomeGreeting";
 import { KpiRow } from "@/app/features/home/KpiRow";
@@ -17,6 +18,7 @@ import {
   type BadgeTone,
 } from "@/app/features/home/OpportunityTeaserCard";
 import { RecentItemCard } from "@/app/features/home/RecentItemCard";
+import { ErrorDisplay } from "@/app/components/ui/ErrorDisplay";
 
 const eur = (n?: number | null) =>
   n == null
@@ -58,22 +60,6 @@ function RowSkeleton() {
         <div className="h-3 w-2/3 animate-pulse rounded bg-secondary-200 dark:bg-secondary-700" />
         <div className="h-2.5 w-1/3 animate-pulse rounded bg-secondary-200 dark:bg-secondary-700" />
       </div>
-    </div>
-  );
-}
-
-function ErrorBanner({ onRetry }: { onRetry: () => void }) {
-  return (
-    <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-center dark:border-red-800 dark:bg-red-900/20">
-      <p className="text-sm text-red-600 dark:text-red-400">
-        No se pudieron cargar los datos. Comprueba tu conexión e inténtalo de nuevo.
-      </p>
-      <button
-        onClick={onRetry}
-        className="mt-3 rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-700"
-      >
-        Reintentar
-      </button>
     </div>
   );
 }
@@ -126,7 +112,14 @@ export default function DashboardPage() {
     queryKey: ["opportunities", "home"],
     queryFn: () => fetchOpportunities({ limit: 5 }),
   });
+  const { data: health, isError: healthError } = useQuery({
+    queryKey: ["health", "dashboard"],
+    queryFn: fetchHealth,
+    retry: 1,
+    staleTime: 30_000,
+  });
 
+  const backendDown = healthError && !health;
   const anyError = historyError || statsError || oppError;
   const refetchAll = () => {
     void refetchHistory();
@@ -182,7 +175,25 @@ export default function DashboardPage() {
         Buscar vehículos
       </Link>
 
-      {anyError && <ErrorBanner onRetry={refetchAll} />}
+      {backendDown && (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-900/20">
+          <p className="text-sm font-medium text-amber-700 dark:text-amber-300">
+            No se pudo conectar con el backend. Algunos datos pueden no estar disponibles.
+          </p>
+          <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+            Si estás en un dispositivo físico, ve a{" "}
+            <Link href="/settings" className="font-medium underline">Configuración</Link>{" "}
+            para configurar la URL del servidor.
+          </p>
+        </div>
+      )}
+
+      {anyError && (
+        <ErrorDisplay
+          error={new Error("No se pudieron cargar los datos del dashboard")}
+          onRetry={refetchAll}
+        />
+      )}
 
       {/* Oportunidades + Actividad (stack en móvil, grid 2 cols en desktop) */}
       <div className="mt-6 grid gap-6 md:grid-cols-2">
@@ -194,7 +205,10 @@ export default function DashboardPage() {
               <RowSkeleton />
             </div>
           ) : oppError ? (
-            <ErrorBanner onRetry={refetchOpps} />
+            <ErrorDisplay
+              error={new Error("Error al cargar oportunidades")}
+              onRetry={refetchOpps}
+            />
           ) : oppItems.length === 0 ? (
             <EmptyOpportunities />
           ) : (
@@ -234,7 +248,10 @@ export default function DashboardPage() {
               <RowSkeleton />
             </div>
           ) : historyError ? (
-            <ErrorBanner onRetry={refetchHistory} />
+            <ErrorDisplay
+              error={new Error("Error al cargar el historial")}
+              onRetry={refetchHistory}
+            />
           ) : !history || history.length === 0 ? (
             <EmptyActivity />
           ) : (
