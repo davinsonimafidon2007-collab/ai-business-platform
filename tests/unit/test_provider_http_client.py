@@ -415,3 +415,16 @@ def test_default_user_agents_are_modern():
     uas = client._default_user_agents()
     assert any("Chrome/131" in ua or "Chrome/12" in ua for ua in uas)
     assert any("Firefox" in ua for ua in uas)
+
+
+@pytest.mark.asyncio
+async def test_http_client_oversized_response_raises_value_error(http_client):
+    """Test que verifica que respuestas de más de 15MB lanzan un ValueError para evitar fugas de memoria."""
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.content = b"A" * (16 * 1024 * 1024)  # 16 MB
+    mock_response.raise_for_status = MagicMock()
+
+    with patch.object(httpx.AsyncClient, "request", new_callable=AsyncMock, return_value=mock_response):
+        with pytest.raises(ValueError, match="exceeds limit of 15MB"):
+            await http_client.get("/test")

@@ -225,3 +225,36 @@ def override_auth(test_user: User) -> User:
     app.dependency_overrides[get_current_user] = _get_current_user
     yield test_user
     app.dependency_overrides.pop(get_current_user, None)
+
+
+def pytest_configure(config: Any) -> None:
+    """Verifica si PostgreSQL está levantado antes de correr los tests de integración."""
+    import os
+    import socket
+    from urllib.parse import urlparse
+    from app.core.config import settings
+
+    db_url = os.environ.get("DATABASE_URL") or settings.database_url
+    if not db_url:
+        config.postgres_available = False
+        return
+
+    try:
+        parsed = urlparse(db_url)
+        host = parsed.hostname or "localhost"
+        port = parsed.port or 5432
+        # Intentar conectar al puerto TCP para verificar disponibilidad
+        with socket.create_connection((host, port), timeout=0.5):
+            pass
+    except Exception:
+        config.postgres_available = False
+    else:
+        config.postgres_available = True
+
+
+@pytest.fixture(autouse=True)
+def check_postgres_availability(request: Any) -> None:
+    """Salta automáticamente los tests de integración si Postgres no está levantado."""
+    postgres_available = getattr(request.config, "postgres_available", True)
+    if not postgres_available:
+        pytest.skip("PostgreSQL is not running on 5432 (skipping integration tests)")

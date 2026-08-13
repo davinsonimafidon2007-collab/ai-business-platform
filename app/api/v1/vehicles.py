@@ -198,7 +198,7 @@ async def simulate_vehicle_profit(
     )
     if purchase is None or purchase <= 0:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="El precio de compra debe ser un valor positivo mayor que cero.",
         )
 
