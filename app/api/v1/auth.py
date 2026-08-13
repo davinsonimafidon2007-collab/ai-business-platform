@@ -207,11 +207,13 @@ async def verify_email(
 async def get_password_reset_service(session: AsyncSession = Depends(get_db_session)) -> PasswordResetService:
     user_repository = UserRepository(session)
     token_repository = PasswordResetTokenRepository(session)
+    refresh_token_repository = RefreshTokenRepository(session)
     email_provider = SmtpEmailProvider()
     return PasswordResetService(
         user_repository=user_repository,
         token_repository=token_repository,
         email_provider=email_provider,
+        refresh_token_repository=refresh_token_repository,
     )
 
 

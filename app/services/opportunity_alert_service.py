@@ -118,8 +118,16 @@ class OpportunityAlertService:
             return False
         return True
 
-    def _in_cooldown(self, vehicle_key: str) -> bool:
-        """Comprueba si el vehicle_id está en cooldown."""
+    async def _in_cooldown(self, vehicle_key: str, channel: str = "email") -> bool:
+        """Comprueba si el vehicle_id está en cooldown (usando Redis con memoria local como fallback)."""
+        from app.core.redis import cache_get
+        try:
+            val = await cache_get(f"cooldown:{channel}:{vehicle_key}")
+            if val is not None:
+                return True
+        except Exception:
+            logger.warning("Failed to check cooldown from Redis, falling back to process memory", exc_info=True)
+
         last = self._last_sent.get(vehicle_key)
         if not last:
             return False
@@ -162,12 +170,20 @@ class OpportunityAlertService:
             or getattr(vehicle, "id", None)
             or getattr(opportunity, "id", "")
         )
-        if self._in_cooldown(vid):
+        if await self._in_cooldown(vid, "email"):
             logger.info("opportunity_alert: cooldown vehicle_id=%s", vid)
             return False
 
         subject, body = self._build_message(opportunity, vehicle)
         await self._send(user_email, subject, body)
+
+        from app.core.redis import cache_set
+        try:
+            ttl_seconds = self._cooldown * 3600
+            await cache_set(f"cooldown:email:{vid}", "1", ttl_seconds)
+        except Exception:
+            logger.warning("Failed to save cooldown to Redis", exc_info=True)
+
         self._last_sent[vid] = datetime.now(UTC)
         return True
 

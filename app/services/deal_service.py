@@ -83,7 +83,7 @@ class DealService:
         """
         if not opportunity_id and not vehicle_id:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="At least one of opportunity_id or vehicle_id is required",
             )
 
@@ -176,7 +176,7 @@ class DealService:
         allowed = self._TRANSITIONS.get(deal.status, set())
         if new_status not in allowed:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail=(
                     f"Invalid transition from {deal.status.value} "
                     f"to {new_status.value}"

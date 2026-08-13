@@ -71,6 +71,28 @@ async def scheduler_lifespan(app: FastAPI) -> AsyncGenerator[None]:
     await init_redis()
     await db_manager.init()
 
+    # TASK-009: Reconciliar y recuperar proactivamente órdenes de búsqueda atascadas en RUNNING al iniciar la aplicación
+    try:
+        async with db_manager.get_session() as session:
+            import logging
+
+            from app.repositories.search_order_repository import SearchOrderRepository
+
+            logger_main = logging.getLogger("app.main")
+            order_repo = SearchOrderRepository(session)
+            # Recupera todas las órdenes RUNNING (stale_minutes=0) y las vuelve a PENDING
+            stale_orders = await order_repo.stale_running_orders(stale_minutes=0)
+            for stale in stale_orders:
+                await order_repo.reset_to_pending(stale)
+            if stale_orders:
+                logger_main.warning(
+                    "Startup recovery: Reset %d stuck RUNNING search order(s) to PENDING",
+                    len(stale_orders),
+                )
+    except Exception:
+        import logging
+        logging.getLogger("app.main").exception("Failed to recover stuck RUNNING search orders on startup")
+
     context = JobContext(db_manager=db_manager, settings=settings)
     scheduler: Scheduler = create_scheduler(context)
 

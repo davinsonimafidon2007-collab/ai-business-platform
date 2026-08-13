@@ -116,7 +116,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         serializable_errors.append(serializable_error)
 
     return JSONResponse(
-        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
         content=_build_error_response(
             message=detail,
             code="validation_error",

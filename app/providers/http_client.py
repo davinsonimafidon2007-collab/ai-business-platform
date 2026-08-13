@@ -251,6 +251,15 @@ class ProviderHttpClient:
                             provider=self.provider_name,
                         )
 
+                    # TASK-010: Control de tamaño máximo de respuesta para evitar fugas de memoria
+                    if len(response.content) > 15 * 1024 * 1024:
+                        logger.error(
+                            "provider_http_client: Response size from %s exceeds limit of 15MB (%d bytes)",
+                            self.provider_name,
+                            len(response.content)
+                        )
+                        raise ValueError(f"Response size from {self.provider_name} exceeds limit of 15MB")
+
                     response.raise_for_status()
                     return response
 

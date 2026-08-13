@@ -331,6 +331,19 @@ async def search_vehicles(
     items = [_build_search_result_item(r) for r in engine_result.results]
     summary = engine_result.summary
 
+    # TASK-008: Alerta operativa si todas las fuentes solicitadas fallaron
+    provider_issues_list = getattr(engine_result, "provider_issues", []) or []
+    if provider_issues_list:
+        import logging
+        logger_ops = logging.getLogger("app.api.search_ops")
+        requested_providers = set(domain_request.providers)
+        failed_providers = {issue.provider for issue in provider_issues_list if getattr(issue, "stage", "") == "search"}
+        if requested_providers and requested_providers.issubset(failed_providers):
+            logger_ops.warning(
+                "SEARCH_API_ALERT: All requested providers %s failed. Potential proxy block, cookie expiration, or anti-bot activation.",
+                requested_providers,
+            )
+
     return SearchAPIResponse(
         summary=SearchSummarySchema(
             total_results=summary.total_results,
