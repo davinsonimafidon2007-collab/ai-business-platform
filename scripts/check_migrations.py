@@ -21,7 +21,7 @@ import re
 import subprocess
 import sys
 
-EXPECTED_HEAD = "k3l4m5n6o7p8"
+EXPECTED_HEAD = "l2m3n4o5p6q7"
 EXPECTED_ROOT = "2f6d3d5a7b2c"
 
 
