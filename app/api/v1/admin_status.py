@@ -27,8 +27,6 @@ from app.jobs.base import JobContext
 from app.jobs.canary_state import get_last_canary_result
 from app.jobs.provider_canary import ProviderCanaryJob
 from app.models.user import User
-
-logger = logging.getLogger(__name__)
 from app.providers.registry import ProviderRegistry
 from app.schemas.admin_status import (
     AdminSystemStatus,
@@ -36,6 +34,8 @@ from app.schemas.admin_status import (
     ProviderCanaryStatus,
     ProvidersStatus,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/admin/status", tags=["Admin System Status"])
 

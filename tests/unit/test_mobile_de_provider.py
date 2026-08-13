@@ -589,7 +589,7 @@ async def test_search_from_vehicle_service(search_html: str) -> None:
 async def test_import_from_provider_result(search_html: str) -> None:
     """Test que VehicleService puede importar resultados de MobileDeProvider."""
     from app.services.vehicle_service import VehicleService
-    from tests.unit.test_vehicle_service_providers import MockVehicleRepository, TEST_USER_ID
+    from tests.unit.test_vehicle_service_providers import TEST_USER_ID, MockVehicleRepository
 
     provider = MobileDeProvider()
     service = VehicleService(MockVehicleRepository())

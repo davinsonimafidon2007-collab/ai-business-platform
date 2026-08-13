@@ -7,7 +7,7 @@ services:
     command: >
       sh -c "for i in 1 2 3 4 5; do uv run --no-sync alembic upgrade head && break || echo 'Waiting for DB...' && sleep 3; done && uv run --no-sync uvicorn app.main:app --host 0.0.0.0 --port 8000"
     ports:
-      - "8000:8000"
+      - "${API_PORT:-8000}:8000"
     volumes:
       - .:/app
       - uploads_data:/app/uploads/inspection_photos
@@ -46,7 +46,7 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
     ports:
-      - "3000:3000"
+      - "${FRONTEND_PORT:-3000}:3000"
     environment:
       # GRAVE.004: el frontend se sirve desde el HOST (puerto 3000), así que
       # el navegador no puede resolver 'api'; apuntamos a localhost:8000.
@@ -89,9 +89,6 @@ services:
 
 volumes:
   postgres_data:
-    name: ai_platform_postgres_data
   redis_data:
-    name: ai_platform_redis_data
   uploads_data:
-    name: ai_platform_uploads_data
 
