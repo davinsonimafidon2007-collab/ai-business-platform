@@ -274,13 +274,3 @@ export interface SearchHistory {
   execution_time?: number | null;
 }
 
-// =============================================================================
-// Dashboard Stats
-// =============================================================================
-export interface DashboardStats {
-  total_searches: number;
-  recent_searches: number;
-  average_results_per_search: number;
-  average_execution_time: number;
-  provider_stats: Record<string, number>;
-}
