@@ -118,7 +118,7 @@ class OpportunityAlertService:
             return False
         return True
 
-    async def _in_cooldown(self, vehicle_key: str, channel: str = "email") -> bool:
+    def _in_cooldown(self, vehicle_key: str, channel: str = "email") -> bool:
         """Comprueba si el vehicle_id está en cooldown (memoria del proceso)."""
         last = self._last_sent.get(vehicle_key)
         if not last:

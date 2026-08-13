@@ -173,11 +173,12 @@ async def test_cooldown_persisted_in_redis():
     assert first is True
     assert second is False  # cooldown detectado por Redis
     cache_set.assert_awaited_once()
-    assert cache_set.await_args.args[0] == "alert:cooldown:v1"
+    assert cache_set.await_args.args[0] == "alert:cooldown:email:v1"
 
 
 @pytest.mark.asyncio
 async def test_cooldown_redis_key_namespaced():
-    """TASK-005: la clave Redis del cooldown está namespaced por vehicle_id."""
+    """TASK-005: la clave Redis del cooldown está namespaced por vehicle y canal."""
     svc = OpportunityAlertService()
-    assert svc._cooldown_key("abc-123") == "alert:cooldown:abc-123"
+    assert svc._cooldown_key("abc-123") == "alert:cooldown:email:abc-123"
+    assert svc._cooldown_key("abc-123", "telegram") == "alert:cooldown:telegram:abc-123"
