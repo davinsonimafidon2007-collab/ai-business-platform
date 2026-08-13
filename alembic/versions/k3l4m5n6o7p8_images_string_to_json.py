@@ -37,7 +37,13 @@ def upgrade() -> None:
 
     # Drop old column and rename new one
     op.drop_column("vehicles", "images")
-    op.alter_column("vehicles", "images_json", new_column_name="images")
+    op.alter_column(
+        "vehicles",
+        "images_json",
+        new_column_name="images",
+        type_=sa.JSON,
+        postgresql_using="images_json::json",
+    )
 
 
 def downgrade() -> None:
@@ -60,4 +66,10 @@ def downgrade() -> None:
             )
 
     op.drop_column("vehicles", "images")
-    op.alter_column("vehicles", "images_csv", new_column_name="images")
+    op.alter_column(
+        "vehicles",
+        "images_csv",
+        new_column_name="images",
+        type_=sa.Text,
+        postgresql_using="images_csv",
+    )

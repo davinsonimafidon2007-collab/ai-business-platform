@@ -165,3 +165,12 @@ def test_simulate_profit_coherence_warnings_extreme_roi(override_deps: None) -> 
         assert len(data["coherence_warnings"]) >= 1
     finally:
         app.dependency_overrides.pop(get_profit_analyzer, None)
+
+
+def test_simulate_profit_invalid_price_returns_422(override_deps: None) -> None:
+    response = client.post(
+        "/api/v1/vehicles/vehicle-1/simulate-profit",
+        json={"profile_name": "ES", "purchase_price": 0, "estimated_sale_price": 24000},
+    )
+    assert response.status_code == 422
+    assert "El precio de compra debe ser un valor positivo mayor que cero." in response.json()["error"]["message"]

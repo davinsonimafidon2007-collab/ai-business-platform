@@ -186,12 +186,20 @@ class TelegramAlertService(OpportunityAlertService):
             or getattr(vehicle, "id", None)
             or getattr(opportunity, "id", "")
         )
-        if self._in_cooldown(vid):
+        if await self._in_cooldown(vid, "telegram"):
             logger.info("telegram_alert: cooldown vehicle_id=%s", vid)
             return False
 
         text = self._build_telegram_message(opportunity, vehicle, evaluation)
         await self._send_telegram(vid, text)
+
+        from app.core.redis import cache_set
+        try:
+            ttl_seconds = self._cooldown * 3600
+            await cache_set(f"cooldown:telegram:{vid}", "1", ttl_seconds)
+        except Exception:
+            logger.warning("Failed to save Telegram cooldown to Redis", exc_info=True)
+
         self._last_sent[vid] = self._now_utc()
         return True
 

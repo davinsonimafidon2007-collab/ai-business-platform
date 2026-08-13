@@ -196,10 +196,10 @@ async def simulate_vehicle_profit(
         if body.purchase_price is not None
         else getattr(vehicle, "price", None)
     )
-    if purchase is None:
+    if purchase is None or purchase <= 0:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="vehicle has no price and purchase_price not provided",
+            detail="El precio de compra debe ser un valor positivo mayor que cero.",
         )
 
     class _V:

@@ -159,10 +159,14 @@ async def test_reset_password_updates_password():
     user_repo.get_by_id.return_value = user
     user_repo.update.return_value = user
 
+    refresh_token_repo = MagicMock()
+    refresh_token_repo.revoke_all_by_user_id = AsyncMock()
+
     svc = PasswordResetService(
         user_repository=user_repo,
         token_repository=token_repo,
         email_provider=None,
+        refresh_token_repository=refresh_token_repo,
     )
 
     new_password = "NewSecurePass123!"
@@ -170,6 +174,7 @@ async def test_reset_password_updates_password():
 
     token_repo.mark_as_used.assert_called_once_with(valid_token)
     token_repo.invalidate_all_for_user.assert_called_once_with(str(user.id))
+    refresh_token_repo.revoke_all_by_user_id.assert_called_once_with(str(user.id))
     user_repo.update.assert_called_once_with(user)
     # Verificar que la contraseña se ha actualizado (hasheada)
     assert user.hashed_password != "hashed"
