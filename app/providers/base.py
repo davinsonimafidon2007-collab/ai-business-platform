@@ -286,6 +286,9 @@ class VehicleProvider(ABC):
         # --- Ubicación ---
         location = self._extract_location(node)
 
+        # --- Emisiones (TASK-013) ---
+        emissions = self._extract_emissions(node)
+
         return VehicleSearchResult(
             source=self.source_name,
             external_id=external_id,
@@ -300,6 +303,7 @@ class VehicleProvider(ABC):
             location=location,
             images=images,
             price=price,
+            emissions=emissions,
         )
 
     # --------------------------------------------------------------
@@ -344,6 +348,9 @@ class VehicleProvider(ABC):
         # --- Descripción ---
         description = self._extract_description(soup)
 
+        # --- Emisiones (TASK-013) ---
+        emissions = self._extract_emissions(soup)
+
         return VehicleDetail(
             source=self.source_name,
             external_id=external_id,
@@ -359,6 +366,7 @@ class VehicleProvider(ABC):
             images=images,
             description=description,
             price=price,
+            emissions=emissions,
         )
 
     # --------------------------------------------------------------
@@ -707,6 +715,20 @@ class VehicleProvider(ABC):
                 text = tag.get_text(strip=True)
                 if text:
                     return text
+        return None
+
+    def _extract_emissions(self, soup: Any) -> str | None:
+        """Extrae la normativa de emisiones Euro (ej. Euro 6, Euro 5) o CO2 (TASK-013)."""
+        text = soup.get_text()
+        # Buscar "Euro 6", "Euro 5", "Euro 4", etc.
+        match = re.search(r"\b(Euro\s*[3456](?:d-temp|d|c)?)\b", text, re.IGNORECASE)
+        if match:
+            # Normalizar a título (ej: Euro 6)
+            return match.group(1).strip().capitalize()
+        # Buscar etiquetas típicas de CO2 (ej: "120 g/km")
+        match_co2 = re.search(r"\b(\d+)\s*g\s*/\s*km\b", text, re.IGNORECASE)
+        if match_co2:
+            return f"{match_co2.group(1)} g/km"
         return None
 
     # --------------------------------------------------------------

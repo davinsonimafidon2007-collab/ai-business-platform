@@ -4,6 +4,23 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
+# Re-exporting API v1 schemas for unification (TASK-014)
+from app.api.v1.schemas.search import (
+    ProviderIssueSchema as ProviderIssueSchema,  # noqa: F401
+)
+from app.api.v1.schemas.search import (
+    SearchAPIRequest as SearchAPIRequest,  # noqa: F401
+)
+from app.api.v1.schemas.search import (
+    SearchAPIResponse as SearchAPIResponse,  # noqa: F401
+)
+from app.api.v1.schemas.search import (
+    SearchResultItem as SearchResultItem,  # noqa: F401
+)
+from app.api.v1.schemas.search import (
+    SearchSummarySchema as SearchSummarySchema,  # noqa: F401
+)
+
 
 class SearchBase(BaseModel):
     name: str = Field(..., max_length=255)

@@ -49,3 +49,30 @@ def test_vehicle_detail_dto() -> None:
     assert detail.external_id == "ext-789"
     assert detail.vin is None
     assert detail.description is None
+
+
+def test_vehicle_provider_extract_emissions_euro_norm() -> None:
+    """Verifica la extracción y normalización de la clasificación ambiental Euro (TASK-013)."""
+    from bs4 import BeautifulSoup
+
+    class TestProvider(VehicleProvider):
+        @property
+        def source_name(self) -> str:
+            return "test_provider"
+
+        def _find_listing_nodes(self, soup: BeautifulSoup) -> list:
+            return []
+
+    provider = TestProvider()
+
+    # 1) Euro norm pattern
+    soup1 = BeautifulSoup("<html><body>Normativa Euro 6d-temp disponible</body></html>", "lxml")
+    assert provider._extract_emissions(soup1) == "Euro 6d-temp"
+
+    # 2) CO2 emissions pattern fallback
+    soup2 = BeautifulSoup("<html><body>Emisiones de CO2: 120 g/km combinadas</body></html>", "lxml")
+    assert provider._extract_emissions(soup2) == "120 g/km"
+
+    # 3) Empty/Missing pattern
+    soup3 = BeautifulSoup("<html><body>Sin especificar el tipo de coche</body></html>", "lxml")
+    assert provider._extract_emissions(soup3) is None

@@ -23,6 +23,8 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/ai_business_platform"
     jwt_secret_key: str = ""
     jwt_algorithm: str = "HS256"
+    jwt_previous_secret_key: str = ""
+    """Clave secreta anterior de JWT para dar soporte a la rotación periódica sin desconectar usuarios (TASK-015)."""
 
     auth_disabled: bool = False
     """Si True, no exige JWT: inyecta usuario local ADMIN (uso personal).

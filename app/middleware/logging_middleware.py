@@ -72,15 +72,25 @@ class AccessLogMiddleware(BaseHTTPMiddleware):
             "user_agent": request.headers.get("user-agent", ""),
         }
 
+        # Add database pool metrics logging if available (TASK-011)
+        try:
+            from app.database import db_manager
+            log_data["db_pool"] = db_manager.get_pool_metrics()
+        except Exception:
+            pass
+
         if settings.log_json:
             logger.info(json.dumps(log_data, ensure_ascii=False))
         else:
+            db_pool = log_data.get("db_pool", {})
+            pool_info = f" (db_pool size={db_pool.get('size', 0)} checkedout={db_pool.get('checkedout', 0)})" if db_pool else ""
             logger.info(
-                "%s %s %d %.2fms [%s]",
+                "%s %s %d %.2fms [%s]%s",
                 log_data["method"],
                 log_data["path"],
                 log_data["status"],
                 log_data["duration_ms"],
                 log_data["request_id"],
+                pool_info,
             )
 

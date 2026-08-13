@@ -188,3 +188,25 @@ async def test_authenticate_with_google_propagates_verify_error(monkeypatch) -> 
     service = AuthService(repository)
     with pytest.raises(AuthenticationError, match="Firebase is not configured"):
         await service.authenticate_with_google(id_token="tok")
+
+
+def test_auth_service_jwt_secret_key_rotation(monkeypatch) -> None:
+    """Verifica que se pueden decodificar tokens firmados con la clave secreta anterior (TASK-015)."""
+    from jose import jwt
+
+    from app.core.config import settings
+
+    repository = AsyncMock()
+    service = AuthService(repository)
+
+    # 1) Configurar secreto anterior en settings
+    monkeypatch.setattr(settings, "jwt_secret_key", "current_jwt_secret_key_that_is_at_least_32_chars")
+    monkeypatch.setattr(settings, "jwt_previous_secret_key", "previous_jwt_secret_key_that_is_at_least_32_chars")
+
+    # 2) Generar un token con la clave anterior (simulando que el usuario tenía una sesión antes de rotar la clave)
+    payload = {"sub": "user-123", "exp": 9999999999}
+    token_old = jwt.encode(payload, "previous_jwt_secret_key_that_is_at_least_32_chars", algorithm="HS256")
+
+    # 3) Debe decodificar de forma exitosa usando la clave de rotación de respaldo
+    decoded = service.decode_access_token(token_old)
+    assert decoded["sub"] == "user-123"

@@ -93,4 +93,10 @@ class AuthService:
         try:
             return jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
         except JWTError as exc:
+            # Si falla con la clave actual, intentamos con la clave anterior para dar soporte a la rotación (TASK-015)
+            if settings.jwt_previous_secret_key:
+                try:
+                    return jwt.decode(token, settings.jwt_previous_secret_key, algorithms=[settings.jwt_algorithm])
+                except JWTError:
+                    pass
             raise AuthenticationError("Invalid or expired token") from exc

@@ -4,6 +4,20 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
+# Re-exporting API v1 schemas for unification (TASK-014)
+from app.api.v1.schemas.vehicle import (
+    ProviderListResponse as ProviderListResponse,  # noqa: F401
+)
+from app.api.v1.schemas.vehicle import (
+    SimulateProfitRequest as SimulateProfitRequest,  # noqa: F401
+)
+from app.api.v1.schemas.vehicle import (
+    SimulateProfitResponse as SimulateProfitResponse,  # noqa: F401
+)
+from app.api.v1.schemas.vehicle import (
+    VehicleDetailResponse as VehicleDetailResponse,  # noqa: F401
+)
+
 
 class VehicleBase(BaseModel):
     source: str = Field(..., max_length=50)
@@ -31,6 +45,7 @@ class VehicleBase(BaseModel):
     description: str | None = None
     images: list[str] | None = None
     equipment: str | None = None
+
 
 class VehicleCreate(VehicleBase):
     pass

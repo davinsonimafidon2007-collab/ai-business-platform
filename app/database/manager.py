@@ -68,6 +68,19 @@ class DatabaseManager:
         """El sessionmaker para crear sesiones."""
         return self._session_factory
 
+    def get_pool_metrics(self) -> dict[str, int]:
+        """Devuelve métricas actuales de utilización del pool de conexiones (TASK-011)."""
+        pool = self._engine.pool
+        from sqlalchemy.pool import QueuePool
+        if isinstance(pool, QueuePool):
+            return {
+                "size": pool.size(),
+                "checkedout": pool.checkedout(),
+                "overflow": pool.overflow(),
+                "checkedin": pool.checkedin(),
+            }
+        return {"size": 0, "checkedout": 0, "overflow": 0, "checkedin": 0}
+
     # ------------------------------------------------------------------
     # API pública
     # ------------------------------------------------------------------
