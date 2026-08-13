@@ -1,5 +1,6 @@
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from logging import getLogger
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -21,6 +22,8 @@ from app.middleware.rate_limit_middleware import RateLimitMiddleware
 from app.middleware.request_id import RequestIdMiddleware
 
 setup_logging()
+
+logger_main = getLogger("app.main")
 
 # ---------------------------------------------------------------------------
 # Startup validation — refuse to boot with insecure defaults
@@ -71,27 +74,22 @@ async def scheduler_lifespan(app: FastAPI) -> AsyncGenerator[None]:
     await init_redis()
     await db_manager.init()
 
-    # TASK-009: Reconciliar y recuperar proactivamente órdenes de búsqueda atascadas en RUNNING al iniciar la aplicación
+    # TASK-009: Recuperar al arrancar las órdenes de búsqueda que quedaron en
+    # RUNNING (crash/reinicio anterior) reencolándolas a PENDING para que el
+    # job de procesado las retome. Un solo UPDATE atómico, sin umbral de
+    # antigüedad: al boot no puede haber workers procesando.
     try:
+        from app.repositories.search_order_repository import SearchOrderRepository
+
         async with db_manager.get_session() as session:
-            import logging
-
-            from app.repositories.search_order_repository import SearchOrderRepository
-
-            logger_main = logging.getLogger("app.main")
-            order_repo = SearchOrderRepository(session)
-            # Recupera todas las órdenes RUNNING (stale_minutes=0) y las vuelve a PENDING
-            stale_orders = await order_repo.stale_running_orders(stale_minutes=0)
-            for stale in stale_orders:
-                await order_repo.reset_to_pending(stale)
-            if stale_orders:
-                logger_main.warning(
-                    "Startup recovery: Reset %d stuck RUNNING search order(s) to PENDING",
-                    len(stale_orders),
-                )
+            recovered = await SearchOrderRepository(session).recover_all_running()
+        if recovered:
+            logger_main.warning(
+                "Startup recovery: reenqueued %d stuck RUNNING search order(s) -> PENDING",
+                recovered,
+            )
     except Exception:
-        import logging
-        logging.getLogger("app.main").exception("Failed to recover stuck RUNNING search orders on startup")
+        logger_main.exception("Failed to recover stuck RUNNING search orders on startup")
 
     context = JobContext(db_manager=db_manager, settings=settings)
     scheduler: Scheduler = create_scheduler(context)

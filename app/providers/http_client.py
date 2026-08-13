@@ -35,6 +35,7 @@ from app.providers.exceptions import (
     ProviderMaxRetriesExceededError,
     ProviderNotFoundError,
     ProviderRateLimitError,
+    ProviderResponseTooLargeError,
     ProviderTimeoutError,
 )
 
@@ -55,6 +56,7 @@ class ProviderHttpClient:
         proxy: str | None = None,
         cookies: str | None = None,
         min_delay_ms: int | None = None,
+        max_bytes: int | None = None,
     ) -> None:
         self.provider_name = provider_name
         self.base_url = base_url
@@ -83,6 +85,9 @@ class ProviderHttpClient:
 
         cfg_delay = int(getattr(settings, "provider_http_min_delay_ms", 0) or 0)
         self.min_delay_ms = min_delay_ms if min_delay_ms is not None else cfg_delay
+        # TASK-010: límite de bytes por descarga (0/None = sin límite).
+        cfg_max = int(getattr(settings, "provider_http_max_html_bytes", 0) or 0)
+        self.max_bytes = max_bytes if max_bytes is not None else cfg_max
         self._last_request_at: float = 0.0
         self._client: httpx.AsyncClient | None = None
 
@@ -229,16 +234,18 @@ class ProviderHttpClient:
                 with attempt:
                     await self._respect_min_delay()
                     client = await self._get_client()
-                    response = await client.request(
+                    request = client.build_request(
                         method=method,
                         url=full_url,
                         params=params,
                         headers=request_headers,
                         **kwargs,
                     )
+                    response = await client.send(request, stream=True)
                     self._last_request_at = time.monotonic()
 
                     if response.status_code == 403:
+                        await response.aclose()
                         logger.error(
                             "provider_http_client: HTTP 403 anti-bot en %s (url=%s)",
                             self.provider_name,
@@ -251,18 +258,20 @@ class ProviderHttpClient:
                             provider=self.provider_name,
                         )
 
-                    # TASK-010: Control de tamaño máximo de respuesta para evitar fugas de memoria
-                    if len(response.content) > 15 * 1024 * 1024:
-                        logger.error(
-                            "provider_http_client: Response size from %s exceeds limit of 15MB (%d bytes)",
-                            self.provider_name,
-                            len(response.content)
-                        )
-                        raise ValueError(f"Response size from {self.provider_name} exceeds limit of 15MB")
-
                     response.raise_for_status()
-                    return response
 
+                    # TASK-010: leer el cuerpo en streaming con un tope de bytes
+                    # para no materializar descargas gigantes en memoria.
+                    body = await self._read_capped_body(response, full_url)
+                    return httpx.Response(
+                        status_code=response.status_code,
+                        headers=response.headers,
+                        content=body,
+                        request=response.request,
+                    )
+
+        except ProviderResponseTooLargeError:
+            raise
         except ProviderConnectionError:
             raise
         except httpx.TimeoutException as e:
@@ -278,6 +287,7 @@ class ProviderHttpClient:
                 original_error=e,
             ) from e
         except httpx.HTTPStatusError as e:
+            await e.response.aclose()
             if e.response.status_code == 404:
                 # SEARCH.DIAG.1: en un listado, 404 suele significar que la
                 # marca/modelo no existe en esa web, no que la fuente esté
@@ -313,6 +323,33 @@ class ProviderHttpClient:
         self, url: str, params: dict[str, Any] | None = None, **kwargs: Any
     ) -> httpx.Response:
         return await self.request("GET", url, params=params, **kwargs)
+
+    async def _read_capped_body(
+        self, response: httpx.Response, full_url: str
+    ) -> bytes:
+        """Lee el cuerpo en streaming con tope ``self.max_bytes`` (TASK-010).
+
+        Si la descarga supera el límite se corta y se lanza
+        ``ProviderResponseTooLargeError``, de modo que nunca se materializa un
+        cuerpo gigante en memoria. ``max_bytes <= 0`` = sin límite.
+        """
+        if self.max_bytes <= 0:
+            return await response.aread()
+
+        chunks: list[bytes] = []
+        total = 0
+        async for chunk in response.aiter_bytes():
+            total += len(chunk)
+            if total > self.max_bytes:
+                await response.aclose()
+                raise ProviderResponseTooLargeError(
+                    f"Respuesta de {self.provider_name} supera el límite de "
+                    f"{self.max_bytes} bytes (url={full_url})",
+                    provider=self.provider_name,
+                    max_bytes=self.max_bytes,
+                )
+            chunks.append(chunk)
+        return b"".join(chunks)
 
     async def post(
         self,

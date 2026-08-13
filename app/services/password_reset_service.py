@@ -108,10 +108,6 @@ class PasswordResetService:
         # Invalidar cualquier otro token activo del mismo usuario
         await self.token_repository.invalidate_all_for_user(token_record.user_id)
 
-        # Revoke all active refresh tokens for this user immediately upon successful password reset
-        if self.refresh_token_repository is not None:
-            await self.refresh_token_repository.revoke_all_by_user_id(token_record.user_id)
-
         # Obtener usuario y actualizar contraseña
         user = await self.user_repository.get_by_id(token_record.user_id)
         if user is None:
@@ -119,6 +115,12 @@ class PasswordResetService:
 
         user.hashed_password = password_hasher.hash(new_password)
         await self.user_repository.update(user)
+
+        # TASK-003: invalidar sesiones activas (refresh_tokens) tras el reset
+        if self.refresh_token_repository is not None:
+            await self.refresh_token_repository.revoke_all_by_user_id(
+                token_record.user_id
+            )
 
         return token_record.user_id
 

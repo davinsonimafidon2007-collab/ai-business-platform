@@ -153,6 +153,28 @@ class SearchOrderRepository:
         await self.session.commit()
         await self.session.refresh(order)
 
+    async def recover_all_running(self) -> int:
+        """Reencola TODAS las órdenes RUNNING -> PENDING (arranque de la app).
+
+        Al boot no puede haber workers procesando; cualquier orden RUNNING es
+        un resto de un proceso anterior (crash/reinicio). A diferencia de
+        ``stale_running_orders``, no aplica umbral de antigüedad: se recuperan
+        todas de inmediato (TASK-009).
+        """
+        from sqlalchemy import update
+
+        result = await self.session.execute(
+            update(SearchOrder)
+            .where(SearchOrder.status == "RUNNING")
+            .values(
+                status="PENDING",
+                error_message="Reencolada al arrancar la app (quedó en RUNNING)",
+                updated_at=datetime.now(UTC),
+            )
+        )
+        await self.session.commit()
+        return result.rowcount
+
     async def add_vehicle(
         self,
         order: SearchOrder,

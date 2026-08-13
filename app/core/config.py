@@ -23,6 +23,14 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/ai_business_platform"
     jwt_secret_key: str = ""
     jwt_algorithm: str = "HS256"
+    jwt_previous_secrets: list[str] = []
+    """Claves JWT anteriores usadas al rotar ``jwt_secret_key``.
+
+    TASK-015: durante la rotación de credenciales, los tokens firmados con la
+    clave anterior deben seguir siendo válidos hasta que expiren. Se puede
+    definir como lista separada por comas en ``JWT_PREVIOUS_SECRETS``. El
+    decode intenta primero la clave actual y después estas previas.
+    """
 
     auth_disabled: bool = False
     """Si True, no exige JWT: inyecta usuario local ADMIN (uso personal).
@@ -190,6 +198,9 @@ class Settings(BaseSettings):
     provider_http_max_retries: int = 3
     provider_http_retry_backoff_min: int = 1
     provider_http_retry_backoff_max: int = 60
+    # TASK-010: tamaño máximo de descarga HTML (bytes). Evita fugas de memoria
+    # con respuestas gigantes; se aplica leyendo en streaming con corte.
+    provider_http_max_html_bytes: int = 10 * 1024 * 1024
     # Proxy residencial (ej. http://user:pass@host:port). Vacío = sin proxy.
     provider_http_proxy: str = ""
     # Cookie header de navegador real (ej. "sid=abc; consent=1")

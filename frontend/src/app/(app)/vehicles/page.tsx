@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/app/services/api/client";
+import { SkeletonRow } from "@/app/components/ui/Skeleton";
 import { VehicleTable } from "@/app/features/vehicle/VehicleTable";
 import { VehicleDrawer } from "@/app/features/vehicle/VehicleDrawer";
 import type { Vehicle, SearchResultItem } from "@/app/types/vehicle";
@@ -61,7 +62,13 @@ export default function VehiclesPage() {
   const [selectedVehicle, setSelectedVehicle] = useState<SearchResultItem | null>(null);
 
   if (isLoading) {
-    return <div className="p-6">Cargando vehículos...</div>;
+    return (
+      <div className="space-y-3 p-6">
+        <SkeletonRow />
+        <SkeletonRow />
+        <SkeletonRow />
+      </div>
+    );
   }
 
   if (error) {

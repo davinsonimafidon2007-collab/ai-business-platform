@@ -1,4 +1,4 @@
-﻿// DetecciÃ³n de modo (PERSONAL.NOAUTH): uso personal sin login.
+﻿// Detección de modo (PERSONAL.NOAUTH): uso personal sin login.
 //
 // NEXT_PUBLIC_AUTH_DISABLED=true  â†’ el frontend no exige token, no redirige a
 // login y no muestra acciones de sesiÃ³n. El backend, con AUTH_DISABLED=true,

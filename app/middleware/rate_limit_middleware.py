@@ -103,8 +103,8 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     ) -> Response:
         path = request.url.path
 
-        # Health (montado bajo /api/v1 y posible alias raíz)
-        if path in ("/health", "/api/v1/health"):
+        # Health (montado bajo /api/v1 y posible alias raíz) + liveness
+        if path in ("/health", "/api/v1/health", "/health/live", "/api/v1/health/live"):
             return await call_next(request)
 
         client_ip = request.client.host if request.client else "unknown"

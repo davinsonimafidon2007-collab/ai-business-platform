@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { searchOrdersService } from "@/app/services/search-orders";
+import { SkeletonRow } from "@/app/components/ui/Skeleton";
 import type { SearchOrder, SearchOrderStatus } from "@/app/types/search-orders";
 
 const STATUS_LABEL: Record<SearchOrderStatus, string> = {
@@ -64,7 +65,13 @@ export default function OrdersPage() {
   });
 
   if (isLoading) {
-    return <div className="p-6">Cargando búsquedas...</div>;
+    return (
+      <div className="space-y-3 p-6">
+        <SkeletonRow />
+        <SkeletonRow />
+        <SkeletonRow />
+      </div>
+    );
   }
 
   if (error) {

@@ -27,6 +27,7 @@ from app.jobs.base import JobContext
 from app.jobs.canary_state import get_last_canary_result
 from app.jobs.provider_canary import ProviderCanaryJob
 from app.models.user import User
+from app.providers.base import VehicleProvider
 from app.providers.registry import ProviderRegistry
 from app.schemas.admin_status import (
     AdminSystemStatus,
@@ -114,6 +115,7 @@ async def _build_admin_system_status(request: Request) -> AdminSystemStatus:
         canary=canary,
         jobs=_build_jobs(request),
         providers=providers,
+        selector_health=VehicleProvider.get_selector_health(),
     )
 
 

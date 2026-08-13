@@ -35,7 +35,9 @@ services:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      # TASK-004: liveness puro (proceso vivo) para que Docker no reinicie la
+      # API mientras las dependencias (DB/Redis) aún arrancan.
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health/live"]
       interval: 30s
       timeout: 10s
       retries: 10

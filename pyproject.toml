@@ -58,6 +58,10 @@ fail_under = 0
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+addopts = ["-m", "not integration_db"]
+markers = [
+    "integration_db: tests that require a real PostgreSQL connection (skipped by default; run with `-m integration_db`)",
+]
 
 [tool.ruff]
 line-length = 100

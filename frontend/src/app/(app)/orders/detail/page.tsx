@@ -5,6 +5,7 @@ import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { searchOrdersService } from "@/app/services/search-orders";
+import { SkeletonCard } from "@/app/components/ui/Skeleton";
 import { VehicleTable } from "@/app/features/vehicle/VehicleTable";
 import { VehicleDrawer } from "@/app/features/vehicle/VehicleDrawer";
 import type { SearchOrderDetail } from "@/app/types/search-orders";
@@ -51,7 +52,12 @@ function OrderDetailContent({ id }: { id: string }) {
   });
 
   if (isLoading) {
-    return <div className="p-6">Cargando búsqueda...</div>;
+    return (
+      <div className="space-y-3 p-6">
+        <SkeletonCard />
+        <SkeletonCard />
+      </div>
+    );
   }
 
   if (error || !order) {

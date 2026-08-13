@@ -1,6 +1,6 @@
 """Tests unitarios para el servicio de alertas de oportunidades (Task C.2)."""
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -137,3 +137,47 @@ async def test_no_user_email_does_not_send():
     ok = await svc.maybe_notify(user_email=None, opportunity=opp, vehicle=None)
     assert ok is False
     sender.send_email.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_cooldown_persisted_in_redis():
+    """TASK-005: tras enviar, el cooldown se escribe en Redis.
+
+    Con Redis disponible, el segundo envío (mismo vehicle_id) se corta por la
+    clave Redis aunque el dict en memoria esté vacío (simula proceso nuevo).
+    """
+    sender = MagicMock()
+    sender.send_email = AsyncMock(return_value=None)
+    now_iso = "2026-08-13T10:00:00+00:00"
+    cache_set = AsyncMock()
+    cache_get = AsyncMock(side_effect=[None, now_iso])
+
+    svc = OpportunityAlertService(
+        email_sender=sender,
+        enabled=True,
+        min_recommendation="BUY",
+        cooldown_hours=24,
+    )
+    opp = MagicMock(recommendation="BUY", opportunity_score=90, vehicle_id="v1")
+    vehicle = MagicMock(id="v1", brand="Audi", model="A4", price=1, url="")
+
+    with (
+        patch("app.core.redis.cache_set", cache_set),
+        patch("app.core.redis.cache_get", cache_get),
+    ):
+        first = await svc.maybe_notify(user_email="a@b.com", opportunity=opp, vehicle=vehicle)
+        # Reset en memoria para simular un proceso nuevo que lee de Redis.
+        svc._last_sent.clear()
+        second = await svc.maybe_notify(user_email="a@b.com", opportunity=opp, vehicle=vehicle)
+
+    assert first is True
+    assert second is False  # cooldown detectado por Redis
+    cache_set.assert_awaited_once()
+    assert cache_set.await_args.args[0] == "alert:cooldown:v1"
+
+
+@pytest.mark.asyncio
+async def test_cooldown_redis_key_namespaced():
+    """TASK-005: la clave Redis del cooldown está namespaced por vehicle_id."""
+    svc = OpportunityAlertService()
+    assert svc._cooldown_key("abc-123") == "alert:cooldown:abc-123"

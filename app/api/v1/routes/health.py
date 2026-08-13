@@ -73,6 +73,19 @@ async def _check_redis() -> str:
 
 
 @router.get(
+    "/health/live",
+    status_code=status.HTTP_200_OK,
+    summary="Liveness — proceso vivo",
+    description="Solo comprueba que el proceso responde, sin depender de DB o "
+    "Redis. Usado por el healthcheck del contenedor (docker-compose) para no "
+    "reiniciar la API cuando las dependencias tardan en arrancar.",
+)
+async def get_health_live() -> dict[str, object]:
+    """Liveness: el proceso está vivo (TASK-004)."""
+    return {"status": "ok", "checks": {"api": "ok"}}
+
+
+@router.get(
     "/health",
     response_model=HealthResponse,
     status_code=status.HTTP_200_OK,

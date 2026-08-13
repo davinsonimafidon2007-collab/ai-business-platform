@@ -86,3 +86,21 @@ class ProviderMaxRetriesExceededError(ProviderError):
     ) -> None:
         self.attempts = attempts
         super().__init__(message, provider)
+
+
+class ProviderResponseTooLargeError(ProviderError):
+    """La respuesta del proveedor supera el límite de bytes configurado.
+
+    Se lanza para evitar fugas de memoria al descargar cuerpos gigantes
+    (TASK-010). El límite se controla leyendo la respuesta en streaming, de
+    forma que nunca se llega a materializar el cuerpo completo en memoria.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        provider: str | None = None,
+        max_bytes: int = 0,
+    ) -> None:
+        self.max_bytes = max_bytes
+        super().__init__(message, provider)
