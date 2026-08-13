@@ -68,3 +68,4 @@ class AdminSystemStatus(BaseModel):
     canary: ProviderCanaryStatus
     jobs: list[JobMetricsRead] = []  # nuevo (G.4)
     providers: ProvidersStatus = ProvidersStatus()  # ADMIN.1
+    selector_health: dict[str, dict[str, dict[str, int]]] = {}  # TASK-017

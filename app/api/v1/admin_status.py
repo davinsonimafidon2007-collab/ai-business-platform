@@ -109,11 +109,21 @@ async def _build_admin_system_status(request: Request) -> AdminSystemStatus:
         enable_autoscout24_es=getattr(settings, "enable_autoscout24_es", False),
     )
 
+    selector_health = {}
+    for p_name in ProviderRegistry.list_providers():
+        try:
+            p = ProviderRegistry.get(p_name)
+            if hasattr(p, "get_selector_health"):
+                selector_health[p_name] = p.get_selector_health()
+        except Exception:
+            pass
+
     return AdminSystemStatus(
         redis_ok=redis_ok,
         canary=canary,
         jobs=_build_jobs(request),
         providers=providers,
+        selector_health=selector_health,
     )
 
 

@@ -18,6 +18,23 @@ def _read(name: str) -> str:
 
 
 class TestAutoScout24HtmlRegression:
+    def test_autoscout24_selector_health_ratio(self) -> None:
+        """Verifica que la tasa de acierto de los selectores esté por encima de un umbral saludable (TASK-016)."""
+        html = _read("autoscout24_search_results.html")
+        provider = AutoScout24Provider()
+        provider.reset_selector_health()
+
+        # Forzar el parseo de HTML llamando directamente a super() para activar el tracking de selectores
+        super(AutoScout24Provider, provider)._parse_search_results(html, "https://www.autoscout24.de/lst")
+        health = provider.get_selector_health()
+
+        hits = sum(h["hits"] for h in health.values())
+        misses = sum(h["misses"] for h in health.values())
+        total = hits + misses
+        assert total > 0
+        ratio = hits / total
+        assert ratio >= 0.1  # Al menos un selector debe hacer hit en el HTML de muestra
+
     def test_search_results_parse_at_least_one(self) -> None:
         html = _read("autoscout24_search_results.html")
         provider = AutoScout24Provider()

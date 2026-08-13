@@ -316,6 +316,68 @@ export default function AdminStatusPage() {
             )}
           </div>
 
+          {status.selector_health && Object.keys(status.selector_health).length > 0 && (
+            <div className="rounded-xl border border-secondary-200 bg-white p-5 dark:border-secondary-700 dark:bg-secondary-900">
+              <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-secondary-500">
+                Salud de Selectores (Scrapers)
+              </h2>
+              <div className="space-y-4">
+                {Object.entries(status.selector_health).map(([provider, selectors]) => (
+                  <div key={provider} className="space-y-2">
+                    <h3 className="text-sm font-bold text-secondary-800 dark:text-secondary-200">
+                      {provider}
+                    </h3>
+                    {Object.keys(selectors).length === 0 ? (
+                      <p className="text-xs text-secondary-500">Sin datos de selectores.</p>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-xs">
+                          <thead>
+                            <tr className="border-b border-secondary-200 text-secondary-500 dark:border-secondary-700">
+                              <th className="py-1 pr-3">Selector CSS</th>
+                              <th className="py-1 pr-3">Hits</th>
+                              <th className="py-1 pr-3">Misses</th>
+                              <th className="py-1">Ratio</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {Object.entries(selectors).map(([key, data]) => {
+                              const hits = (data as { hits: number }).hits || 0;
+                              const misses = (data as { misses: number }).misses || 0;
+                              const total = hits + misses;
+                              const ratio = total > 0 ? (hits / total) * 100 : 0;
+                              const cleanKey = key.replace(`${provider}:`, "");
+                              return (
+                                <tr key={key} className="border-b border-secondary-100 last:border-0 dark:border-secondary-800">
+                                  <td className="py-1 pr-3 font-mono font-medium text-secondary-800 dark:text-secondary-200">
+                                    {cleanKey}
+                                  </td>
+                                  <td className="py-1 pr-3 text-green-600">{hits}</td>
+                                  <td className="py-1 pr-3 text-red-500">{misses}</td>
+                                  <td className="py-1 font-mono">
+                                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                      ratio >= 70
+                                        ? "bg-green-100 text-green-800"
+                                        : ratio > 0
+                                          ? "bg-amber-100 text-amber-800"
+                                          : "bg-red-100 text-red-800"
+                                    }`}>
+                                      {ratio.toFixed(0)}%
+                                    </span>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="rounded-xl border border-secondary-200 bg-white p-5 dark:border-secondary-700 dark:bg-secondary-900">
             <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-secondary-500">
               Providers (comparables)

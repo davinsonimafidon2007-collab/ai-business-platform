@@ -5,6 +5,26 @@
 
 ---
 
+## Manual de operaciones y Captura de Cookies (TASK-019)
+
+### Paso a paso para capturar Cookies del navegador real:
+1. Abre Google Chrome o Firefox e ingresa de forma manual a [https://www.mobile.de/](https://www.mobile.de/).
+2. Presiona `F12` o clic derecho -> `Inspeccionar` para abrir las Herramientas de Desarrollador.
+3. Navega a la pestaña **Network** (Red) y recarga la página (`F5`).
+4. Haz clic en la primera petición de red de tipo documento HTML (generalmente llamada `www.mobile.de` o `search.html` tras buscar).
+5. En la sección **Headers** (Cabeceras) -> **Request Headers** (Cabeceras de Petición), busca el parámetro `Cookie:`.
+6. Copia todo el contenido de texto a la derecha de `Cookie:` (ej: `sid=abc123xyz...; consent=true; ...`).
+7. Pega dicho valor en la variable `PROVIDER_HTTP_COOKIES` de tu archivo `.env`.
+
+### Configuración y Rotación de Proxies Residenciales:
+* **Elegir Proveedor:** Para uso personal de scraping sobre mobile.de, se recomienda utilizar un proveedor de proxies residenciales que ofrezca planes basados en consumo de GB (pay-as-you-go) en vez de tarifas planas de datacenter. Algunos de los proveedores más estables son Bright Data, Smartproxy, o Oxylabs.
+* **Rotación automática:** Configura el proxy residencial para que utilice puertos rotativos. Esto significa que cada solicitud HTTP que realiza `ProviderHttpClient` saldrá por una dirección IP residencial distinta en Europa (preferiblemente Alemania `cy=D`), mitigando el riesgo de bloqueos por tasa de uso (Rate Limiting 429).
+
+### Mantenimiento y Expiración:
+* Las cookies de sesión capturadas manualmente suelen durar entre 2 y 7 días según las políticas de mobile.de. Si las peticiones vuelven a retornar `403 Forbidden` a pesar de tener un proxy activo, repite el proceso de captura de cookies e introduce el nuevo token de sesión en tu `.env`.
+
+---
+
 ## 1. Contexto
 
 mobile.de bloquea sistemáticamente peticiones desde IPs de datacenter con
