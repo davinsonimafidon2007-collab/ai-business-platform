@@ -1,10 +1,10 @@
 import { api } from "./api/client";
 import type {
-  DashboardStats,
   SearchAPIRequest,
   SearchAPIResponse,
   SearchHistory,
 } from "@/app/types/vehicle";
+import type { DashboardStats } from "@/app/types/search-orders";
 
 export const searchService = {
   async searchVehicles(

@@ -33,6 +33,9 @@ def normalize(text: str) -> list[str]:
         s = line.strip()
         if not s or s.startswith("#"):
             continue
+        # Strip environment markers to prevent mismatches across different uv versions
+        if ";" in s:
+            s = s.split(";")[0].strip()
         lines.append(s)
     return sorted(lines)
 
