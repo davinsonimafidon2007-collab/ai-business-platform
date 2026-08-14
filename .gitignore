@@ -80,3 +80,9 @@ backups/
 # OS
 .DS_Store
 Thumbs.db
+
+# MOB-P1-006: Android keystore y firma — nunca versionar
+frontend/android/keystore/
+frontend/android/release-key.jks
+frontend/android/local.properties
+*.jks

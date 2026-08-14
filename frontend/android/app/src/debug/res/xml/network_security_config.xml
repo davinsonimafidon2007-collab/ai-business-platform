@@ -1,15 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Override SOLO para buildType debug (res/merge del source set src/debug/).
+  MOB-P1-007: Network security config — build type DEBUG (overlay).
 
-  En un dispositivo físico (o emulador) se prueba contra la API del PC por
-  HTTP en la IP de la LAN (p. ej. http://192.168.x.x:8000), y Android
-  bloquea el cleartext fuera de 10.0.2.2/localhost (ver src/main).
-
-  Este override permite cleartext a cualquier host SOLO en el APK debug
-  (gradlew assembleDebug / cap:build:android). El release conserva el
-  network_security_config estricto de src/main.
+  Debug builds must talk to a LAN backend over HTTP (physical device against
+  the dev PC's IP), so cleartext is permitted and user-installed CA certs are
+  trusted (useful for HTTP/2 dev servers). This file overrides the release
+  config in src/main for debug builds only.
 -->
 <network-security-config>
-    <base-config cleartextTrafficPermitted="true" />
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
+    </base-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">10.0.2.2</domain>
+        <domain includeSubdomains="true">localhost</domain>
+    </domain-config>
 </network-security-config>

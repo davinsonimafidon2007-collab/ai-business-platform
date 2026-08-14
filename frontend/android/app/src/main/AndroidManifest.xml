@@ -62,6 +62,15 @@
                     android:host="open" />
             </intent-filter>
 
+            <!-- Custom scheme (cualquier ruta): aibusiness://vehicle/123,
+                 aibusiness://search?make=Toyota, etc. (MOB-P1-009). -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="aibusiness" />
+            </intent-filter>
+
         </activity>
 
         <provider
@@ -86,6 +95,9 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- MOB-P2-004: Biometría / huella dactilar -->
+    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
+    <uses-permission android:name="android.permission.USE_FINGERPRINT" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
 </manifest>
