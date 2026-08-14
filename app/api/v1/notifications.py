@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db_session
 from app.dependencies.auth import get_current_user
 from app.models.user import User
+from app.repositories.push_token_repository import PushTokenRepository
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
 
@@ -32,8 +33,8 @@ async def register_push_token(
     Stores the token so the backend can send push notifications
     (e.g., new opportunities, deal updates) to this device.
     """
-    # TODO: Store token in database (create PushToken model or add to User)
-    # For now, just acknowledge receipt
+    repo = PushTokenRepository(db)
+    await repo.upsert(user_id=current_user.id, token=body.token, platform=body.platform)
     return RegisterTokenResponse(
         ok=True,
         message=f"Token registered for user {current_user.id}",
