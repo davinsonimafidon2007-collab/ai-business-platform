@@ -8,6 +8,8 @@ import { initGoogleAuth } from "@/app/services/google-auth";
 import { initPushNotifications } from "@/app/services/push-notifications";
 import { isAuthDisabled } from "@/app/config/app-mode";
 import { useAndroidBackButton } from "@/app/hooks/useAndroidBackButton";
+import { useOnboarding, OnboardingModal } from "@/app/hooks/use-onboarding";
+import { useDeepLinks } from "@/app/hooks/use-deep-links";
 
 function ThemeInitializer({ children }: { children: React.ReactNode }) {
   const initialize = useThemeStore((state) => state.initialize);
@@ -70,6 +72,36 @@ function NativeNavigationEffects({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+/**
+ * MOB-P1-003: Wrapper del onboarding de configuración de URL.
+ */
+function OnboardingWrapper({ children }: { children: React.ReactNode }) {
+  const { showOnboarding, complete, dismiss } = useOnboarding();
+  return (
+    <>
+      {children}
+      {showOnboarding && <OnboardingModal onComplete={complete} onDismiss={dismiss} />}
+    </>
+  );
+}
+
+/**
+ * MOB-P1-009: Escucha el evento `deepLink:navigate` emitido por push
+ * notifications (MOB-P1-009) y navega a la ruta resuelta.
+ */
+function DeepLinkListener({ children }: { children: React.ReactNode }) {
+  const { handleDeepLink } = useDeepLinks();
+  useEffect(() => {
+    const onDeepLinkNavigate = (event: Event) => {
+      const detail = (event as CustomEvent<{ url?: string }>).detail;
+      if (detail?.url) handleDeepLink(detail.url);
+    };
+    window.addEventListener("deepLink:navigate", onDeepLinkNavigate);
+    return () => window.removeEventListener("deepLink:navigate", onDeepLinkNavigate);
+  }, [handleDeepLink]);
+  return <>{children}</>;
+}
+
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
     () =>
@@ -90,7 +122,11 @@ export function Providers({ children }: { children: React.ReactNode }) {
         <AuthInitializer>
           <GoogleAuthInitializer>
             <PushNotificationsInitializer>
-              <NativeNavigationEffects>{children}</NativeNavigationEffects>
+              <NativeNavigationEffects>
+                <DeepLinkListener>
+                  <OnboardingWrapper>{children}</OnboardingWrapper>
+                </DeepLinkListener>
+              </NativeNavigationEffects>
             </PushNotificationsInitializer>
           </GoogleAuthInitializer>
         </AuthInitializer>

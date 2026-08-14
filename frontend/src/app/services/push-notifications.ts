@@ -1,18 +1,10 @@
 "use client";
 
 /**
- * MOB-P1-001: Push notifications service for Capacitor.
+ * MOB-P1-009 + MOB-P2-001: Push Notifications con Deep Links
  *
- * This module provides:
- * - Registration of FCM tokens with the backend
- * - Permission request for notifications
- * - Handling notification received / clicked events
- *
- * Requires: @capacitor/push-notifications plugin
- *
- * Usage in app/providers.tsx:
- *   import { initPushNotifications } from "@/app/services/push-notifications";
- *   useEffect(() => { initPushNotifications(); }, []);
+ * Registra el token FCM con el backend (MOB-P1-001) y navega desde
+ * notificaciones a rutas internas vía deep links.
  */
 
 import { Capacitor } from "@capacitor/core";
@@ -27,54 +19,54 @@ let currentFcmToken: string | null = null;
  */
 export async function initPushNotifications(): Promise<void> {
   if (initialized) return;
-  if (Capacitor.getPlatform() === "web") return;
+  if (!Capacitor.isNativePlatform()) return;
 
   try {
-    // Dynamic import to avoid issues on web
-    const PushNotifications = (await import("@capacitor/push-notifications")).PushNotifications as any;
+    const { PushNotifications } = await import("@capacitor/push-notifications");
 
-    // Request permission
     const permission = await PushNotifications.requestPermissions();
     if (permission.receive !== "granted") {
-      console.warn("Push notification permission not granted");
+      console.warn("[Push] Permission denied");
       return;
     }
 
-    // Register for push
-    await PushNotifications.register();
-
-    // Listen for registration
-    PushNotifications.addListener("registration", async (token: { value: string }) => {
+    await PushNotifications.addListener("registration", async (token: { value: string }) => {
       currentFcmToken = token.value;
+      console.log("[Push] Token:", token.value);
       try {
-        await api.post("/notifications/register", { token: token.value });
+        await api.post("/notifications/register", {
+          token: token.value,
+          platform: Capacitor.getPlatform(),
+        });
       } catch (err) {
-        console.error("Failed to register push token:", err);
+        console.error("[Push] Failed to register token:", err);
       }
     });
 
-    // Listen for registration errors
-    PushNotifications.addListener("registrationError", (error: Error) => {
-      console.error("Push registration error:", error);
+    await PushNotifications.addListener("registrationError", (err: { error?: string }) => {
+      console.error("[Push] Registration error:", err.error);
     });
 
-    // Listen for received notifications (app in foreground)
-    PushNotifications.addListener("pushNotificationReceived", (notification: { title?: string; body?: string }) => {
-      console.log("Push received:", notification.title, notification.body);
+    await PushNotifications.addListener("pushNotificationReceived", (notification: unknown) => {
+      console.log("[Push] Received:", notification);
     });
 
-    // Listen for notification opened (tap)
-    PushNotifications.addListener("pushNotificationActionPerformed", (action: { notification: { data?: { url?: string } } }) => {
-      const data = action.notification.data;
-      if (data?.url) {
-        window.location.href = data.url;
+    await PushNotifications.addListener(
+      "pushNotificationActionPerformed",
+      (action: { notification: { data?: { deepLink?: string } } }) => {
+        console.log("[Push] Action performed:", action);
+        const data = action.notification.data;
+        if (data?.deepLink) {
+          const event = new CustomEvent("deepLink:navigate", { detail: { url: data.deepLink } });
+          window.dispatchEvent(event);
+        }
       }
-    });
+    );
 
+    await PushNotifications.register();
     initialized = true;
   } catch (err) {
-    // Plugin not installed or not available — silent fail
-    console.warn("Push notifications not available:", err);
+    console.error("[Push] Init failed:", err);
   }
 }
 
@@ -90,6 +82,6 @@ export async function unregisterPushNotifications(): Promise<void> {
     await api.post("/notifications/unregister", { token: currentFcmToken });
     currentFcmToken = null;
   } catch (err) {
-    console.error("Failed to unregister push token:", err);
+    console.error("[Push] Failed to unregister token:", err);
   }
 }
