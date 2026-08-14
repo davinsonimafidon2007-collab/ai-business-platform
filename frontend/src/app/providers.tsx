@@ -5,6 +5,7 @@ import { useState, useEffect } from "react";
 import { useAuthStore } from "@/app/store/auth-store";
 import { useThemeStore } from "@/app/store/theme-store";
 import { initGoogleAuth } from "@/app/services/google-auth";
+import { initPushNotifications } from "@/app/services/push-notifications";
 import { isAuthDisabled } from "@/app/config/app-mode";
 import { useAndroidBackButton } from "@/app/hooks/useAndroidBackButton";
 
@@ -14,6 +15,14 @@ function ThemeInitializer({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     initialize();
   }, [initialize]);
+
+  return <>{children}</>;
+}
+
+function PushNotificationsInitializer({ children }: { children: React.ReactNode }) {
+  useEffect(() => {
+    initPushNotifications();
+  }, []);
 
   return <>{children}</>;
 }
@@ -80,7 +89,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
       <ThemeInitializer>
         <AuthInitializer>
           <GoogleAuthInitializer>
-            <NativeNavigationEffects>{children}</NativeNavigationEffects>
+            <PushNotificationsInitializer>
+              <NativeNavigationEffects>{children}</NativeNavigationEffects>
+            </PushNotificationsInitializer>
           </GoogleAuthInitializer>
         </AuthInitializer>
       </ThemeInitializer>

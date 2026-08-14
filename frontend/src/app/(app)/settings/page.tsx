@@ -91,7 +91,7 @@ export default function SettingsPage() {
           )}
           {saved && !testResult && (
             <p className="text-sm font-medium text-green-600 dark:text-green-400">
-              Guardado. Pulsa "Probar conexión" para verificar.
+              Guardado. Pulsa &quot;Probar conexión&quot; para verificar.
             </p>
           )}
           <div className="flex flex-wrap gap-2">
@@ -152,7 +152,7 @@ export default function SettingsPage() {
           <li>Conecta el PC y el móvil a la misma red Wi-Fi.</li>
           <li>Arranca el backend en el PC (debe escuchar en 0.0.0.0:8000).</li>
           <li>Averigua la IP LAN del PC con <code className="rounded bg-secondary-100 px-1 dark:bg-secondary-700">ipconfig</code>.</li>
-          <li>Introduce aquí <code className="rounded bg-secondary-100 px-1 dark:bg-secondary-700">http://IP:8000</code>, guarda y pulsa "Probar conexión".</li>
+          <li>Introduce aquí <code className="rounded bg-secondary-100 px-1 dark:bg-secondary-700">http://IP:8000</code>, guarda y pulsa &quot;Probar conexión&quot;.</li>
           <li>Si el test falla, verifica que el backend está en marcha y la IP es correcta.</li>
         </ol>
       </div>

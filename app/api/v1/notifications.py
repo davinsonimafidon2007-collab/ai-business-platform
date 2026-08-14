@@ -2,9 +2,10 @@
 
 from pydantic import BaseModel
 from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.deps import get_db, get_current_user
+from app.database import get_db_session
+from app.dependencies.auth import get_current_user
 from app.models.user import User
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
@@ -24,7 +25,7 @@ class RegisterTokenResponse(BaseModel):
 async def register_push_token(
     body: RegisterTokenRequest,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db_session),
 ) -> RegisterTokenResponse:
     """Register a push notification token (FCM) for the current user.
 

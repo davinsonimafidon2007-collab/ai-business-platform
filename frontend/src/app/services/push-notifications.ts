@@ -30,8 +30,7 @@ export async function initPushNotifications(): Promise<void> {
 
   try {
     // Dynamic import to avoid issues on web
-    // @ts-expect-error — plugin may not be installed; runtime guard via try/catch
-    const { PushNotifications } = await import("@capacitor/push-notifications");
+    const PushNotifications = (await import("@capacitor/push-notifications")).PushNotifications as any;
 
     // Request permission
     const permission = await PushNotifications.requestPermissions();

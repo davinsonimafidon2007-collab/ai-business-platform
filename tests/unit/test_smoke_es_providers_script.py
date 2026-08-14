@@ -3,12 +3,15 @@ import subprocess
 import sys
 
 
-def _run_smoke(*args: str) -> subprocess.CompletedProcess:
+def _run_smoke(*args: str, extra_env: dict[str, str] | None = None) -> subprocess.CompletedProcess:
+    env = {**os.environ, "ENVIRONMENT": "test"}
+    if extra_env:
+        env.update(extra_env)
     return subprocess.run(
         [sys.executable, "scripts/smoke_es_providers.py", *args],
         capture_output=True,
         text=True,
-        env={**os.environ, "ENVIRONMENT": "test"},
+        env=env,
     )
 
 
@@ -24,7 +27,7 @@ def test_smoke_es_registry_exit_0():
 
 
 def test_smoke_es_live_as24_es_skip_exit_2():
-    r = _run_smoke("--live-as24-es")
+    r = _run_smoke("--live-as24-es", extra_env={"ENABLE_AUTOSCOUT24_ES": "false"})
     # Con ENABLE_AUTOSCOUT24_ES=true el provider está habilitado y funciona.
     # Solo esperamos SKIP (exit 2) si el flag está off.
     assert r.returncode in (0, 2), r.stderr
