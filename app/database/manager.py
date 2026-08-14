@@ -106,7 +106,6 @@ class DatabaseManager:
         va a desechar) se loguea un warning con la URL y el uso del pool.
         """
         from sqlalchemy import event
-        from sqlalchemy.pool import Pool
 
         pool = self._engine.pool
         start_times: dict[object, float] = self._last_checkout_ts

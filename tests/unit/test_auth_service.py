@@ -215,9 +215,8 @@ def test_decode_with_rotated_key_still_valid(monkeypatch) -> None:
 
 def test_decode_rejects_token_when_previous_keys_do_not_match(monkeypatch) -> None:
     """Con claves incorrectas (actual y previas) el token se rechaza."""
-    from app.exceptions import AuthenticationError
-
     from app.core.config import settings
+    from app.exceptions import AuthenticationError
 
     key = "c" * 40
     monkeypatch.setattr(settings, "jwt_secret_key", key)

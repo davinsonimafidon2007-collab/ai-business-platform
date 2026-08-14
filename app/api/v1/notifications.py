@@ -1,7 +1,7 @@
 """MOB-P1-001: Push notification token registration endpoint."""
 
-from pydantic import BaseModel
 from fastapi import APIRouter, Depends
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db_session
