@@ -47,3 +47,11 @@ class PushTokenRepository:
     async def delete(self, push_token: PushToken) -> None:
         await self.session.delete(push_token)
         await self.session.commit()
+
+    async def delete_by_token(self, token: str) -> None:
+        """Elimina el token FCM (p.ej. al hacer logout o cuando es inválido)."""
+        result = await self.session.execute(select(PushToken).where(PushToken.token == token))
+        push_token = result.scalar_one_or_none()
+        if push_token is not None:
+            await self.session.delete(push_token)
+            await self.session.commit()

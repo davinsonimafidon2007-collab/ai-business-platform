@@ -19,6 +19,7 @@ import { Capacitor } from "@capacitor/core";
 import { api } from "@/app/services/api/client";
 
 let initialized = false;
+let currentFcmToken: string | null = null;
 
 /**
  * Initialize push notifications. Call once at app startup.
@@ -44,6 +45,7 @@ export async function initPushNotifications(): Promise<void> {
 
     // Listen for registration
     PushNotifications.addListener("registration", async (token: { value: string }) => {
+      currentFcmToken = token.value;
       try {
         await api.post("/notifications/register", { token: token.value });
       } catch (err) {
@@ -73,5 +75,21 @@ export async function initPushNotifications(): Promise<void> {
   } catch (err) {
     // Plugin not installed or not available — silent fail
     console.warn("Push notifications not available:", err);
+  }
+}
+
+/**
+ * Unregister push notifications. Call on logout so the backend stops
+ * sending pushes to this device. Silently no-ops on web or if no token
+ * was registered during this session.
+ */
+export async function unregisterPushNotifications(): Promise<void> {
+  if (Capacitor.getPlatform() === "web") return;
+  if (!currentFcmToken) return;
+  try {
+    await api.post("/notifications/unregister", { token: currentFcmToken });
+    currentFcmToken = null;
+  } catch (err) {
+    console.error("Failed to unregister push token:", err);
   }
 }

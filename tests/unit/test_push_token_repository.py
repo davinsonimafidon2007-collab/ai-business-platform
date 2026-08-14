@@ -87,3 +87,32 @@ async def test_upsert_separates_platforms(session: AsyncSession) -> None:
     tokens = await repo.get_by_user_id(user.id)
     assert len(tokens) == 2
     assert {t.platform for t in tokens} == {"android", "ios"}
+
+
+@pytest.mark.asyncio
+async def test_delete_by_token_removes_token(session: AsyncSession) -> None:
+    repo = PushTokenRepository(session)
+    user = User(email="push@example.com", hashed_password="secret")
+    session.add(user)
+    await session.commit()
+
+    await repo.upsert(user_id=user.id, token="fcm-token-1", platform="android")
+    await repo.delete_by_token(token="fcm-token-1")
+
+    tokens = await repo.get_by_user_id(user.id)
+    assert tokens == []
+
+
+@pytest.mark.asyncio
+async def test_delete_by_token_noop_when_missing(session: AsyncSession) -> None:
+    repo = PushTokenRepository(session)
+    user = User(email="push@example.com", hashed_password="secret")
+    session.add(user)
+    await session.commit()
+
+    await repo.upsert(user_id=user.id, token="fcm-token-1", platform="android")
+    await repo.delete_by_token(token="unknown-token")
+
+    tokens = await repo.get_by_user_id(user.id)
+    assert len(tokens) == 1
+    assert tokens[0].token == "fcm-token-1"

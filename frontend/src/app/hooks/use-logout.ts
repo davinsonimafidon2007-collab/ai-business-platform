@@ -4,6 +4,7 @@ import { useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuthStore } from "@/app/store/auth-store";
 import { signOutOfGoogle } from "@/app/services/google-auth";
+import { unregisterPushNotifications } from "@/app/services/push-notifications";
 
 /**
  * Path canónico de logout.
@@ -22,7 +23,12 @@ export function useLogout() {
     } catch {
       // Ignore Firebase sign-out errors
     }
+    try {
+      await unregisterPushNotifications();
+    } catch {
+      // Ignore push unregister errors
+    }
     queryClient.clear();
-    logoutStore();
+    await logoutStore();
   }, [queryClient, logoutStore]);
 }

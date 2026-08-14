@@ -5,6 +5,8 @@ import axios, {
 } from "axios";
 import { isAuthDisabled } from "@/app/config/app-mode";
 import { getApiBaseUrl } from "@/app/config/api-url";
+import { secureStorage } from "@/app/services/storage";
+import { TOKEN_KEYS } from "@/app/store/auth-store";
 
 const API_BASE_URL = getApiBaseUrl();
 
@@ -36,15 +38,13 @@ class ApiClient {
     );
   }
 
-  private handleRequest(
+  private async handleRequest(
     config: InternalAxiosRequestConfig
-  ): InternalAxiosRequestConfig {
-    if (typeof window !== "undefined") {
-      const token = localStorage.getItem("access_token");
-      // Protección básica: solo enviar si el token existe y parece válido
-      if (token && token.trim().length > 10) {
-        config.headers.Authorization = `Bearer ${token}`;
-      }
+  ): Promise<InternalAxiosRequestConfig> {
+    const token = await secureStorage.get(TOKEN_KEYS.accessToken);
+    // Protección básica: solo enviar si el token existe y parece válido
+    if (token && token.trim().length > 10) {
+      config.headers.Authorization = `Bearer ${token}`;
     }
     return config;
   }
@@ -120,7 +120,7 @@ class ApiClient {
         // importar el store (evitaría dependencia circular). Estrategia elegida:
         // clearTokens() + evento "auth:logout" que el provider escucha para
         // resetear el store y vaciar el caché de React Query.
-        this.clearTokens();
+        await this.clearTokens();
         if (typeof window !== "undefined") {
           window.dispatchEvent(new Event("auth:logout"));
           window.location.href = "/auth/login/";
@@ -138,7 +138,7 @@ class ApiClient {
 
     this.refreshPromise = new Promise(async (resolve) => {
       try {
-        const refreshToken = localStorage.getItem("refresh_token");
+        const refreshToken = await secureStorage.get(TOKEN_KEYS.refreshToken);
         if (!refreshToken) {
           resolve(null);
           return;
@@ -150,8 +150,8 @@ class ApiClient {
         );
 
         const { access_token, refresh_token: newRefreshToken } = response.data;
-        localStorage.setItem("access_token", access_token);
-        localStorage.setItem("refresh_token", newRefreshToken);
+        await secureStorage.set(TOKEN_KEYS.accessToken, access_token);
+        await secureStorage.set(TOKEN_KEYS.refreshToken, newRefreshToken);
         resolve(access_token);
       } catch {
         resolve(null);
@@ -163,10 +163,10 @@ class ApiClient {
     return this.refreshPromise;
   }
 
-  private clearTokens(): void {
-    localStorage.removeItem("access_token");
-    localStorage.removeItem("refresh_token");
-    localStorage.removeItem("user");
+  private async clearTokens(): Promise<void> {
+    await secureStorage.remove(TOKEN_KEYS.accessToken);
+    await secureStorage.remove(TOKEN_KEYS.refreshToken);
+    await secureStorage.remove(TOKEN_KEYS.user);
   }
 
   get axiosInstance(): AxiosInstance {

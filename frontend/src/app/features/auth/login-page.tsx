@@ -56,7 +56,7 @@ export function LoginPage() {
 
       const userRes = await api.get<User>("/auth/me");
       // Persistencia unificada (tokens + user + store) en un solo lugar.
-      setSession({
+      await setSession({
         accessToken: authRes.data.access_token,
         refreshToken: authRes.data.refresh_token,
         user: userRes.data,

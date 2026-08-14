@@ -112,8 +112,8 @@ export async function signInWithGoogle(): Promise<void> {
 
   const userRes = await api.get<User>("/auth/me");
   // Persistencia unificada via setSession (mismo contrato que login/register).
-  // setSession guarda access_token/refresh_token/user en localStorage.
-  useAuthStore.getState().setSession({
+  // setSession guarda access_token/refresh_token/user en el storage seguro.
+  await useAuthStore.getState().setSession({
     accessToken: authRes.data.access_token,
     refreshToken: authRes.data.refresh_token,
     user: userRes.data,

@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { User } from "@/app/types/auth";
 import { isAuthDisabled, LOCAL_USER } from "@/app/config/app-mode";
+import { secureStorage } from "@/app/services/storage";
 
 // Claves de localStorage. Centralizadas aquí para que login/register/google/auth
 // client compartan el mismo contrato y no haya strings sueltos.
@@ -47,27 +48,10 @@ interface AuthState {
   isLoading: boolean;
   setUser: (user: User | null) => void;
   setLoading: (loading: boolean) => void;
-  setSession: (params: SetSessionParams) => void;
-  logout: () => void;
-  initialize: () => void;
+  setSession: (params: SetSessionParams) => Promise<void>;
+  logout: () => Promise<void>;
+  initialize: () => Promise<void>;
 }
-
-// Guarda / lee de localStorage solo en el cliente (SSR-safe) y mantiene
-// compatibilidad con Capacitor WebView (localStorage disponible ahí).
-const storage = {
-  get(key: string): string | null {
-    if (typeof window === "undefined") return null;
-    return window.localStorage.getItem(key);
-  },
-  set(key: string, value: string): void {
-    if (typeof window === "undefined") return;
-    window.localStorage.setItem(key, value);
-  },
-  remove(key: string): void {
-    if (typeof window === "undefined") return;
-    window.localStorage.removeItem(key);
-  },
-};
 
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
@@ -77,21 +61,22 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ user, isAuthenticated: !!user, isLoading: false }),
   setLoading: (isLoading) => set({ isLoading }),
   // Path canónico para persistir una sesión: login, register y Google.
-  // Centraliza la escritura en localStorage y el update del store,
-  // evitando que cada flujo copie la persistencia a mano.
-  setSession: ({ accessToken, refreshToken, user }) => {
-    storage.set(TOKEN_KEYS.accessToken, accessToken);
-    storage.set(TOKEN_KEYS.refreshToken, refreshToken);
-    storage.set(TOKEN_KEYS.user, JSON.stringify(user));
+  // Centraliza la escritura en el storage seguro (Capacitor Preferences en
+  // nativo, localStorage en web) y el update del store, evitando que cada
+  // flujo copie la persistencia a mano.
+  setSession: async ({ accessToken, refreshToken, user }) => {
+    await secureStorage.set(TOKEN_KEYS.accessToken, accessToken);
+    await secureStorage.set(TOKEN_KEYS.refreshToken, refreshToken);
+    await secureStorage.set(TOKEN_KEYS.user, JSON.stringify(user));
     set({ user, isAuthenticated: true, isLoading: false });
   },
-  logout: () => {
-    storage.remove(TOKEN_KEYS.accessToken);
-    storage.remove(TOKEN_KEYS.refreshToken);
-    storage.remove(TOKEN_KEYS.user);
+  logout: async () => {
+    await secureStorage.remove(TOKEN_KEYS.accessToken);
+    await secureStorage.remove(TOKEN_KEYS.refreshToken);
+    await secureStorage.remove(TOKEN_KEYS.user);
     set({ user: null, isAuthenticated: false, isLoading: false });
   },
-  initialize: () => {
+  initialize: async () => {
     // Auth desactivada (uso personal): autentica directamente al usuario local
     // sin token → sin redirección a login y con sesión "activa" para la UI.
     if (isAuthDisabled()) {
@@ -103,17 +88,17 @@ export const useAuthStore = create<AuthState>((set) => ({
       return;
     }
     try {
-      const token = storage.get(TOKEN_KEYS.accessToken);
-      const userStr = storage.get(TOKEN_KEYS.user);
+      const token = await secureStorage.get(TOKEN_KEYS.accessToken);
+      const userStr = await secureStorage.get(TOKEN_KEYS.user);
       // FE-001: validar la expiración del access token. Si el token expone
       // `exp` y ya venció, no hidratar la sesión: se limpia storage y se
       // marca no autenticado (el API client reintentará refresh si se usa).
       if (token) {
         const exp = getTokenExpiry(token);
         if (exp !== null && exp * 1000 <= Date.now()) {
-          storage.remove(TOKEN_KEYS.accessToken);
-          storage.remove(TOKEN_KEYS.refreshToken);
-          storage.remove(TOKEN_KEYS.user);
+          await secureStorage.remove(TOKEN_KEYS.accessToken);
+          await secureStorage.remove(TOKEN_KEYS.refreshToken);
+          await secureStorage.remove(TOKEN_KEYS.user);
           set({ user: null, isAuthenticated: false, isLoading: false });
           return;
         }

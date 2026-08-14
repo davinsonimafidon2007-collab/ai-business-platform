@@ -39,3 +39,22 @@ async def register_push_token(
         ok=True,
         message=f"Token registered for user {current_user.id}",
     )
+
+
+@router.post("/unregister", response_model=RegisterTokenResponse)
+async def unregister_push_token(
+    body: RegisterTokenRequest,
+    _: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+) -> RegisterTokenResponse:
+    """Remove a previously registered push notification token (FCM).
+
+    Called on logout so the backend stops sending push notifications
+    to a device that no longer belongs to a signed-in session.
+    """
+    repo = PushTokenRepository(db)
+    await repo.delete_by_token(token=body.token)
+    return RegisterTokenResponse(
+        ok=True,
+        message="Token unregistered",
+    )
