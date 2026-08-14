@@ -16,10 +16,27 @@ android {
             ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        release {
+            // MOB-P1-002: Release signing config.
+            // To generate a keystore, run:
+            //   keytool -genkey -v -keystore release-key.jks -keyalg RSA -keysize 2048 -validity 10000 -alias aibusiness
+            // Then set environment variables or local.properties:
+            //   KEYSTORE_FILE=path/to/release-key.jks
+            //   KEYSTORE_PASSWORD=your_password
+            //   KEY_ALIAS=aibusiness
+            //   KEY_PASSWORD=your_password
+            storeFile file(System.getenv("KEYSTORE_FILE") ?: "release-key.jks")
+            storePassword System.getenv("KEYSTORE_PASSWORD") ?: ""
+            keyAlias System.getenv("KEY_ALIAS") ?: "aibusiness"
+            keyPassword System.getenv("KEY_PASSWORD") ?: ""
+        }
+    }
     buildTypes {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            signingConfig signingConfigs.release
         }
     }
 }

@@ -1,10 +1,13 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/app/components/ui/button";
 import { ScoreBadge, OpportunityBadge, RecommendationBadge, NegotiationBadge } from "@/app/components/ui/ScoreBadge";
 import { useIsMobile } from "@/app/hooks/useIsMobile";
+import { SimulateProfitPanel } from "@/app/features/simulate/SimulateProfitPanel";
+import { createDeal } from "@/app/services/deals";
 import type { SearchResultItem } from "@/app/types/vehicle";
 
 interface VehicleDrawerProps {
@@ -334,6 +337,11 @@ export function VehicleDrawer({ vehicle, onClose }: VehicleDrawerProps) {
             </Section>
           )}
 
+          {/* MOB-P1-005: Action buttons - Deal + Simulation */}
+          <div className="space-y-3">
+            <VehicleDealActions vehicle={vehicle} />
+          </div>
+
           {/* Nueva inspección */}
           <button
             onClick={() => {
@@ -342,7 +350,7 @@ export function VehicleDrawer({ vehicle, onClose }: VehicleDrawerProps) {
               }
             }}
             disabled={!vehicle.external_id}
-            className="block w-full rounded-lg bg-green-600 px-4 py-2 text-center text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
+            className="block w-full rounded-lg border border-secondary-300 bg-white px-4 py-2.5 text-center text-sm font-medium text-secondary-700 hover:bg-secondary-50 dark:border-secondary-600 dark:bg-secondary-800 dark:text-secondary-300 dark:hover:bg-secondary-700"
           >
             Nueva inspección
           </button>
@@ -353,7 +361,7 @@ export function VehicleDrawer({ vehicle, onClose }: VehicleDrawerProps) {
               href={vehicle.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="block rounded-lg bg-primary-600 px-4 py-2 text-center text-sm font-medium text-white hover:bg-primary-700"
+              className="block rounded-lg bg-primary-600 px-4 py-2.5 text-center text-sm font-medium text-white hover:bg-primary-700"
             >
               Ver anuncio original
             </a>
@@ -378,6 +386,82 @@ function Section({ title, children }: { title: string; children: React.ReactNode
     <div className="rounded-lg border border-secondary-200 p-4 dark:border-secondary-700">
       <h3 className="mb-3 text-base font-semibold text-secondary-900 dark:text-secondary-100">{title}</h3>
       <div className="space-y-3">{children}</div>
+    </div>
+  );
+}
+
+function VehicleDealActions({ vehicle }: { vehicle: SearchResultItem }) {
+  const queryClient = useQueryClient();
+  const [dealId, setDealId] = useState<string | null>(null);
+  const [dealMsg, setDealMsg] = useState<string | null>(null);
+  const [dealError, setDealError] = useState<string | null>(null);
+
+  const createDealMut = useMutation({
+    mutationFn: () =>
+      createDeal({
+        vehicle_id: vehicle.external_id ?? undefined,
+      }),
+    onSuccess: (deal) => {
+      setDealId(deal.id);
+      setDealMsg("Deal creado");
+      setDealError(null);
+      queryClient.invalidateQueries({ queryKey: ["deals"] });
+    },
+    onError: (err: Error) => {
+      setDealError(err.message || "Error al crear el deal");
+      setDealMsg(null);
+    },
+  });
+
+  if (!vehicle.external_id) return null;
+
+  return (
+    <div className="rounded-lg border border-secondary-200 p-4 dark:border-secondary-700">
+      <h3 className="mb-3 text-base font-semibold text-secondary-900 dark:text-secondary-100">
+        Evaluar y negociar
+      </h3>
+
+      <div className="flex flex-wrap gap-2">
+        {!dealId ? (
+          <Button
+            variant="primary"
+            size="sm"
+            disabled={createDealMut.isPending}
+            onClick={() => createDealMut.mutate()}
+          >
+            {createDealMut.isPending ? "Creando..." : "Abrir deal"}
+          </Button>
+        ) : (
+          <a
+            href="/deals"
+            className="inline-flex h-8 items-center rounded-lg bg-primary-600 px-3 text-sm font-medium text-white hover:bg-primary-700"
+          >
+            Ver deal
+          </a>
+        )}
+      </div>
+
+      {dealMsg && (
+        <p className="mt-2 text-sm font-medium text-green-600 dark:text-green-400">{dealMsg}</p>
+      )}
+      {dealError && (
+        <p className="mt-2 text-sm font-medium text-red-600 dark:text-red-400">{dealError}</p>
+      )}
+
+      <SimulateProfitPanel
+        vehicleId={vehicle.external_id ?? ""}
+        defaultPurchasePrice={vehicle.price}
+        dealId={dealId}
+        onEnsureDeal={async () => {
+          if (dealId) return dealId;
+          const deal = await createDeal({
+            vehicle_id: vehicle.external_id ?? undefined,
+          });
+          setDealId(deal.id);
+          queryClient.invalidateQueries({ queryKey: ["deals"] });
+          return deal.id;
+        }}
+      />
     </div>
   );
 }

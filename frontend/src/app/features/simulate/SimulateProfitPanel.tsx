@@ -327,32 +327,18 @@ const saveSim = useMutation({
                   >
                     {saveSim.isPending ? "Guardando..." : "Guardar en deal"}
                   </Button>
-                ) : (
-                  <>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={saveSim.isPending}
-                    >
-                      Guardar en deal
-                    </Button>
-                    <span className="text-xs text-secondary-500 dark:text-secondary-400">
-                      Abre un deal para guardar la simulación
-                    </span>
-                    {onEnsureDeal && (
-                      <Button
-                        variant="primary"
-                        size="sm"
-                        disabled={saveWithDeal.isPending}
-                        onClick={() => saveWithDeal.mutate()}
-                      >
-                        {saveWithDeal.isPending
-                          ? "Creando..."
-                          : "Crear deal y guardar"}
-                      </Button>
-                    )}
-                  </>
-                )}
+                ) : onEnsureDeal ? (
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    disabled={saveWithDeal.isPending}
+                    onClick={() => saveWithDeal.mutate()}
+                  >
+                    {saveWithDeal.isPending
+                      ? "Creando..."
+                      : "Crear deal y guardar"}
+                  </Button>
+                ) : null}
                 {savedMsg && (
                   <span className="text-sm font-medium text-green-600 dark:text-green-400">
                     {savedMsg}

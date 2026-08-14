@@ -9,6 +9,7 @@ import {
   type Opportunity,
 } from "@/app/services/opportunities";
 import { fetchHealth } from "@/app/services/health";
+import { useNetworkStatus } from "@/app/hooks/useNetworkStatus";
 import { useAuthStore } from "@/app/store/auth-store";
 import { HomeGreeting } from "@/app/features/home/HomeGreeting";
 import { KpiRow } from "@/app/features/home/KpiRow";
@@ -106,6 +107,8 @@ function EmptyActivity() {
 
 export default function DashboardPage() {
   const user = useAuthStore((s) => s.user);
+  const networkStatus = useNetworkStatus();
+  const isOffline = networkStatus === "offline";
   const { data: history, isLoading: historyLoading, isError: historyError, refetch: refetchHistory } = useSearchHistory();
   const { data: stats, isLoading: statsLoading, isError: statsError, refetch: refetchStats } = useDashboardStats();
   const { data: opportunities, isLoading: oppLoading, isError: oppError, refetch: refetchOpps } = useQuery({
@@ -174,6 +177,14 @@ export default function DashboardPage() {
         <Search className="h-4 w-4" aria-hidden />
         Buscar vehículos
       </Link>
+
+      {isOffline && (
+        <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-900/20">
+          <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+            Sin conexión a internet. Los datos mostrados pueden estar desactualizados.
+          </p>
+        </div>
+      )}
 
       {backendDown && (
         <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-900/20">
