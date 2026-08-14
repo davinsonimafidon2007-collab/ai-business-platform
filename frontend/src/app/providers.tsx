@@ -6,10 +6,11 @@ import { useAuthStore } from "@/app/store/auth-store";
 import { useThemeStore } from "@/app/store/theme-store";
 import { initGoogleAuth } from "@/app/services/google-auth";
 import { initPushNotifications } from "@/app/services/push-notifications";
+import { initLocalNotifications } from "@/app/services/local-notifications.service";
 import { isAuthDisabled } from "@/app/config/app-mode";
 import { useAndroidBackButton } from "@/app/hooks/useAndroidBackButton";
 import { useOnboarding, OnboardingModal } from "@/app/hooks/use-onboarding";
-import { useDeepLinks } from "@/app/hooks/use-deep-links";
+import { NotificationNavigator } from "@/app/hooks/notification-navigation";
 
 function ThemeInitializer({ children }: { children: React.ReactNode }) {
   const initialize = useThemeStore((state) => state.initialize);
@@ -24,6 +25,14 @@ function ThemeInitializer({ children }: { children: React.ReactNode }) {
 function PushNotificationsInitializer({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     initPushNotifications();
+  }, []);
+
+  return <>{children}</>;
+}
+
+function LocalNotificationsInitializer({ children }: { children: React.ReactNode }) {
+  useEffect(() => {
+    initLocalNotifications();
   }, []);
 
   return <>{children}</>;
@@ -86,20 +95,11 @@ function OnboardingWrapper({ children }: { children: React.ReactNode }) {
 }
 
 /**
- * MOB-P1-009: Escucha el evento `deepLink:navigate` emitido por push
- * notifications (MOB-P1-009) y navega a la ruta resuelta.
+ * MOB-P2-006: Escucha el evento `deepLink:navigate` emitido por push
+ * notifications (MOB-P1-009 / MOB-P2-006) y navega a la ruta resuelta.
  */
-function DeepLinkListener({ children }: { children: React.ReactNode }) {
-  const { handleDeepLink } = useDeepLinks();
-  useEffect(() => {
-    const onDeepLinkNavigate = (event: Event) => {
-      const detail = (event as CustomEvent<{ url?: string }>).detail;
-      if (detail?.url) handleDeepLink(detail.url);
-    };
-    window.addEventListener("deepLink:navigate", onDeepLinkNavigate);
-    return () => window.removeEventListener("deepLink:navigate", onDeepLinkNavigate);
-  }, [handleDeepLink]);
-  return <>{children}</>;
+function NotificationListener({ children }: { children: React.ReactNode }) {
+  return <NotificationNavigator>{children}</NotificationNavigator>;
 }
 
 export function Providers({ children }: { children: React.ReactNode }) {
@@ -122,11 +122,13 @@ export function Providers({ children }: { children: React.ReactNode }) {
         <AuthInitializer>
           <GoogleAuthInitializer>
             <PushNotificationsInitializer>
-              <NativeNavigationEffects>
-                <DeepLinkListener>
-                  <OnboardingWrapper>{children}</OnboardingWrapper>
-                </DeepLinkListener>
-              </NativeNavigationEffects>
+              <LocalNotificationsInitializer>
+                <NativeNavigationEffects>
+                  <NotificationListener>
+                    <OnboardingWrapper>{children}</OnboardingWrapper>
+                  </NotificationListener>
+                </NativeNavigationEffects>
+              </LocalNotificationsInitializer>
             </PushNotificationsInitializer>
           </GoogleAuthInitializer>
         </AuthInitializer>
