@@ -8,6 +8,19 @@ from fastapi.openapi.utils import get_openapi
 
 from app.api.v1.router import api_router
 from app.api.v1.routes.health import router as health_router
+<<<<<<< ours
+||||||| base
+from app.api.v1.search_orders import router as search_orders_router
+from app.api.v1.searches import router as searches_router
+from app.api.v1.users import router as users_router
+from app.api.v1.vehicles import router as vehicles_router
+=======
+from app.api.v1.search_orders import router as search_orders_router
+from app.api.v1.searches import router as searches_router
+from app.api.v1.users import router as users_router
+from app.api.v1.vehicles import router as vehicles_router
+from app.api.v1.mobile import router as mobile_router
+>>>>>>> theirs
 from app.core.config import settings
 from app.core.exception_handlers import register_exception_handlers
 from app.core.logging import setup_logging
@@ -141,6 +154,7 @@ app.add_middleware(
 )
 
 app.include_router(api_router, prefix="/api/v1")
+app.include_router(mobile_router, prefix="/api/v1")
 # Health compuesto (DB + Redis) también en raíz para el healthcheck de Docker.
 app.include_router(health_router)
 

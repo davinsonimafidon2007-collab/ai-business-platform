@@ -1,0 +1,36 @@
+# MOB-P3-006 — Archivos/directorios excluidos del bundle de Capacitor.
+#
+# Estos recursos se omiten en la exportación/`cap sync` para reducir el tamaño
+# del APK/AAB. El contenido servido por el backend (imágenes, docs) se carga
+# bajo demanda y no debe empaquetarse en el binario móvil.
+
+# Sourcemaps y builds previos
+.next/
+out/
+*.map
+
+# Documentación / ejemplos no necesarios en runtime
+docs/
+LICENSE
+*.md
+
+# Recursos de desarrollo
+node_modules/
+.terraform/
+coverage/
+
+# Credenciales y entorno (nunca en el bundle)
+.env*
+*.pem
+*.keystore
+google-services.json.backup
+
+# Tests y tooling
+e2e/
+src/__tests__/
+*.test.ts
+*.spec.ts
+
+# Archivos fn viejos
+fix*.js
+*.bat

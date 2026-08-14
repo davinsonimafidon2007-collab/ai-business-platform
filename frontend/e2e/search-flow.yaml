@@ -1,0 +1,13 @@
+appId: com.aibusiness.platform
+---
+- launchApp
+- runFlow:
+    when: { visible: "Iniciar sesión" }
+    commands: [ { tapOn: "Continuar sin cuenta" } ]
+- tapOn: "Buscar"
+- tapOn: "Marca"
+- tapOn: "Toyota"
+- tapOn: "Aplicar filtros"
+- assertVisible: "Resultados"
+- tapOn: { id: "vehicle-card-0" }
+- assertVisible: "Detalle del vehículo"
