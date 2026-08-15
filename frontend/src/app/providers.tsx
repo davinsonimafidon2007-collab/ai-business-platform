@@ -11,6 +11,7 @@ import { isAuthDisabled } from "@/app/config/app-mode";
 import { useAndroidBackButton } from "@/app/hooks/useAndroidBackButton";
 import { useOnboarding, OnboardingModal } from "@/app/hooks/use-onboarding";
 import { NotificationNavigator } from "@/app/hooks/notification-navigation";
+import { useServiceWorker } from "@/app/hooks/use-service-worker";
 
 function ThemeInitializer({ children }: { children: React.ReactNode }) {
   const initialize = useThemeStore((state) => state.initialize);
@@ -95,6 +96,14 @@ function OnboardingWrapper({ children }: { children: React.ReactNode }) {
 }
 
 /**
+ * MOB-P2-006 / TASK-016: Registra el Service Worker (offline support) una vez.
+ */
+function ServiceWorkerInitializer({ children }: { children: React.ReactNode }) {
+  useServiceWorker();
+  return <>{children}</>;
+}
+
+/**
  * MOB-P2-006: Escucha el evento `deepLink:navigate` emitido por push
  * notifications (MOB-P1-009 / MOB-P2-006) y navega a la ruta resuelta.
  */
@@ -125,7 +134,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
               <LocalNotificationsInitializer>
                 <NativeNavigationEffects>
                   <NotificationListener>
-                    <OnboardingWrapper>{children}</OnboardingWrapper>
+                    <OnboardingWrapper>
+                      <ServiceWorkerInitializer>{children}</ServiceWorkerInitializer>
+                    </OnboardingWrapper>
                   </NotificationListener>
                 </NativeNavigationEffects>
               </LocalNotificationsInitializer>

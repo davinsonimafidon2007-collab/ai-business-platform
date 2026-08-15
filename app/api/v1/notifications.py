@@ -22,6 +22,17 @@ class RegisterTokenResponse(BaseModel):
     message: str
 
 
+class SendPushRequest(BaseModel):
+    title: str
+    body: str
+    data: dict | None = None
+
+
+class SendPushResponse(BaseModel):
+    ok: bool
+    result: dict
+
+
 @router.post("/register", response_model=RegisterTokenResponse)
 async def register_push_token(
     body: RegisterTokenRequest,
@@ -58,3 +69,25 @@ async def unregister_push_token(
         ok=True,
         message="Token unregistered",
     )
+
+
+@router.post("/send", response_model=SendPushResponse)
+async def send_push_notification(
+    body: SendPushRequest,
+    current_user: User = Depends(get_current_user),
+) -> SendPushResponse:
+    """Send a test push notification to the current user (FCM).
+
+    TASK-010 (FASE 5): permite verificar de forma manual el envío FCM a los
+    tokens registrados del usuario autenticado. Sin Firebase configurado el
+    servicio responde ``skipped=True`` (dry-run, patrón del proyecto).
+    """
+    from app.services.push_service import PushNotificationService
+
+    result = await PushNotificationService.send_to_user(
+        user_id=str(current_user.id),
+        title=body.title,
+        body=body.body,
+        data=body.data,
+    )
+    return SendPushResponse(ok=True, result=result)
