@@ -12,18 +12,18 @@ export default function AgentsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const { data, isLoading, isError, refetch } = useAgents();
 
-  const agents = data ?? [];
+  const agentsList = useMemo(() => data ?? [], [data]);
 
   const filtered = useMemo(() => {
-    if (!searchQuery.trim()) return agents;
+    if (!searchQuery.trim()) return agentsList;
     const q = searchQuery.toLowerCase();
-    return agents.filter(
+    return agentsList.filter(
       (a: any) =>
         a.name?.toLowerCase().includes(q) ||
         a.role?.toLowerCase().includes(q) ||
         a.description?.toLowerCase().includes(q)
     );
-  }, [agents, searchQuery]);
+  }, [agentsList, searchQuery]);
 
   return (
     <div className="max-w-4xl mx-auto space-y-5">

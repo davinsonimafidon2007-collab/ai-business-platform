@@ -23,10 +23,10 @@ export default function WorkflowsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const { data, isLoading, isError, refetch } = useWorkflows();
 
-  const workflows = data ?? [];
+  const workflowsList = useMemo(() => data ?? [], [data]);
 
   const filtered = useMemo(() => {
-    let result = workflows;
+    let result = workflowsList;
     if (activeFilter !== "Todos") {
       result = result.filter((w: any) => w.status === STATUS_MAP[activeFilter]);
     }
@@ -39,7 +39,7 @@ export default function WorkflowsPage() {
       );
     }
     return result;
-  }, [workflows, activeFilter, searchQuery]);
+  }, [workflowsList, activeFilter, searchQuery]);
 
   return (
     <div className="max-w-4xl mx-auto space-y-5">

@@ -31,18 +31,18 @@ export default function OpportunitiesPage() {
     status: activeFilter !== "Todas" ? STATUS_MAP[activeFilter] : undefined,
   });
 
-  const allItems = data?.items ?? [];
+  const allItemsList = useMemo(() => data?.items ?? [], [data]);
 
   const filtered = useMemo(() => {
-    if (!searchQuery.trim()) return allItems;
+    if (!searchQuery.trim()) return allItemsList;
     const q = searchQuery.toLowerCase();
-    return allItems.filter(
+    return allItemsList.filter(
       (o: any) =>
         o.title?.toLowerCase().includes(q) ||
         o.brand?.toLowerCase().includes(q) ||
         o.model?.toLowerCase().includes(q)
     );
-  }, [allItems, searchQuery]);
+  }, [allItemsList, searchQuery]);
 
   const totalPages = Math.ceil(filtered.length / ITEMS_PER_PAGE);
   const paginated = filtered.slice(

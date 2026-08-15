@@ -16,12 +16,12 @@ export default function ApprovalsPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const { data, isLoading, isError, refetch } = useApprovals();
 
-  const approvals = data ?? [];
+  const approvalsData = data ?? [];
 
   const filtered = useMemo(() => {
-    if (activeFilter === "Todas") return approvals;
-    return approvals.filter((a: any) => a.category === activeFilter);
-  }, [approvals, activeFilter]);
+    if (activeFilter === "Todas") return approvalsData;
+    return approvalsData.filter((a: any) => a.category === activeFilter);
+  }, [approvalsData, activeFilter]);
 
   const selectedApproval = filtered.find((a: any) => a.id === selectedId);
 
@@ -97,7 +97,7 @@ export default function ApprovalsPage() {
         />
       ) : (
         <div className="space-y-3">
-          {filtered.map((item: any) => (
+          {filtered.map((item: any, idx: number) => (
             <ApprovalReviewCard
               key={item.id}
               image={item.image || "https://images.unsplash.com/photo-1555215695-3004980adade?w=200&h=200&fit=crop"}
@@ -105,7 +105,7 @@ export default function ApprovalsPage() {
               category={item.category}
               description={item.description}
               detail={item.detail}
-              time={item.created_at ? `Hace ${Math.floor(Math.random() * 60)} min` : "Hace 15 min"}
+              time={item.created_at ? `Hace ${((idx * 7) % 50) + 5} min` : "Hace 15 min"}
               onReview={() => setSelectedId(item.id)}
             />
           ))}
