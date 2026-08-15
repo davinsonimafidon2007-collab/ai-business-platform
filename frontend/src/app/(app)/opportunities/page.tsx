@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { api } from "@/app/services/api/client";
 import { fetchOpportunities } from "@/app/services/opportunities";
 import { createDeal, fetchDeals } from "@/app/services/deals";
 import type { Opportunity } from "@/app/services/opportunities";
@@ -251,6 +252,26 @@ function OpportunitiesContent() {
           disabled={isFetching}
         >
           {isFetching ? "Actualizando..." : "Actualizar"}
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            void api
+              .get(`/opportunities/export/csv`, {
+                responseType: "blob",
+              })
+              .then(({ data }) => {
+                const url = URL.createObjectURL(data);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = "oportunidades.csv";
+                a.click();
+                URL.revokeObjectURL(url);
+              });
+          }}
+        >
+          Exportar CSV
         </Button>
       </div>
 

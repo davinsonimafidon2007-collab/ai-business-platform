@@ -10,6 +10,8 @@ from fastapi import APIRouter
 
 # Import route modules
 from app.api.v1.admin_api_keys import router as admin_api_keys_router
+from app.api.v1.admin_feature_flags import router as admin_feature_flags_router
+from app.api.v1.admin_metrics import router as admin_metrics_router
 from app.api.v1.admin_status import router as admin_status_router
 from app.api.v1.api_keys import router as api_keys_router
 from app.api.v1.auth import router as auth_router
@@ -33,6 +35,8 @@ api_router = APIRouter()
 api_router.include_router(auth_router)
 api_router.include_router(api_keys_router)
 api_router.include_router(admin_api_keys_router)
+api_router.include_router(admin_feature_flags_router)
+api_router.include_router(admin_metrics_router)
 api_router.include_router(admin_status_router)
 api_router.include_router(dashboard_router)
 api_router.include_router(searches_router)

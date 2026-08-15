@@ -13,6 +13,7 @@ from app.models.user import User
 from app.models.vehicle import Vehicle
 from app.repositories.vehicle_evaluation_repository import VehicleEvaluationRepository
 from app.repositories.vehicle_repository import VehicleRepository
+from app.schemas.pagination import CursorPage
 from app.schemas.vehicle import VehicleCreate, VehicleRead, VehicleUpdate
 from app.schemas.vehicle_evaluation import VehicleEvaluationRead, VehicleEvaluationUpdate
 from app.services.cost_breakdown_labels import build_cost_lines
@@ -22,6 +23,7 @@ from app.services.profit_coherence import build_coherence_warnings
 from app.services.recommendation_labels import recommendation_label_es, risk_label_es
 from app.services.vehicle_evaluation_service import VehicleEvaluationService
 from app.services.vehicle_service import VehicleService
+from app.utils.vin_validator import validate_vin
 
 router = APIRouter(prefix="/vehicles", tags=["Vehicles"])
 
@@ -67,6 +69,50 @@ async def list_vehicles(
 ) -> list[VehicleRead]:
     vehicles = await service.list_vehicles_by_user(current_user.id, skip=skip, limit=limit)
     return [VehicleRead.model_validate(v) for v in vehicles]
+
+
+@router.get("/cursor", response_model=CursorPage[VehicleRead])
+async def list_vehicles_cursor(
+    cursor: str | None = Query(None, description="Token de la página anterior"),
+    limit: int = Query(20, ge=1, le=100),
+    session: AsyncSession = Depends(get_db_session),
+    current_user: User = Depends(get_current_user),
+) -> CursorPage[VehicleRead]:
+    """Lista vehículos del usuario con paginación por cursor (TASK-019)."""
+    repo = VehicleRepository(session)
+    vehicles, total, has_more, next_cursor = await repo.list_cursor(
+        user_id=current_user.id,
+        cursor=cursor,
+        limit=limit,
+    )
+    return CursorPage[VehicleRead](
+        items=[VehicleRead.model_validate(v) for v in vehicles],
+        total=total,
+        has_more=has_more,
+        next_cursor=next_cursor,
+        limit=limit,
+    )
+
+
+@router.get("/vin/{vin}", response_model=VehicleRead)
+async def get_vehicle_by_vin(
+    vin: str,
+    session: AsyncSession = Depends(get_db_session),
+    current_user: User = Depends(get_current_user),
+) -> VehicleRead:
+    """Busca un vehículo del usuario por VIN (TASK-017).
+
+    Valida ISO 3779 (17 caracteres) y normaliza a mayúsculas. Devuelve 404 si
+    no hay vehículo guardado con ese VIN para el usuario actual.
+    """
+    ok, reason = validate_vin(vin)
+    if not ok:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=reason)
+    repo = VehicleRepository(session)
+    vehicle = await repo.get_by_vin(vin, user_id=current_user.id)
+    if vehicle is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vehicle not found")
+    return VehicleRead.model_validate(vehicle)
 
 
 @router.get("/{vehicle_id}", response_model=VehicleRead)

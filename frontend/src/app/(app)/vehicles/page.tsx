@@ -13,6 +13,11 @@ async function fetchMyVehicles(): Promise<Vehicle[]> {
   return data;
 }
 
+async function fetchByVin(vin: string): Promise<SearchResultItem> {
+  const { data } = await api.get<Vehicle>(`/vehicles/vin/${encodeURIComponent(vin)}`);
+  return toSearchResultItem(data);
+}
+
 /**
  * Convierte un vehículo guardado (Vehicle, de GET /vehicles) al shape
  * que espera VehicleTable (SearchResultItem).
@@ -60,6 +65,31 @@ export default function VehiclesPage() {
     queryFn: fetchMyVehicles,
   });
   const [selectedVehicle, setSelectedVehicle] = useState<SearchResultItem | null>(null);
+  const [vin, setVin] = useState("");
+  const [vinResult, setVinResult] = useState<SearchResultItem | null>(null);
+  const [vinError, setVinError] = useState<string | null>(null);
+  const [vinLoading, setVinLoading] = useState(false);
+
+  async function searchByVin(e: React.FormEvent) {
+    e.preventDefault();
+    const value = vin.trim();
+    if (!value) return;
+    setVinLoading(true);
+    setVinError(null);
+    setVinResult(null);
+    try {
+      setVinResult(await fetchByVin(value));
+    } catch (err) {
+      const status = (err as { response?: { status?: number } })?.response?.status;
+      setVinError(
+        status === 404
+          ? "No se encontró ningún vehículo guardado con ese VIN."
+          : "VIN no válido o error al buscar."
+      );
+    } finally {
+      setVinLoading(false);
+    }
+  }
 
   if (isLoading) {
     return (
@@ -87,6 +117,37 @@ export default function VehiclesPage() {
           Vehículos que has guardado desde búsquedas anteriores
         </p>
       </div>
+
+      <form
+        onSubmit={searchByVin}
+        className="flex max-w-xl flex-wrap items-center gap-2"
+      >
+        <input
+          value={vin}
+          onChange={(e) => setVin(e.target.value)}
+          placeholder="Buscar por VIN (17 caracteres)"
+          maxLength={17}
+          className="flex-1 rounded-lg border border-secondary-200 bg-white px-3 py-2 text-sm dark:border-secondary-700 dark:bg-secondary-800"
+        />
+        <button
+          type="submit"
+          disabled={vinLoading}
+          className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50"
+        >
+          {vinLoading ? "Buscando…" : "Buscar VIN"}
+        </button>
+      </form>
+
+      {vinError && <p className="text-sm text-red-600">{vinError}</p>}
+
+      {vinResult && (
+        <div className="max-w-xl">
+          <VehicleTable
+            vehicles={[vinResult]}
+            onSelectVehicle={setSelectedVehicle}
+          />
+        </div>
+      )}
 
       {items.length > 0 ? (
         <VehicleTable

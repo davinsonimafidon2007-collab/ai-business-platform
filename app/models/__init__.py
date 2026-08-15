@@ -2,6 +2,7 @@ from app.models.api_key import ApiKey
 from app.models.base import Base
 from app.models.cached_market import CachedMarketData
 from app.models.deal import Deal, DealStatus
+from app.models.feature_flag import FeatureFlag
 from app.models.inspection import (
     InspectionObservation,
     InspectionPhoto,
@@ -44,6 +45,7 @@ __all__ = [
     "Deal",
     "DealStatus",
     "DefectItem",
+    "FeatureFlag",
     "InspectionObservation",
     "InspectionPhoto",
     "InspectionResult",

@@ -8,6 +8,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.limits import clamp_limit, clamp_skip
 from app.models.vehicle import Vehicle
+from app.repositories.cursor_pagination import CursorPaginator
 
 
 class VehicleRepository:
@@ -38,6 +39,20 @@ class VehicleRepository:
         result = await self.session.execute(query)
         return result.scalar_one_or_none()
 
+    async def get_by_vin(
+        self,
+        vin: str,
+        user_id: str | None = None,
+    ) -> Vehicle | None:
+        """Localiza un vehículo por VIN normalizado (mayúsculas), opcionalmente
+        acotado al usuario (TASK-017)."""
+        normalized = (vin or "").strip().upper()
+        query = select(Vehicle).where(Vehicle.vin == normalized)
+        if user_id is not None:
+            query = query.where(Vehicle.user_id == str(user_id))
+        result = await self.session.execute(query)
+        return result.scalar_one_or_none()
+
     async def list_all(self, skip: int = 0, limit: int = 100) -> list[Vehicle]:
         skip = clamp_skip(skip)
         limit = clamp_limit(limit)
@@ -62,6 +77,25 @@ class VehicleRepository:
             select(func.count(Vehicle.id)).where(Vehicle.user_id == str(user_id))
         )
         return result.scalar() or 0
+
+    async def list_cursor(
+        self,
+        user_id: str,
+        cursor: str | None = None,
+        limit: int = 20,
+    ) -> tuple[list[Vehicle], int, bool, str | None]:
+        """Pagina los vehículos del usuario con keyset (TASK-019).
+
+        Devuelve ``(items, total, has_more, next_cursor)`` ordenado por
+        ``created_at DESC, id DESC``.
+        """
+        limit = clamp_limit(limit)
+        paginator = CursorPaginator(self.session, Vehicle)
+        return await paginator.paginate(
+            cursor,
+            limit,
+            where=[Vehicle.user_id == str(user_id)],
+        )
 
     async def update(self, vehicle: Vehicle) -> Vehicle:
         await self.session.commit()

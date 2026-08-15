@@ -32,6 +32,7 @@ from app.api.v1.schemas.search import (
 from app.dependencies.auth import require_search
 from app.models.user import User
 from app.services.cost_breakdown_labels import build_cost_lines
+from app.services.metrics_service import record_opportunity_generated, record_search_request
 from app.services.profit_coherence import build_coherence_warnings
 from app.services.provider_issue_labels import build_provider_issue_payloads
 from app.services.recommendation_labels import recommendation_label_es, risk_label_es
@@ -324,12 +325,21 @@ async def search_vehicles(
     # Convertir API request → domain SearchRequest
     domain_request = request.to_search_request()
 
+    # TASK-007: métricas de negocio (cada provider solicitado cuenta una petición)
+    for provider in domain_request.providers:
+        record_search_request(provider)
+
     # Ejecutar búsqueda (pipeline completo)
     engine_result = await search_engine.search(domain_request)
 
     # Convertir resultados internos → API responses
     items = [_build_search_result_item(r) for r in engine_result.results]
     summary = engine_result.summary
+
+    # TASK-007: oportunidades detectadas en este resultado
+    for item in items:
+        if item.opportunity is not None:
+            record_opportunity_generated()
 
     # TASK-008: Alerta operativa si todas las fuentes solicitadas fallaron
     provider_issues_list = getattr(engine_result, "provider_issues", []) or []

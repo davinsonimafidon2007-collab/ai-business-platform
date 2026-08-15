@@ -6,6 +6,13 @@ import {
   runProviderCanary,
 } from "@/app/services/adminStatus";
 import type { AdminSystemStatus } from "@/app/services/adminStatus";
+import { fetchAdminMetrics } from "@/app/services/adminMetrics";
+import {
+  createFeatureFlag,
+  deleteFeatureFlag,
+  fetchFeatureFlags,
+  updateFeatureFlag,
+} from "@/app/services/featureFlags";
 import { fetchHealth } from "@/app/services/health";
 
 function checkTone(value?: string) {
@@ -64,6 +71,39 @@ export default function AdminStatusPage() {
     onSuccess: (data: AdminSystemStatus) => {
       queryClient.setQueryData(["admin-status"], data);
     },
+  });
+
+  const flagsQuery = useQuery({
+    queryKey: ["feature-flags"],
+    queryFn: fetchFeatureFlags,
+  });
+
+  const ttlFlagsMutation = useMutation({
+    mutationFn: updateFeatureFlag,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["feature-flags"] });
+    },
+  });
+
+  const createFlagMutation = useMutation({
+    mutationFn: createFeatureFlag,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["feature-flags"] });
+    },
+  });
+
+  const deleteFlagMutation = useMutation({
+    mutationFn: deleteFeatureFlag,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["feature-flags"] });
+    },
+  });
+
+  const metricsQuery = useQuery({
+    queryKey: ["admin-metrics"],
+    queryFn: fetchAdminMetrics,
+    refetchInterval: 15_000,
+    retry: 1,
   });
 
     const healthQuery = useQuery({
@@ -248,6 +288,137 @@ export default function AdminStatusPage() {
                 {JSON.stringify(canary?.mobile_de ?? null, null, 2)}
               </pre>
             </div>
+          </div>
+
+          <div className="rounded-xl border border-secondary-200 bg-white p-5 dark:border-secondary-700 dark:bg-secondary-900">
+            <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-secondary-500">
+              Feature flags
+            </h2>
+            {flagsQuery.isLoading && (
+              <p className="text-sm text-secondary-500">Cargando flags…</p>
+            )}
+            {flagsQuery.isError && (
+              <p className="text-sm text-red-500">
+                No se pudieron cargar los feature flags.
+              </p>
+            )}
+            {flagsQuery.data && (
+              <div className="space-y-2">
+                {flagsQuery.data.map((flag) => (
+                  <div
+                    key={flag.id}
+                    className="flex items-center justify-between gap-4 rounded-lg bg-secondary-50 px-3 py-2 dark:bg-secondary-800"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate font-mono text-sm text-secondary-900 dark:text-white">
+                        {flag.key}
+                      </div>
+                      {flag.description && (
+                        <div className="truncate text-xs text-secondary-500">
+                          {flag.description}
+                        </div>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        ttlFlagsMutation.mutate({
+                          key: flag.key,
+                          value: !flag.value,
+                        })
+                      }
+                      className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
+                        flag.value
+                          ? "bg-green-500"
+                          : "bg-secondary-300 dark:bg-secondary-700"
+                      }`}
+                      aria-label={`Toggle ${flag.key}`}
+                    >
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                          flag.value ? "translate-x-6" : "translate-x-1"
+                        }`}
+                      />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (window.confirm(`Eliminar flag "${flag.key}"?`)) {
+                          deleteFlagMutation.mutate(flag.key);
+                        }
+                      }}
+                      className="text-xs text-red-500 hover:text-red-700"
+                    >
+                      Eliminar
+                    </button>
+                  </div>
+                ))}
+                <div className="mt-3">
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      const data = new FormData(e.currentTarget);
+                      const key = String(data.get("key") ?? "").trim();
+                      if (!key) {
+                        return;
+                      }
+                      createFlagMutation.mutate({
+                        key,
+                        description: String(data.get("description") ?? "").trim() || null,
+                      });
+                      e.currentTarget.reset();
+                    }}
+                    className="flex flex-wrap items-center gap-2"
+                  >
+                    <input
+                      name="key"
+                      required
+                      placeholder="nueva_flag (snake_case)"
+                      className="flex-1 rounded-lg border border-secondary-200 bg-white px-3 py-1.5 text-sm dark:border-secondary-700 dark:bg-secondary-800"
+                    />
+                    <input
+                      name="description"
+                      placeholder="Descripción"
+                      className="flex-1 rounded-lg border border-secondary-200 bg-white px-3 py-1.5 text-sm dark:border-secondary-700 dark:bg-secondary-800"
+                    />
+                    <button
+                      type="submit"
+                      className="rounded-lg bg-primary-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-700"
+                    >
+                      Crear
+                    </button>
+                  </form>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-xl border border-secondary-200 bg-white p-5 dark:border-secondary-700 dark:bg-secondary-900">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-secondary-500">
+                Métricas de negocio (Prometheus)
+              </h2>
+              <button
+                type="button"
+                className="text-xs text-primary-600 hover:underline"
+                onClick={() => metricsQuery.refetch()}
+              >
+                Refrescar
+              </button>
+            </div>
+            {metricsQuery.isLoading && (
+              <p className="text-sm text-secondary-500">Cargando métricas…</p>
+            )}
+            {metricsQuery.isError && (
+              <p className="text-sm text-red-500">
+                No se pudieron cargar las métricas.
+              </p>
+            )}
+            {metricsQuery.data && (
+              <pre className="overflow-auto rounded-lg bg-secondary-50 p-3 text-xs dark:bg-secondary-800">
+                {metricsQuery.data}
+              </pre>
+            )}
           </div>
 
           <div className="rounded-xl border border-secondary-200 bg-white p-5 dark:border-secondary-700 dark:bg-secondary-900">

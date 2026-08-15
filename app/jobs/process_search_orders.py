@@ -8,6 +8,7 @@ que el frontend muestre el badge "X nuevos" (PERSONAL.NOAUTH).
 
 from __future__ import annotations
 
+import time
 from datetime import UTC, datetime
 from typing import Any
 
@@ -15,6 +16,7 @@ from app.core.config import settings
 from app.core.logging import get_logger
 from app.jobs.base import Job, JobContext, JobResult
 from app.repositories.search_order_repository import SearchOrderRepository
+from app.services.metrics_service import record_search_order_duration
 from app.services.search_persistence import SearchPersistenceService
 
 logger = get_logger(__name__)
@@ -88,6 +90,7 @@ class ProcessSearchOrdersJob(Job):
 
                     try:
 
+                        start_ts = time.perf_counter()
                         domain_request = self._build_request(order)
                         engine_result = await engine.search(domain_request)
 
@@ -95,6 +98,8 @@ class ProcessSearchOrdersJob(Job):
                             user_id=order.user_id,
                             engine_result=engine_result,
                         )
+                        # TASK-007: duración del procesado de la orden (histograma)
+                        record_search_order_duration(time.perf_counter() - start_ts)
                         results = list(getattr(engine_result, "results", []) or [])
                         # persist_engine_result devuelve el vehicle_id por índice:
                         # vincula sin re-consultar por source/external_id (J3).
