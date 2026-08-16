@@ -1,5 +1,6 @@
 """Tests unitarios para el servicio de alertas de oportunidades (Task C.2)."""
 
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -148,7 +149,7 @@ async def test_cooldown_persisted_in_redis():
     """
     sender = MagicMock()
     sender.send_email = AsyncMock(return_value=None)
-    now_iso = "2026-08-13T10:00:00+00:00"
+    now_iso = datetime.now(UTC).isoformat()
     cache_set = AsyncMock()
     cache_get = AsyncMock(side_effect=[None, now_iso])
 
