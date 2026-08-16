@@ -144,7 +144,6 @@ export function useOfflineSearch<T>(
   }, [isOnline, queryFn, queryKey, stableQueryParams, options?.enabled]);
 
   useEffect(() => {
-    // Deferred: el lint react-hooks prohíbe setState síncrono en effects.
     const timer = setTimeout(() => {
       void execute();
     }, 0);

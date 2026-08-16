@@ -41,20 +41,24 @@ function classifyError(err: unknown): { title: string; detail: string; hint?: st
   };
 }
 
-interface ErrorDisplayProps {
-  error: unknown;
+export interface ErrorDisplayProps {
+  error?: unknown;
+  title?: string;
+  message?: string;
   onRetry?: () => void;
   className?: string;
 }
 
-export function ErrorDisplay({ error, onRetry, className }: ErrorDisplayProps) {
+export function ErrorDisplay({ error, title, message, onRetry, className }: ErrorDisplayProps) {
   const copy = classifyError(error);
+  const displayTitle = title || copy.title;
+  const displayDetail = message || copy.detail;
 
   return (
     <div className={`rounded-lg border border-red-200 bg-red-50 p-4 text-center dark:border-red-800 dark:bg-red-900/20 ${className ?? ""}`}>
-      <h3 className="text-sm font-semibold text-red-700 dark:text-red-300">{copy.title}</h3>
-      <p className="mt-1 text-sm text-red-600 dark:text-red-400">{copy.detail}</p>
-      {copy.hint && (
+      <h3 className="text-sm font-semibold text-red-700 dark:text-red-300">{displayTitle}</h3>
+      <p className="mt-1 text-sm text-red-600 dark:text-red-400">{displayDetail}</p>
+      {!message && copy.hint && (
         <p className="mt-2 text-xs text-red-500/90 dark:text-red-400/80">{copy.hint}</p>
       )}
       {onRetry && (

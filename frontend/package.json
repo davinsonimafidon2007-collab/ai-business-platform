@@ -18,25 +18,13 @@
     "test:lighthouse": "bash scripts/lighthouse-audit.sh",
     "test:all": "npm run test:run && npm run test:release",
     "export": "next build",
-<<<<<<< ours
     "check:cap-config": "node scripts/check-capacitor-config.mjs",
     "cap:sync": "npm run check:cap-config && npm run export && npx cap sync",
     "cap:sync:android": "npm run check:cap-config && npm run export && npx cap sync android",
     "cap:open:android": "npm run check:cap-config && npx cap open android",
-    "cap:build:android": "npm run cap:sync:android && cd android && gradlew.bat assembleDebug"
-||||||| base
-    "cap:sync": "npm run export && npx cap sync",
-    "cap:sync:android": "npm run export && npx cap sync android",
-    "cap:open:android": "npx cap open android",
-    "cap:build:android": "npm run cap:sync:android && cd android && gradlew.bat assembleDebug"
-=======
-    "cap:sync": "npm run export && npx cap sync",
-    "cap:sync:android": "npm run export && npx cap sync android",
-    "cap:open:android": "npx cap open android",
     "cap:build:android": "npm run cap:sync:android && cd android && gradlew.bat assembleDebug",
     "generate:pin": "bash scripts/generate-pin.sh",
     "analyze:bundle": "bash scripts/analyze-bundle.sh"
->>>>>>> theirs
   },
   "dependencies": {
     "@capacitor/android": "^6.2.1",
@@ -44,7 +32,6 @@
     "@capacitor/camera": "^6.1.3",
     "@capacitor/cli": "^6.2.1",
     "@capacitor/core": "^6.2.1",
-<<<<<<< ours
     "@capacitor/local-notifications": "^6.1.3",
     "@capacitor/network": "^6.0.4",
     "@capacitor/preferences": "^6.0.4",
@@ -52,10 +39,6 @@
     "@capacitor/share": "^6.0.4",
     "@capacitor/status-bar": "^6.0.3",
     "@capgo/capacitor-native-biometric": "^6.0.4",
-||||||| base
-=======
-    "@capacitor/preferences": "^8.0.1",
->>>>>>> theirs
     "@codetrix-studio/capacitor-google-auth": "^3.4.0-rc.4",
     "@hookform/resolvers": "^5.5.7",
     "@radix-ui/react-dialog": "^1.1.23",
