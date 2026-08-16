@@ -1,0 +1,89 @@
+{
+  "listings": [
+    {
+      "external_id": "cn-bmw-320d-001",
+      "brand": "BMW",
+      "model": "Serie 3",
+      "version": "320d",
+      "year": 2019,
+      "mileage": 118000,
+      "fuel_type": "Diésel",
+      "transmission": "Automático",
+      "price": 19200,
+      "currency": "EUR",
+      "location": "Madrid",
+      "url": "https://www.coches.net/fixture/cn-bmw-320d-001",
+      "seller_type": "professional"
+    },
+    {
+      "external_id": "cn-bmw-320d-002",
+      "brand": "BMW",
+      "model": "Serie 3",
+      "version": "320d",
+      "year": 2018,
+      "mileage": 140000,
+      "fuel_type": "Diésel",
+      "transmission": "Manual",
+      "price": 16800,
+      "currency": "EUR",
+      "location": "Barcelona",
+      "url": "https://www.coches.net/fixture/cn-bmw-320d-002",
+      "seller_type": "private"
+    },
+    {
+      "external_id": "cn-bmw-320d-003",
+      "brand": "BMW",
+      "model": "Serie 3",
+      "version": "320d",
+      "year": 2020,
+      "mileage": 85000,
+      "fuel_type": "Diésel",
+      "transmission": "Automático",
+      "price": 22500,
+      "currency": "EUR",
+      "location": "Valencia",
+      "url": "https://www.coches.net/fixture/cn-bmw-320d-003",
+      "seller_type": "professional"
+    },
+    {
+      "external_id": "cn-audi-a4-001",
+      "brand": "Audi",
+      "model": "A4",
+      "year": 2019,
+      "mileage": 105000,
+      "fuel_type": "Diésel",
+      "transmission": "Automático",
+      "price": 20500,
+      "currency": "EUR",
+      "location": "Sevilla",
+      "url": "https://www.coches.net/fixture/cn-audi-a4-001"
+    },
+    {
+      "external_id": "cn-vw-golf-001",
+      "brand": "Volkswagen",
+      "model": "Golf",
+      "year": 2018,
+      "mileage": 120000,
+      "fuel_type": "Gasolina",
+      "transmission": "Manual",
+      "price": 13900,
+      "currency": "EUR",
+      "location": "Madrid",
+      "url": "https://www.coches.net/fixture/cn-vw-golf-001"
+    },
+    {
+      "external_id": "cn-bmw-320i-001",
+      "brand": "BMW",
+      "model": "Serie 3",
+      "version": "320i",
+      "year": 2019,
+      "mileage": 95000,
+      "fuel_type": "Gasolina",
+      "transmission": "Automático",
+      "price": 21000,
+      "currency": "EUR",
+      "location": "Bilbao",
+      "url": "https://www.coches.net/fixture/cn-bmw-320i-001"
+    }
+  ]
+}

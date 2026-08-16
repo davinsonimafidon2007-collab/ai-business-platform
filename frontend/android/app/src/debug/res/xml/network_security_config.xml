@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  MOB-P1-007: Network security config — build type DEBUG (overlay).
+
+  Debug builds must talk to a LAN backend over HTTP (physical device against
+  the dev PC's IP), so cleartext is permitted and user-installed CA certs are
+  trusted (useful for HTTP/2 dev servers). This file overrides the release
+  config in src/main for debug builds only.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
+    </base-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">10.0.2.2</domain>
+        <domain includeSubdomains="true">localhost</domain>
+    </domain-config>
+</network-security-config>

@@ -1,0 +1,249 @@
+AUDITORÍA DOCKER / DEVOPS / INFRA — ai-business-platform-clone
+Generado: 2026-08-08
+Auditor: opencode (no se modificaron archivos del proyecto)
+
+=================================================================
+RESUMEN EJECUTIVO
+=================================================================
+- Proyecto: C:\Users\davin\Documents\Default Project\ai-business-platform-clone
+- Dockerfile: OK (build pasa)
+- docker-compose.yml: OK (db/redis levantan; api FALLO por puerto 8000 ocupado y falta .env)
+- .env real: NO EXISTE (solo .env.example). Esto bloquea arranque sin pasos manuales.
+- Volúmenes postgres/redis: CONFLICTO con otro proyecto "agentesdeia" (nombre fijo en compose).
+- Frontend: NO integrado en docker-compose (sin servicio ni Dockerfile propio).
+- Alembic: Configurado; migraciones presentes.
+- Scheduler / Jobs: Configurado en app/main.py y app/jobs/.
+- Healthcheck: Configurado en compose (curl /health); api no llega a levantar.
+- Variables de entorno: JWT_SECRET_KEY y FIREBASE_CREDENTIALS_JSON no definidas en host.
+- Backup / Restore scripts: Presentes (scripts/backup_postgres.sh, restore_postgres.sh).
+- Prueba docker compose up --build: FALLA (puerto ocupado + variables faltantes + conflicto volúmenes).
+
+=================================================================
+REGISTRO DETALLADO: archivo, línea, problema, impacto
+=================================================================
+
+1. ARCHIVO: .env (ausente)
+   LÍNEA: N/A
+   PROBLEMA: No existe archivo .env en la raíz. Solo .env.example.
+   IMPACTO: docker-compose usa valores por defecto del host (vacíos para JWT_SECRET_KEY, etc.).
+            La app no arranca sin JWT_SECRET_KEY (RuntimeError en app/main.py:35-45).
+            Se requieren pasos manuales (copiar .env.example → .env y rellenar) para arrancar.
+
+2. ARCHIVO: docker-compose.yml
+   LÍNEA: 12-27 (volumes api)
+   PROBLEMA: La api no expone volumen persistente para uploads ni logs. Solo bind-mount .:/app.
+   IMPACTO: Cualquier archivo generado en /uploads dentro del contenedor se pierde al recrear.
+
+3. ARCHIVO: docker-compose.yml
+   LÍNEA: 28-31 (depends_on)
+   PROBLEMA: depends_on usa condition: service_healthy (correcto) pero no hay restart_policy explícito para db/redis aparte de unless-stopped.
+   IMPACTO: Bajo, pero en caso de fallo de red podría requerir reinicio manual si el healthcheck tarda en recuperarse.
+
+4. ARCHIVO: docker-compose.yml
+   LÍNEA: 16 (DATABASE_URL)
+   PROBLEMA: DATABASE_URL apunta a db:5432, que es correcto para compose, pero no se valida que el contenedor api pueda resolver "db" antes del primer intento de conexión (Alembic corre antes que uvicorn, pero no hay retry explícito).
+   IMPACTO: Si db tarda más de lo esperado en estar lista, alembic upgrade head puede fallar.
+
+5. ARCHIVO: docker-compose.yml
+   LÍNEA: 8 (command)
+   PROBLEMA: El comando del servicio api ejecuta "sh -c 'alembic upgrade head && uvicorn ...'" sin timeout ni retry para alembic. Si db no está lista, el contenedor falla inmediatamente sin reintentar.
+   IMPACTO: El contenedor api sale con error y requiere reinicio manual si hay una carrera con db.
+
+6. ARCHIVO: docker-compose.yml
+   LÍNEA: 42-55 (db healthcheck)
+   PROBLEMA: Healthcheck de db usa pg_isready -U postgres -d ai_business_platform. Es correcto.
+   IMPACTO: Bajo. Funciona correctamente.
+
+7. ARCHIVO: docker-compose.yml
+   LÍNEA: 58-76 (redis y volúmenes)
+   PROBLEMA: redis_data y postgres_data usan nombres fijos (ai_platform_postgres_data, ai_platform_redis_data). Si otro proyecto (ej. "agentesdeia") ya creó volúmenes con esos nombres, docker compose advierte que fueron creados para otro proyecto y podría haber contaminación de datos.
+   IMPACTO: Posible contaminación de datos entre proyectos; el contenedor api no levanta si hay conflicto de puertos.
+
+8. ARCHIVO: docker-compose.yml
+   LÍNEA: 66-69 (redis healthcheck)
+   PROBLEMA: Healthcheck usa "redis-cli ping" sin argumentos de usuario/contraseña. Redis en este stack no requiere auth, por lo que es correcto, pero si en futuro se activa AUTH, fallará.
+   IMPACTO: Bajo (futuro).
+
+9. ARCHIVO: docker-compose.yml
+   LÍNEA: 34-39 (api healthcheck)
+   PROBLEMA: El healthcheck usa curl -f http://localhost:8000/health. Esto requiere que curl esté instalado (sí, Dockerfile lo instala) y que /health esté disponible. El endpoint /health existe (app/api/v1/routes/health.py) y está registrado en main.py.
+   IMPACTO: Funcional si el contenedor arranca.
+
+10. ARCHIVO: Dockerfile
+    LÍNEA: 1 (FROM python:3.13-slim)
+    PROBLEMA: Usa python:3.13-slim. Es una versión reciente y válida.
+    IMPACTO: Ninguno directo.
+
+11. ARCHIVO: Dockerfile
+    LÍNEA: 3 (COPY --from=ghcr.io/astral-sh/uv:0.11.32 /uv /uvx /bin/)
+    PROBLEMA: Descarga uv de un registro externo. Si hay problemas de conectividad con ghcr.io, el build falla.
+    IMPACTO: Dependencia externa para build; podría fallar sin conexión a internet o si el registro cambia.
+
+12. ARCHIVO: Dockerfile
+    LÍNEA: 16 (RUN uv sync --locked --group dev)
+    PROBLEMA: Instala el grupo dev, que incluye pytest, ruff, etc. Esto aumenta el tamaño de la imagen y el tiempo de build.
+    IMPACTO: Imagen más grande; si solo se necesita producción, sería mejor excluir --group dev o usar grupos mínimos.
+
+13. ARCHIVO: Dockerfile
+    LÍNEA: 22-23 (apt-get update && apt-get install -y --no-install-recommends curl)
+    PROBLEMA: Instala curl dentro del contenedor solo para el healthcheck. Esto aumenta el tamaño de la imagen (~14MB adicionales).
+    IMPACTO: Tamaño de imagen mayor; posible reducir con un stage multi-etapa para curl o usar wget/urllib en Python para el healthcheck.
+
+14. ARCHIVO: Dockerfile
+    LÍNEA: 25 (CMD ["uv", "run", ...])
+    PROBLEMA: El CMD no usa una shell, por lo que señales como SIGTERM no siempre se propagan correctamente al proceso uvicorn, aunque uv puede manejarlas.
+    IMPACTO: Bajo; podría requerir docker-compose down --timeout más largo para apagado limpio.
+
+15. ARCHIVO: .env.example
+    LÍNEA: 18 (JWT_SECRET_KEY=)
+    PROBLEMA: El archivo ejemplo deja JWT_SECRET_KEY vacío sin advertencia explícita en el archivo (solo un comentario). Un usuario que copie sin leer podría arrancar con valor vacío.
+    IMPACTO: Si se copia sin rellenar, la app falla al arrancar (RuntimeError en main.py:35-45).
+
+16. ARCHIVO: .env.example
+    LÍNEA: 82 (FIREBASE_CREDENTIALS_JSON=)
+    PROBLEMA: Deja vacío. No es obligatorio en desarrollo (firebase_required=false), pero el compose no establece explícitamente FIREBASE_REQUIRED=false en el entorno del contenedor.
+    IMPACTO: El contenedor podría fallar si en algún momento firebase_required es true por defecto en la configuración.
+
+17. ARCHIVO: docker-compose.yml
+    LÍNEA: 21 (FIREBASE_CREDENTIALS_JSON: "${FIREBASE_CREDENTIALS_JSON}")
+    PROBLEMA: Si la variable no está definida en el host, se pasa como cadena vacía. Esto está bien si firebase_required es false.
+    IMPACTO: Bajo.
+
+18. ARCHIVO: app/main.py
+    LÍNEA: 35-39
+    PROBLEMA: Validación de JWT_SECRET_KEY al importar (no solo al arrancar el contenedor). Si el archivo .env no está presente o está vacío, el import de main.py lanza RuntimeError inmediatamente.
+    IMPACTO: El contenedor api sale inmediatamente sin intentar conectarse a la base de datos.
+
+19. ARCHIVO: app/core/config.py
+    LÍNEA: 54-58 (validate_jwt_secret_for_env)
+    PROBLEMA: En environment=development requiere JWT_SECRET_KEY >= 32 chars. No hay fallback automático. Esto es por diseño de seguridad.
+    IMPACTO: Requiere paso manual (crear .env con clave fuerte) para arrancar.
+
+20. ARCHIVO: alembic/env.py
+    LÍNEA: 18 (config.set_main_option("sqlalchemy.url", settings.database_url))
+    PROBLEMA: Usa settings.database_url que por defecto apunta a localhost (ver config.py línea 23). Si se ejecuta alembic localmente sin .env actualizado, intentará conectarse a localhost en lugar de db:5432.
+    IMPACTO: Si se corre alembic fuera del contenedor sin configurar DATABASE_URL, fallará.
+
+21. ARCHIVO: alembic.ini
+    LÍNEA: 4 (sqlalchemy.url =)
+    PROBLEMA: Deja la URL vacía. Confía en alembic/env.py para sobrescribirla con settings.database_url.
+    IMPACTO: Si env.py falla o no se carga correctamente, la URL queda vacía y las migraciones no corren.
+
+22. ARCHIVO: app/core/config.py
+    LÍNEA: 387-392 (SettingsConfigDict)
+    PROBLEMA: env_file=".env" está configurado, pero si el archivo no existe, pydantic-settings no lanza error (solo usa valores por defecto). Esto puede ocultar que la configuración no está completa.
+    IMPACTO: El usuario puede no darse cuenta de que faltan variables críticas hasta que la app arranca y lanza RuntimeError.
+
+23. ARCHIVO: docker-compose.yml
+    LÍNEA: 5 (build: context: .)
+    PROBLEMA: El contexto de build incluye todo el directorio raíz (incluyendo .git, docs, tests, etc.). El archivo .dockerignore existe pero es pequeño (89 bytes) y podría no excluir todo lo necesario.
+    IMPACTO: El contexto de build es grande (se observó transferencia de ~635MB en el build), lo que aumenta el tiempo de build y el uso de red.
+
+24. ARCHIVO: .dockerignore
+    LÍNEA: 1-89 (archivo completo)
+    PROBLEMA: Es muy pequeño. No excluye directorios como .git, tests/, docs/, frontend/, scripts/, etc. Esto hace que el build envíe todo al daemon Docker.
+    IMPACTO: Build más lento, contexto más grande, posible exposición de archivos sensibles en la imagen.
+
+25. ARCHIVO: scripts/backup_postgres.sh
+    LÍNEA: 34-39 (_normalize_url)
+    PROBLEMA: Normaliza DATABASE_URL reemplazando postgresql+asyncpg:// por postgres://. Es correcto para pg_dump.
+    IMPACTO: Ninguno; funciona correctamente.
+
+26. ARCHIVO: scripts/restore_postgres.sh
+    LÍNEA: 52 (pg_restore --exit-on-error --clean --if-exists -d "$PGURL" "$DUMP")
+    PROBLEMA: Usa --clean --if-exists, lo que destruye datos existentes. No hay validación adicional del archivo de respaldo antes de restaurar.
+    IMPACTO: Si se ejecuta con un archivo incorrecto o sin respaldo previo, se pierden datos irreversiblemente.
+
+27. ARCHIVO: frontend/package.json
+    LÍNEA: 5 (scripts)
+    PROBLEMA: No hay script "build" integrado en docker-compose. El frontend no se construye ni sirve automáticamente con el backend.
+    IMPACTO: El usuario debe construir y servir el frontend manualmente (npm run build / npm run start) o usar el archivo estático generado (frontend/out/).
+
+28. ARCHIVO: frontend/next.config.ts
+    LÍNEA: 5 (output: "export")
+    PROBLEMA: Configurado como export estático. Esto es adecuado para servir con nginx o similar, pero no hay servicio nginx en docker-compose ni en Dockerfile.
+    IMPACTO: El frontend debe ser servido por separado o integrado manualmente.
+
+29. ARCHIVO: docker-compose.obs.yml
+    LÍNEA: 19 (prometheus image: prom/prometheus:latest)
+    PROBLEMA: Usa "latest" sin pin de versión. Esto puede romper si hay cambios en la imagen de Prometheus.
+    IMPACTO: Reproducibilidad baja para observabilidad.
+
+30. ARCHIVO: docker-compose.obs.yml
+    LÍNEA: 32 (grafana image: grafana/grafana:latest)
+    PROBLEMA: Igual que prometheus: usa "latest" sin pin.
+    IMPACTO: Reproducibilidad baja.
+
+31. ARCHIVO: docker-compose.obs.yml
+    LÍNEA: 40 (GF_AUTH_ANONYMOUS_ENABLED: "false")
+    PROBLEMA: Configurado correctamente, pero no hay persistencia explícita de la contraseña de admin (solo variable de entorno).
+    IMPACTO: Bajo.
+
+32. ARCHIVO: app/jobs/scheduler.py
+    LÍNEA: 264-270
+    PROBLEMA: La ejecución periódica de jobs corre inmediatamente al arrancar (first_run = True, luego False). Esto podría generar carga inmediata al contenedor.
+    IMPACTO: Si hay muchos jobs registrados, el contenedor consume recursos inmediatamente, lo que podría afectar el arranque.
+
+33. ARCHIVO: app/jobs/factory.py
+    LÍNEA: 21-35 (create_scheduler)
+    PROBLEMA: Registra todos los jobs estándar sin verificar si las dependencias (DB, Redis) están completamente listas. Aunque main.py inicia db_manager antes del scheduler, no hay verificación de que Redis esté listo antes de registrar los jobs que lo usan.
+    IMPACTO: Posibles errores iniciales en los jobs si Redis aún no está disponible en el momento del registro.
+
+34. ARCHIVO: docker-compose.yml
+    LÍNEA: 66 (redis command)
+    PROBLEMA: El comando redis-server usa --maxmemory 256mb --maxmemory-policy allkeys-lru. Esto limita la memoria de Redis a 256MB.
+    IMPACTO: Si la aplicación genera muchos datos en caché o sesiones, Redis podría descartar claves importantes, afectando el rendimiento o la funcionalidad (ej. rate limiting, sesiones).
+
+35. ARCHIVO: docker-compose.yml
+    LÍNEA: 47-48 (redis ports)
+    PROBLEMA: Expone Redis en el puerto 6379 del host. Si hay otra instancia de Redis corriendo localmente, podría haber conflicto.
+    IMPACTO: Bajo para desarrollo local; en producción no debería exponerse directamente.
+
+36. ARCHIVO: docker-compose.yml
+    LÍNEA: 48-49 (db ports)
+    PROBLEMA: Expone PostgreSQL en 5432 del host. Similar a Redis, podría conflictuar con instancias locales.
+    IMPACTO: Bajo; se observó que el contenedor db levantó correctamente.
+
+37. ARCHIVO: docker-compose.yml
+    LÍNEA: 34-39 (api healthcheck start_period)
+    PROBLEMA: start_period es 40 segundos. Si el contenedor tarda más en arrancar (por ejemplo, por build grande, alembic migraciones lentas, o carga inicial), el healthcheck podría fallar y Docker reiniciará el contenedor.
+    IMPACTO: Posibles reinicios innecesarios si el arranque es lento.
+
+38. PRUEBA REAL: docker compose up --build
+    RESULTADO: FALLA por:
+       a) Puerto 8000 ocupado (Bind for 0.0.0.0:8000 failed: port is already allocated).
+       b) Variables JWT_SECRET_KEY y FIREBASE_CREDENTIALS_JSON no definidas (warning en logs).
+       c) Volúmenes postgres/redis existentes con conflicto de nombre con proyecto "agentesdeia".
+    IMPACTO: El stack NO levanta sin pasos manuales. Se requiere:
+       - Liberar el puerto 8000.
+       - Crear .env con JWT_SECRET_KEY (>=32 chars) y otras variables.
+       - Resolver conflicto de volúmenes (usar nombres únicos o eliminar los existentes).
+
+39. ARCHIVO: app/core/redis.py (revisado indirectamente por referencia)
+    LÍNEA: N/A
+    PROBLEMA: No se revisó el archivo completo, pero el código en main.py usa init_redis() y close_redis(). Si Redis no está disponible, init_redis podría lanzar excepciones no capturadas que impidan el arranque del scheduler.
+    IMPACTO: Posible falla del contenedor si Redis no está disponible (aunque el compose declara depends_on con healthcheck).
+
+40. ARCHIVO: app/api/v1/routes/health.py
+    LÍNEA: 34-35 (_DB_CHECK_TIMEOUT_S = 2.0, _REDIS_CHECK_TIMEOUT_S = 2.0)
+    PROBLEMA: Los timeouts son cortos, lo cual es correcto para un healthcheck rápido.
+    IMPACTO: Ninguno negativo.
+
+41. ARCHIVO: tests/unit/test_audit_service.py (referencia)
+    LÍNEA: N/A
+    PROBLEMA: No revisado en detalle, pero su existencia indica que hay cobertura de tests para auditoría.
+    IMPACTO: Ninguno para la infraestructura.
+
+=================================================================
+CONCLUSIÓN
+=================================================================
+El proyecto NO arranca con "docker compose up --build" sin pasos manuales.
+Requisitos para que funcione sin intervención:
+1. Crear archivo .env con JWT_SECRET_KEY >= 32 caracteres.
+2. Definir DATABASE_URL, REDIS_URL y otras variables según .env.example.
+3. Resolver conflicto de puerto 8000 (cambiar en compose o detener servicio que lo usa).
+4. Resolver conflicto de volúmenes (cambiar nombres en docker-compose.yml o eliminar volúmenes existentes con nombres conflictivos).
+5. Considerar integrar frontend en docker-compose o agregar servicio nginx para servir frontend.
+6. Revisar .dockerignore para reducir contexto de build.
+
+No se modificó ningún archivo del proyecto durante esta auditoría.

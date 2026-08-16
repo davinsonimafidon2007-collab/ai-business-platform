@@ -1,0 +1,138 @@
+# CI.2   — unit + requirements sync + Postgres 16 + integration crítico (INT.1)
+# CI.FE.1  — job frontend (Vitest) en paralelo al backend
+# CI.LINT.1 — ruff check como gate del job backend
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: backend (Python 3.13)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: ai_business_platform_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d ai_business_platform_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      ENVIRONMENT: test
+      # ≥32 chars; solo para tests (no es secreto de prod)
+      JWT_SECRET_KEY: test_secret_key_that_is_at_least_32_characters_long_ci_only_do_not_use_in_prod
+      # Mismo Postgres del service; alembic usa settings.database_url (env DATABASE_URL)
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/ai_business_platform_test
+      # Evitar que settings/Firebase intenten I/O real
+      FIREBASE_CREDENTIALS_JSON: ""
+      FIREBASE_CREDENTIALS_PATH: ""
+      SMTP_HOST: ""
+      ENABLE_SCHEDULER: "false"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          # pin opcional; dejar latest del action es OK
+
+      - name: Set up Python 3.13
+        run: uv python install 3.13
+
+      - name: Sync dependencies (incl. dev)
+        run: uv sync --locked --group dev
+
+      - name: Check requirements.txt sync (C.1)
+        run: uv run --no-sync python scripts/check_requirements_sync.py
+
+      # CI.LINT.1 — antes de pytest para fallar rápido (lint es segundos).
+      - name: Ruff check
+        run: uv run --no-sync ruff check app tests
+
+      - name: Alembic upgrade head (Postgres service)
+        # Migraciones contra el service Postgres 16 (DB vacía). Debe correr antes de INT.1.
+        run: uv run --no-sync alembic upgrade head
+
+      - name: Verify single Alembic head
+        run: uv run --no-sync python scripts/check_migrations.py
+
+      # COV.GATE.1 — gate solo sobre módulos críticos (económico + auth), no
+      # sobre el monorepo entero. Actual: ~97 %; el 70 % es piso de disciplina.
+      - name: Unit tests + coverage gate (critical modules)
+        run: |
+          uv run --no-sync python -m pytest tests/unit -q --tb=line \
+            --cov=app.services.profit_analyzer \
+            --cov=app.services.opportunity_finder \
+            --cov=app.services.auth_service \
+            --cov=app.dependencies.auth \
+            --cov-report=term-missing \
+            --cov-fail-under=70
+
+      # INT.1 — mismo subconjunto que release_check --with-integration.
+      # Obligatorio (CI.2): falla el job si integration crítico falla.
+      - name: Integration critical subset (INT.1)
+        run: |
+          uv run --no-sync python -m pytest -q \
+            tests/integration/test_admin_status_api.py \
+            tests/integration/test_api_keys_api.py \
+            tests/integration/test_admin_api_keys_api.py \
+            tests/integration/test_auth_api.py \
+            tests/integration/test_vehicles_api.py \
+            --tb=line
+
+  # CI.FE.1 — corre en paralelo al backend (sin `needs:`) para no alargar el
+  # wall-clock. No necesita Postgres ni Redis.
+  frontend:
+    name: frontend (Node 22)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      # COV.GATE.1 — thresholds en vitest.config.ts sobre store/** y services/**.
+      - name: Unit tests + coverage (Vitest)
+        run: npm run test:coverage
+        env:
+          # La auth debe seguir ON en CI: con el flag de uso personal los tests
+          # de AuthGuard/store dejarían de validar el camino multiusuario.
+          NEXT_PUBLIC_AUTH_DISABLED: "false"
+          CI: "true"
+
+      # Lint pendiente de CI.LINT.1 (aún no verificado en limpio):
+      # - name: Lint
+      #   run: npm run lint

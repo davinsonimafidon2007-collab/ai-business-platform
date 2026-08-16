@@ -1,0 +1,53 @@
+{
+  "version": "2026.08",
+  "tolerance_abs_eur": 0.02,
+  "tolerance_abs_roi_pp": 0.05,
+  "cases": [
+    {
+      "id": "spain_10k_14k",
+      "profile_name": "SPAIN",
+      "purchase_price": 10000.0,
+      "estimated_sale_price": 14000.0,
+      "expected_total_cost": 13920.0,
+      "expected_net_profit": 80.0,
+      "expected_roi_percentage": 0.57
+    },
+    {
+      "id": "spain_18k_24k",
+      "profile_name": "SPAIN",
+      "purchase_price": 18000.0,
+      "estimated_sale_price": 24000.0,
+      "expected_total_cost": 23280.0,
+      "expected_net_profit": 720.0,
+      "expected_roi_percentage": 3.09
+    },
+    {
+      "id": "es_alias_18k_24k",
+      "profile_name": "ES",
+      "purchase_price": 18000.0,
+      "estimated_sale_price": 24000.0,
+      "expected_total_cost": 23280.0,
+      "expected_net_profit": 720.0,
+      "expected_roi_percentage": 3.09,
+      "note": "Debe coincidir con SPAIN 18k/24k"
+    },
+    {
+      "id": "portugal_10k_15k",
+      "profile_name": "PORTUGAL",
+      "purchase_price": 10000.0,
+      "estimated_sale_price": 15000.0,
+      "expected_total_cost": 14470.0,
+      "expected_net_profit": 530.0,
+      "expected_roi_percentage": 3.66
+    },
+    {
+      "id": "pt_alias_12k_16k",
+      "profile_name": "PT",
+      "purchase_price": 12000.0,
+      "estimated_sale_price": 16000.0,
+      "expected_total_cost": 16850.0,
+      "expected_net_profit": -850.0,
+      "expected_roi_percentage": -5.04
+    }
+  ]
+}

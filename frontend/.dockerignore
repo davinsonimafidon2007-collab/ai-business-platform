@@ -1,0 +1,8 @@
+node_modules
+.next
+out
+.env*.local
+android
+capacitor.config.ts
+*.log
+.git

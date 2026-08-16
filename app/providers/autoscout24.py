@@ -1,0 +1,510 @@
+﻿"""Provider para AutoScout24.
+
+Implementa la lógica específica de AutoScout24:
+  - ``source_name``
+  - Parsing prioritario vía ``__NEXT_DATA__`` (JSON embebido, estable)
+  - Fallback HTML con selectores actualizados (2026-08)
+  - Configuraciones de clase para selectores y patrones de combustible
+
+Verificado en vivo (2026-08-02): la página de listados devuelve
+``article[data-testid="list-item"]`` con data-attrs y
+``props.pageProps.listings`` en ``__NEXT_DATA__``.
+Los selectores antiguos (``article.cld-list-item``,
+``div[class*='ListItem']``) estaban rotos o devolvían ruido de UI.
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import re
+from typing import Any
+from urllib.parse import quote, urlencode, urljoin
+
+from bs4 import BeautifulSoup
+
+from app.providers.base import VehicleProvider
+from app.providers.dto import VehicleDetail, VehicleSearchResult
+from app.providers.exceptions import ProviderParsingError
+from app.providers.parsers import autoscout24_parser
+
+logger = logging.getLogger(__name__)
+
+BASE_URL = "https://www.autoscout24.de"
+
+
+class AutoScout24Provider(VehicleProvider):
+    """Provider para AutoScout24."""
+
+    _vehicle_detail_path = "/angebote/"
+
+    _title_selector_groups = [
+        (".ListItemTitle_title__sLi_x", "h2.ListItemTitle_title__sLi_x"),
+        (".list-title", "h1.list-title", "h2.list-title", "h3.list-title"),
+        ("h1.title", "h2.title", "h3.title", ".title h1", ".title h2"),
+        ("h1", "h2", "h3"),
+    ]
+
+    _location_label_keywords = (
+        "ubicación",
+        "location",
+        "localidad",
+        "standort",
+    )
+
+    _fuel_patterns = [
+        (re.compile(r"benzin|petrol|gasolina", re.IGNORECASE), "Gasolina"),
+        (re.compile(r"diesel", re.IGNORECASE), "Diesel"),
+        (re.compile(r"elektro|electric", re.IGNORECASE), "Eléctrico"),
+        (re.compile(r"hybrid", re.IGNORECASE), "Híbrido"),
+        (re.compile(r"wasserstoff|hydrogen", re.IGNORECASE), "Hidrógeno"),
+        (re.compile(r"lpg|cng|autogas", re.IGNORECASE), "Gas"),
+    ]
+
+    def __init__(
+        self,
+        http_client: Any = None,
+        base_url: str = BASE_URL,
+    ) -> None:
+        super().__init__(http_client=http_client, base_url=base_url)
+
+    @property
+    def source_name(self) -> str:
+        return "autoscout24"
+
+    def build_search_url(self, query: str, **kwargs: Any) -> str:
+        """Construye la URL de listados de AS24 a partir de criterios.
+
+        ``VehicleProvider.search()`` descarga el ``query`` tal cual, así que
+        quien llama debe pasar una URL. El SearchOrchestrator pasaba el término
+        crudo ("BMW") y acababa pidiendo ``autoscout24.de/BMW`` → 404, que el
+        orquestador se tragaba devolviendo 200 con 0 resultados
+        (E2E.MANUAL.PASS.1). Si ``query`` ya es una URL se respeta.
+
+        Filtros soportados: brand/model (path ``/lst/<marca>/<modelo>``),
+        min_price/max_price, min_year/max_year, max_mileage, fuel_type,
+        transmission.
+        """
+        if query and query.strip().startswith("http"):
+            return query.strip()
+
+        brand = (kwargs.get("brand") or "").strip()
+        model = (kwargs.get("model") or "").strip()
+
+        # Sin brand explícito, el término libre actúa como marca (uso habitual).
+        if not brand and query:
+            parts = query.strip().split(None, 1)
+            brand = parts[0]
+            if not model and len(parts) > 1:
+                model = parts[1]
+
+        path = "/lst"
+        if brand:
+            path += f"/{quote(brand.lower().replace(' ', '-'))}"
+
+        params: dict[str, str] = {
+            "atype": "C",
+            "cy": "D",
+            "desc": "0",
+            "sort": "standard",
+            "source": "listpage_search-mask",
+            "ustate": "N,U",
+        }
+
+        if model:
+            params["q"] = model
+
+        # ``budget_min``/``budget_max`` son los nombres que usa SearchOrchestrator.
+        mapping = {
+            "min_price": "pricefrom",
+            "budget_min": "pricefrom",
+            "max_price": "priceto",
+            "budget_max": "priceto",
+            "min_year": "fregfrom",
+            "max_year": "fregto",
+            "max_mileage": "kmto",
+            "min_mileage": "kmfrom",
+        }
+        for key, param in mapping.items():
+            value = kwargs.get(key)
+            if value is not None:
+                params[param] = str(int(value)) if isinstance(value, float) else str(value)
+
+        fuel_map = {
+            "gasolina": "B", "petrol": "B", "benzin": "B",
+            "diesel": "D",
+            "eléctrico": "E", "electrico": "E", "electric": "E",
+            "híbrido": "2", "hibrido": "2", "hybrid": "2",
+        }
+        fuel = (kwargs.get("fuel_type") or "").strip().lower()
+        if fuel in fuel_map:
+            params["fuel"] = fuel_map[fuel]
+
+        transmission = (kwargs.get("transmission") or "").strip().lower()
+        if transmission in {"manual", "schaltgetriebe"}:
+            params["gear"] = "M"
+        elif transmission in {"automática", "automatica", "automatic", "automatik"}:
+            params["gear"] = "A"
+
+        return f"{self._base_url or BASE_URL}{path}?{urlencode(params)}"
+
+    async def search(self, query: str, **kwargs: Any) -> list[VehicleSearchResult]:
+        """Busca en AS24 aceptando término libre o URL completa."""
+        search_url = self.build_search_url(query, **kwargs)
+        html = await self._download_url(search_url)
+        return self._parse_search_results(html, search_url)
+
+    def _parse_search_results(self, html: str, search_url: str) -> list[VehicleSearchResult]:
+        """Parsea resultados priorizando ``__NEXT_DATA__`` (más estable).
+
+        Si ``__NEXT_DATA__`` está presente y es legible, su resultado es
+        autoritativo (incluye 0 resultados legítimos). Si el JSON está roto o
+        cambió su estructura (P2) y el fallback HTML tampoco encuentra anuncios,
+        lanza ``ProviderParsingError`` para que el orquestador reporte un
+        ProviderIssue en vez de devolver "0 resultados" silenciosos.
+        """
+        from_json, status = self._parse_listings_from_next_data(html)
+        if status == autoscout24_parser.NEXT_DATA_OK:
+            logger.debug(
+                "autoscout24: %d anuncios extraídos de __NEXT_DATA__",
+                len(from_json),
+            )
+            return from_json
+
+        if status == autoscout24_parser.NEXT_DATA_ABSENT:
+            logger.info(
+                "autoscout24: __NEXT_DATA__ ausente; fallback a selectores HTML"
+            )
+            return super()._parse_search_results(html, search_url)
+
+        logger.warning(
+            "autoscout24: __NEXT_DATA__ presente pero ilegible (%s); "
+            "fallback a selectores HTML",
+            status,
+        )
+        html_results = super()._parse_search_results(html, search_url)
+        if not html_results:
+            raise ProviderParsingError(
+                "AutoScout24 cambió la estructura de su página de resultados: "
+                f"__NEXT_DATA__ {status} y ningún anuncio parseable por HTML.",
+                provider=self.source_name,
+            )
+        return html_results
+
+    def _parse_listings_from_next_data(
+        self, html: str
+    ) -> tuple[list[VehicleSearchResult], str]:
+        """Extrae listings desde el JSON embebido de Next.js.
+
+        Delega en ``autoscout24_parser.parse_listings_from_next_data``.
+        Devuelve ``(results, status)``: el estado distingue 0 resultados
+        legítimos de un cambio estructural (P2).
+        """
+        base = (self._base_url or BASE_URL).rstrip("/")
+        return autoscout24_parser.parse_listings_from_next_data(
+            html,
+            base_url=base,
+            source_name=self.source_name,
+        )
+
+    def _listing_dict_to_result(self, item: dict[str, Any]) -> VehicleSearchResult | None:
+        """Mapea un objeto listing de pageProps a VehicleSearchResult.
+
+        Delega en ``autoscout24_parser.listing_dict_to_result``.
+        """
+        base = (self._base_url or BASE_URL).rstrip("/")
+        return autoscout24_parser.listing_dict_to_result(
+            item,
+            base_url=base,
+            source_name=self.source_name,
+        )
+
+    def _find_listing_nodes(self, soup: BeautifulSoup) -> list[Any]:
+        """Selectores HTML de fallback (compatibles con fixtures y HTML actual)."""
+        strategies = [
+            'article[data-testid="list-item"]',
+            "article.list-page-item",
+            "article.cldt-summary-full-item",
+            "article[data-guid]",
+            "article[data-price]",
+            "article.cld-list-item",
+            "article.listing",
+            "div.ListItem",
+            "div[class*='ListItem']",
+            "[data-listing-id]",
+        ]
+        for selector in strategies:
+            nodes = soup.select(selector)
+            self._track_selector(selector, bool(nodes))
+            if nodes:
+                logger.debug(
+                    "autoscout24: selector HTML %r -> %d nodos",
+                    selector,
+                    len(nodes),
+                )
+                return nodes
+
+        logger.warning(
+            "autoscout24: ninguna estrategia de selector encontró anuncios. "
+            "Es probable que AutoScout24 haya cambiado su HTML — revisar selectores."
+        )
+        return []
+
+    def _parse_listing_node(self, node: Any, search_url: str) -> VehicleSearchResult | None:
+        """Fallback HTML: prioriza data-attrs del article actual de AS24."""
+        href_candidates = [a.get("href") for a in node.select("a[href]") if a.get("href")]
+        has_valid_offer_url = any("/angebote/" in href or "/offers/" in href for href in href_candidates)
+        # Un anuncio sin enlace a /angebote/ ni data-guid no es navegable:
+        # data-listing-id solo no basta (no hay URL de detalle real).
+        if not has_valid_offer_url and not node.get("data-guid"):
+            return None
+
+        external_id = (
+            node.get("data-guid")
+            or node.get("id")
+            or node.get("data-listing-id")
+        )
+        data_price = node.get("data-price")
+        data_make = node.get("data-make")
+        data_model = node.get("data-model")
+        data_mileage = node.get("data-mileage")
+        data_first_reg = node.get("data-first-registration")
+        data_fuel = node.get("data-fuel-type")
+
+        url = None
+        if external_id:
+            url = urljoin(f"{self._base_url}/", f"angebote/{external_id}")
+        else:
+            for anchor in node.select("a[href]"):
+                href = anchor.get("href") or ""
+                if "/angebote/" in href or "/offers/" in href:
+                    url = self._extract_url(anchor)
+                    external_id = self._extract_external_id(url)
+                    break
+
+        if not external_id and not has_valid_offer_url:
+            return None
+        if not external_id:
+            return super()._parse_listing_node(node, search_url)
+        if not url and not has_valid_offer_url:
+            return None
+
+        title = self._extract_title(node)
+        brand, model = self._split_brand_model(title)
+        brand = (data_make.title() if data_make else brand)
+        model = (data_model.title() if data_model else model)
+
+        try:
+            price = float(data_price) if data_price is not None else self._extract_price(node)
+        except (TypeError, ValueError):
+            price = self._extract_price(node)
+
+        mileage = self._parse_intish(data_mileage) or self._extract_mileage(node)
+        year = self._year_from_registration(data_first_reg) or self._extract_year(node)
+        fuel_type = self._normalize_fuel(str(data_fuel)) if data_fuel else self._extract_fuel(node)
+
+        return VehicleSearchResult(
+            source=self.source_name,
+            external_id=str(external_id),
+            url=url,
+            brand=brand,
+            model=model,
+            year=year,
+            mileage=mileage,
+            fuel_type=fuel_type,
+            transmission=self._extract_transmission(node),
+            power_hp=self._extract_power(node),
+            location=self._extract_location(node),
+            first_registration=data_first_reg,
+            images=self._extract_images(node),
+            price=price,
+            currency="EUR",
+        )
+
+    def _normalize_fuel(self, raw: str) -> str | None:
+        """Normaliza el tipo de combustible (delega en el parser)."""
+        return autoscout24_parser.normalize_fuel(raw)
+
+    @staticmethod
+    def _parse_intish(value: Any) -> int | None:
+        """Convierte un valor a entero (delega en el parser)."""
+        return autoscout24_parser.parse_intish(value)
+
+    @staticmethod
+    def _year_from_registration(value: Any) -> int | None:
+        """Extrae el año de matriculación (delega en el parser)."""
+        return autoscout24_parser.year_from_registration(value)
+
+    # ------------------------------------------------------------------
+    # Detail overrides — extractores específicos del HTML de ficha AS24
+    # ------------------------------------------------------------------
+
+    def _extract_title(self, soup: Any) -> str | None:
+        """Título limpio de la ficha AS24 (evita concatenar spans sin espacio)."""
+        selectors = [
+            "h1[data-testid='vip-title']",
+            "h1.StageTitle_title__",
+            "h1.listing-title",
+            "h1",
+            "title",
+        ]
+        for sel in selectors:
+            tag = soup.select_one(sel)
+            if not tag:
+                continue
+            # get_text con separator para no pegar "X1"+"2.0"
+            text = tag.get_text(" ", strip=True)
+            text = re.sub(r"\s+", " ", text).strip()
+            if text and len(text) > 2 and text.lower() not in {"autoscout24", "detail"}:
+                # Quitar sufijo de site si viene en <title>
+                text = re.sub(r"\s*[-–|]\s*AutoScout24.*$", "", text, flags=re.I).strip()
+                return text
+        return super()._extract_title(soup)
+
+    def _split_brand_model(self, title: str | None) -> tuple[str | None, str | None]:
+        brand, model = super()._split_brand_model(title)
+        if model:
+            # "X12.0 d" → "X1 2.0 d" ; "320d" se deja
+            model = re.sub(r"\b([A-Z]?\d)(\d\.\d)\b", r"\1 \2", model)
+            model = re.sub(r"\s+", " ", model).strip()
+        return brand, model
+
+    def _extract_price(self, soup: Any) -> float | None:
+        """Precio de compra en ficha AS24; ignora cuotas y valores no plausibles."""
+
+        # 1) JSON-LD Product / Offer
+        for script in soup.select('script[type="application/ld+json"]'):
+            raw = script.string or script.get_text() or ""
+            try:
+                data = json.loads(raw)
+            except (TypeError, ValueError):
+                logger.debug("autoscout24: JSON-LD de precio malformado, se omite")
+                continue
+            price = self._price_from_json_ld(data)
+            if price is not None:
+                return price
+
+        # 2) Selectores conocidos de precio principal
+        css_candidates = [
+            "[data-testid='price-label']",
+            "[data-testid='prim-price']",
+            ".PriceInfo_price__c5x7g",
+            ".Price_mainPrice__",
+            "span.PriceInfo_primaryPrice__",
+            "div.PriceInfo_wrapper__ span",
+            "[class*='PriceInfo'] [class*='price']",
+            "span[class*='Price']",
+        ]
+        for sel in css_candidates:
+            try:
+                nodes = soup.select(sel)
+            except (TypeError, ValueError):
+                logger.debug(
+                    "autoscout24: selector de precio %r inválido, se omite", sel
+                )
+                continue
+            for node in nodes:
+                text = node.get_text(" ", strip=True)
+                if not text or not re.search(r"\d", text):
+                    continue
+                # Saltar cuotas ("mth", "Monat", "/Monat", "Rate")
+                if re.search(r"mth|monat|/mo\b|rate|finanz", text, re.I):
+                    continue
+                parsed = self._parse_price_text(text)
+                if parsed is not None and self._is_plausible_price(parsed):
+                    return parsed
+
+        # 3) itemprop / meta
+        for sel in ('[itemprop="price"]', 'meta[itemprop="price"]'):
+            tag = soup.select_one(sel)
+            if not tag:
+                continue
+            content = tag.get("content") or tag.get_text(" ", strip=True)
+            parsed = self._coerce_price_number(content)
+            if parsed is not None and self._is_plausible_price(parsed):
+                return parsed
+
+        # 4) Fallback genérico del base, filtrado
+        parsed = super()._extract_price(soup)
+        if parsed is not None and self._is_plausible_price(parsed):
+            return parsed
+        return None
+
+    def _price_from_json_ld(self, data: Any) -> float | None:
+        if isinstance(data, list):
+            for item in data:
+                found = self._price_from_json_ld(item)
+                if found is not None:
+                    return found
+            return None
+        if not isinstance(data, dict):
+            return None
+        offers = data.get("offers")
+        if isinstance(offers, dict):
+            p = self._coerce_price_number(offers.get("price"))
+            if p is not None and self._is_plausible_price(p):
+                return p
+        if isinstance(offers, list):
+            for off in offers:
+                if isinstance(off, dict):
+                    p = self._coerce_price_number(off.get("price"))
+                    if p is not None and self._is_plausible_price(p):
+                        return p
+        p = self._coerce_price_number(data.get("price"))
+        if p is not None and self._is_plausible_price(p):
+            return p
+        return None
+
+    @staticmethod
+    def _coerce_price_number(value: Any) -> float | None:
+        """Coerciona un valor de precio a float (delega en el parser)."""
+        return autoscout24_parser.coerce_price_number(value)
+
+    @staticmethod
+    def _is_plausible_price(value: float) -> bool:
+        """Indica si un precio está en el rango plausible (delega en el parser)."""
+        return autoscout24_parser.is_plausible_price(value)
+
+    @staticmethod
+    def _parse_price_text_static(text: str) -> float | None:
+        """Parsea un texto de precio DE/EU a float (delega en el parser)."""
+        return autoscout24_parser.parse_price_text_static(text)
+
+    def _parse_price_text(self, text: str) -> float | None:
+        return self._parse_price_text_static(text)
+
+    def _extract_external_id(self, url: str | None) -> str | None:
+        if not url:
+            return None
+        # AS24 a veces usa UUID en path o query
+        m = re.search(
+            r"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})",
+            url,
+            re.I,
+        )
+        if m:
+            return m.group(1)
+        m = re.search(r"/angebote/[^/]*?-([a-f0-9]{8,})", url, re.I)
+        if m:
+            return m.group(1)
+        return super()._extract_external_id(url)
+
+    async def get_vehicle(self, external_id: str) -> VehicleDetail:
+        """Detail AS24: URL completa o id/slug."""
+        if external_id.startswith("http"):
+            url = external_id
+        elif re.fullmatch(
+            r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
+            external_id,
+            re.I,
+        ):
+            # UUID de listing — la URL de detail real suele venir del search result.url
+            # Fallback: buscar por id en path genérico
+            base = (self._base_url or BASE_URL).rstrip("/")
+            url = f"{base}/angebote/{external_id}"
+        else:
+            base = (self._base_url or BASE_URL).rstrip("/")
+            url = f"{base}{self._vehicle_detail_path}{external_id}"
+
+        html = await self._download_url(url)
+        return self._parse_vehicle_detail(html, url)

@@ -1,0 +1,87 @@
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { searchService } from "@/app/services/search";
+import type {
+  SearchAPIRequest,
+  SearchAPIResponse,
+  SearchFilters,
+  SearchHistory,
+} from "@/app/types/vehicle";
+import type { DashboardStats } from "@/app/types/search-orders";
+
+export function useSearchVehicles() {
+  const queryClient = useQueryClient();
+
+  return useMutation<SearchAPIResponse, Error, SearchAPIRequest>({
+    mutationFn: async (params: SearchAPIRequest) => {
+      const startedAt = performance.now();
+      const result = await searchService.searchVehicles(params);
+      const elapsedSeconds = (performance.now() - startedAt) / 1000;
+      return { ...result, __elapsedSeconds: elapsedSeconds } as SearchAPIResponse & {
+        __elapsedSeconds: number;
+      };
+    },
+    onSuccess: (data, variables) => {
+      queryClient.setQueryData(["searchResults"], data);
+      const elapsed = (data as SearchAPIResponse & { __elapsedSeconds?: number }).__elapsedSeconds ?? 0;
+      // Save search to history (fire and forget, don't block the UI)
+      searchService.saveSearchToHistory({
+        query: variables.query,
+        results_count: data.summary.total_results,
+        execution_time: elapsed,
+        providers_used: variables.providers,
+      }).catch(() => {
+        // Silently fail - history is not critical
+      });
+    },
+  });
+}
+
+export function useSearchResults() {
+  return useQuery<SearchAPIResponse | null>({
+    queryKey: ["searchResults"],
+    enabled: false,
+  });
+}
+
+export function useSearchHistory() {
+  return useQuery<SearchHistory[]>({
+    queryKey: ["searchHistory"],
+    queryFn: () => searchService.getSearchHistory(),
+  });
+}
+
+export function useDashboardStats() {
+  return useQuery<DashboardStats>({
+    queryKey: ["dashboardStats"],
+    queryFn: () => searchService.getDashboardStats(),
+  });
+}
+
+export function useDeleteSearch() {
+  const queryClient = useQueryClient();
+
+  return useMutation<void, Error, string>({
+    mutationFn: (id: string) => searchService.deleteSearch(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["searchHistory"] });
+    },
+  });
+}
+
+export function formatFiltersForApi(filters: SearchFilters): SearchAPIRequest {
+  return {
+    query: filters.query || filters.brand || "*",
+    providers: filters.provider ? [filters.provider] : undefined,
+    max_results: 30,
+    min_price: filters.min_price || undefined,
+    max_price: filters.max_price || undefined,
+    brand: filters.brand || undefined,
+    model: filters.model || undefined,
+    min_year: filters.min_year || undefined,
+    max_year: filters.max_year || undefined,
+    min_mileage: filters.min_mileage || undefined,
+    max_mileage: filters.max_mileage || undefined,
+    fuel_type: filters.fuel_type || undefined,
+    transmission: filters.transmission || undefined,
+  };
+}

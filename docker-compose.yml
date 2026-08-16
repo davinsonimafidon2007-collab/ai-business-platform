@@ -1,0 +1,96 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    working_dir: /app
+    command: >
+      sh -c "for i in 1 2 3 4 5; do uv run --no-sync alembic upgrade head && break || echo 'Waiting for DB...' && sleep 3; done && uv run --no-sync uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    ports:
+      - "${API_PORT:-8000}:8000"
+    volumes:
+      - .:/app
+      - uploads_data:/app/uploads/inspection_photos
+    environment:
+      PYTHONUNBUFFERED: "1"
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/ai_business_platform
+      REDIS_URL: redis://redis:6379/0
+      JWT_SECRET_KEY: "${JWT_SECRET_KEY}"
+      ENVIRONMENT: "${ENVIRONMENT:-development}"
+      APP_URL: "${APP_URL:-http://localhost:3000}"
+      ENABLE_SCHEDULER: "${ENABLE_SCHEDULER:-true}"
+      ENABLE_MOBILE_DE: "${ENABLE_MOBILE_DE:-false}"
+      PROVIDER_HTTP_PROXY: "${PROVIDER_HTTP_PROXY:-}"
+      FIREBASE_CREDENTIALS_JSON: "${FIREBASE_CREDENTIALS_JSON}"
+      # Uso personal (PERS.CLOSE.1): sin este passthrough el contenedor arranca
+      # con AUTH_DISABLED vacío (=false) y la API responde 401 aunque el .env
+      # del host diga true.
+      AUTH_DISABLED: "${AUTH_DISABLED:-false}"
+      ALLOW_AUTH_DISABLED_IN_PROD: "${ALLOW_AUTH_DISABLED_IN_PROD:-false}"
+      APP_MODE: "${APP_MODE:-personal}"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      # TASK-004: liveness puro (proceso vivo) para que Docker no reinicie la
+      # API mientras las dependencias (DB/Redis) aún arrancan.
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 40s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    environment:
+      # GRAVE.004: el frontend se sirve desde el HOST (puerto 3000), así que
+      # el navegador no puede resolver 'api'; apuntamos a localhost:8000.
+      NEXT_PUBLIC_API_URL: "${NEXT_PUBLIC_API_URL:-http://localhost:8000}"
+      NEXT_PUBLIC_AUTH_DISABLED: "${NEXT_PUBLIC_AUTH_DISABLED:-false}"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ai_business_platform
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ai_business_platform"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+  uploads_data:
+

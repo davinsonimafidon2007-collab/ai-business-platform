@@ -1,0 +1,12 @@
+appId: com.aibusiness.platform
+---
+- launchApp
+- runFlow:
+    when: { visible: "Iniciar sesión" }
+    commands: [ { tapOn: "Continuar sin cuenta" } ]
+- tapOn: "Tratos"
+- tapOn: "Nuevo trato"
+- inputText: { id: "deal-title", text: "Toyota Corolla 2020" }
+- inputText: { id: "deal-vehicle-price", text: "15000" }
+- tapOn: "Guardar"
+- assertVisible: "Toyota Corolla 2020"

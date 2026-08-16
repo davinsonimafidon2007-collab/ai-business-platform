@@ -1,0 +1,88 @@
+# --- Hygiene: diagnóstico / one-shot en raíz (HYGIENE.1) ---
+_diag_*
+_apply_category*_fix.py
+_fix_category*.py
+_verify_*.py
+verify_fix.py
+verify_*.txt
+fix-*.patch
+estructura.txt
+docker_logs*.txt
+docker_build*.txt
+pytest_collect.txt
+uv_lock.txt
+project_structure.txt
+archivos.txt
+tmp_diag.log
+test_run_out.txt
+test_failures_current.txt
+*.log
+
+# Python ruido
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+*.egg-info/
+# COV.GATE.1: reportes de coverage del frontend (v8/istanbul), generados por
+# `npm run test:coverage`. Son artefactos, no fuente.
+frontend/coverage/
+
+# Entornos / secretos
+.venv/
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual environments
+.venv/
+
+# Node
+node_modules/
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+*.tsbuildinfo
+npm-debug.log*
+
+# Environment files
+.env
+.env.*
+# Excepción: templates de entorno que sí se versionan (incluidos subdirs).
+!.env.example
+!**/.env.example
+
+# Build
+build/
+dist/
+
+# Artefactos binarios/accedidales (CODE-001)
+*.zip
+!**/fixtures/**/*.zip
+
+# Backups Postgres (DEVOPS-001 / P3-002) — nunca versionar dumps con datos
+backups/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# MOB-P1-006: Android keystore y firma — nunca versionar
+frontend/android/keystore/
+frontend/android/release-key.jks
+frontend/android/local.properties
+*.jks
