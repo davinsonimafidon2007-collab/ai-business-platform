@@ -98,7 +98,7 @@ export async function trackEvent(
   const analytics = await getAnalyticsInstance();
   if (!analytics) return;
   try {
-    logEvent(analytics, name, params);
+    logEvent(analytics, name as string, params);
   } catch {
     // nunca romper la app por telemetría
   }
