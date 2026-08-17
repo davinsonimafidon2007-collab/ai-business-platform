@@ -1,6 +1,15 @@
 import type { NextConfig } from "next";
 import path from "path";
 
+// MOB-P3-006 / PWA (Bloque 1.3): service worker + manifest instalable.
+// next-pwa v5 es CommonJS, por eso se usa require() dentro de un .ts.
+const withPWA = require("next-pwa")({
+  dest: "public",
+  register: true,
+  skipWaiting: true,
+  disable: process.env.NODE_ENV === "development",
+});
+
 // MOB-P3-006 — Optimización de bundle:
 //  - Separar vendor externo y firebase en chunks propios (cache-rotación).
 //  - Alias lodash → lodash-es (tree-shaking más agresivo).
@@ -55,4 +64,4 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+export default withPWA(nextConfig);
