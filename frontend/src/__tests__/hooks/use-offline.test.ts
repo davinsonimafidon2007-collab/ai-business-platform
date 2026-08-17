@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   offlineCache,
   OFFLINE_CACHE_KEY,
@@ -62,5 +62,20 @@ describe("offlineCache", () => {
   it("returns an empty list when the stored cache is corrupt", async () => {
     window.localStorage.setItem(OFFLINE_CACHE_KEY, "{not json");
     expect(await offlineCache.getAll()).toHaveLength(0);
+  });
+});
+
+describe("offlineCache SSR branches", () => {
+  it("read/write/remove/clear are safe without window (SSR)", async () => {
+    vi.stubGlobal("window", undefined);
+    try {
+      await offlineCache.add({ query: { key: "x" }, results: [], resultCount: 0 });
+      expect(await offlineCache.findByQuery({ key: "x" })).toBeNull();
+      expect(await offlineCache.getAll()).toEqual([]);
+      await offlineCache.remove({ key: "x" });
+      await offlineCache.clear();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

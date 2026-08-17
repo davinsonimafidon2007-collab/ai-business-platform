@@ -72,3 +72,37 @@ describe("useThemeStore", () => {
   });
 });
 
+describe("useThemeStore SSR branches", () => {
+  it("toggleTheme runs without window (SSR)", () => {
+    vi.stubGlobal("window", undefined);
+    try {
+      useThemeStore.setState({ theme: "light" });
+      useThemeStore.getState().toggleTheme();
+      expect(useThemeStore.getState().theme).toBe("dark");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("setTheme runs without window (SSR)", () => {
+    vi.stubGlobal("window", undefined);
+    try {
+      useThemeStore.getState().setTheme("dark");
+      expect(useThemeStore.getState().theme).toBe("dark");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("initialize runs without window (SSR) and keeps the current theme", () => {
+    vi.stubGlobal("window", undefined);
+    try {
+      useThemeStore.setState({ theme: "light" });
+      useThemeStore.getState().initialize();
+      expect(useThemeStore.getState().theme).toBe("light");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});
+
