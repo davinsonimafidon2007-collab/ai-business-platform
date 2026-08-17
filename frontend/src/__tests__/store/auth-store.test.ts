@@ -130,4 +130,42 @@ describe("auth-store", () => {
     expect(decodeJwtPayload("header.%%%.sig")).toBeNull();
     expect(decodeJwtPayload(makeJwt({ exp: 123 }))).toEqual({ exp: 123 });
   });
+
+  it("setUser actualiza usuario y autenticación", () => {
+    useAuthStore.getState().setUser(user);
+
+    const state = useAuthStore.getState();
+    expect(state.user?.email).toBe("user@example.com");
+    expect(state.isAuthenticated).toBe(true);
+    expect(state.isLoading).toBe(false);
+  });
+
+  it("setUser(null) desautentica", () => {
+    useAuthStore.getState().setUser(user);
+    useAuthStore.getState().setUser(null);
+
+    const state = useAuthStore.getState();
+    expect(state.user).toBeNull();
+    expect(state.isAuthenticated).toBe(false);
+    expect(state.isLoading).toBe(false);
+  });
+
+  it("setLoading actualiza solo el flag de carga", () => {
+    useAuthStore.getState().setLoading(true);
+    expect(useAuthStore.getState().isLoading).toBe(true);
+    useAuthStore.getState().setLoading(false);
+    expect(useAuthStore.getState().isLoading).toBe(false);
+  });
+
+  it("initialize autentica al usuario local cuando la auth está desactivada", () => {
+    process.env.NEXT_PUBLIC_AUTH_DISABLED = "true";
+    try {
+      useAuthStore.getState().initialize();
+      const state = useAuthStore.getState();
+      expect(state.isAuthenticated).toBe(true);
+      expect(state.user?.email).toBe("local@example.com");
+    } finally {
+      delete process.env.NEXT_PUBLIC_AUTH_DISABLED;
+    }
+  });
 });

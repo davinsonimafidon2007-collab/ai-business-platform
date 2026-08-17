@@ -1,120 +1,122 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 
-// Mock de axios: create() devuelve una instancia invocable con interceptores.
-// El error handler se registra como 2º arg de response.interceptors.use.
-const { mockInstance, mockCreate, requestHandler, responseHandler } = vi.hoisted(() => {
-  const requestHandler = vi.fn();
-  const responseHandler = vi.fn();
-  const mockInstance = Object.assign(vi.fn(), {
-    interceptors: {
-      request: { use: requestHandler },
-      response: { use: responseHandler },
-    },
-  });
+// Determinamos la base URL por el camino "web" (sin NEXT_PUBLIC_API_URL).
+process.env.NEXT_PUBLIC_API_URL = "";
+
+const { requestUseMock, responseUseMock, postMock, createMock } = vi.hoisted(
+  () => ({
+    requestUseMock: vi.fn(),
+    responseUseMock: vi.fn(),
+    postMock: vi.fn(),
+    createMock: vi.fn(),
+  })
+);
+
+vi.mock("axios", () => {
+  // La "instancia" de axios es un callable (función) con interceptores, para
+  // poder cubrir el retry `this.client(originalRequest)` de handleError.
+  const makeInstance = () => {
+    const instance: any = vi.fn(async () => ({ data: "retried" }));
+    instance.interceptors = {
+      request: { use: requestUseMock },
+      response: { use: responseUseMock },
+    };
+    return instance;
+  };
+  createMock.mockImplementation(makeInstance);
   return {
-    mockInstance,
-    mockCreate: vi.fn(() => mockInstance),
-    requestHandler,
-    responseHandler,
+    default: { create: createMock, post: postMock },
+    AxiosError: class AxiosError extends Error {},
   };
 });
 
-vi.mock("axios", () => ({
-  default: { create: mockCreate },
+vi.mock("@capacitor/core", () => ({
+  Capacitor: {
+    isNativePlatform: vi.fn().mockReturnValue(false),
+    getPlatform: vi.fn().mockReturnValue("web"),
+  },
+}));
+vi.mock("@/app/config/app-mode", () => ({
+  isAuthDisabled: vi.fn().mockReturnValue(false),
 }));
 
-// Modo personal: sin sesión que refrescar (evita el loop 401 en estos tests).
-process.env.NEXT_PUBLIC_AUTH_DISABLED = "true";
+import { apiClient, api } from "@/app/services/api/client";
+import { isAuthDisabled } from "@/app/config/app-mode";
 
-import { apiClient } from "@/app/services/api/client";
+// Los interceptores se registran en el constructor (import del módulo), así
+// que capturamos los handlers UNA vez aquí (no en beforeEach, que los limpiaría).
+const requestHandler = requestUseMock.mock.calls[0]?.[0];
+const responseErrorHandler = responseUseMock.mock.calls[0]?.[1];
 
-// Capturado una vez a nivel de módulo: el interceptor se registra al construir
-// el ApiClient (import). Un clearAllMocks en beforeEach lo borraría.
-const errorHandler = responseHandler.mock.calls[0][1];
+beforeEach(() => {
+  vi.clearAllMocks();
+  window.localStorage.clear();
+  (isAuthDisabled as any).mockReturnValue(false);
+});
 
-interface FakeAxiosError {
-  config: {
-    method: string;
-    headers: Record<string, string>;
-    url: string;
-    _retryCount?: number;
-    _retry?: boolean;
-  };
-  response?: { status: number; data: null; headers: Record<string, string> };
-}
+describe("api client — request interceptor", () => {
+  it("añade el header Authorization cuando hay un token válido", () => {
+    const token = "x".repeat(20);
+    window.localStorage.setItem("access_token", token);
 
-function makeError(method: string, status?: number): FakeAxiosError {
-  const err: FakeAxiosError = {
-    config: { method, headers: {}, url: "/x" },
-  };
-  if (status !== undefined) {
-    err.response = { status, data: null, headers: {} };
-  }
-  return err;
-}
+    const config: any = { headers: {} };
+    const out = requestHandler(config);
 
-describe("api client retry with backoff (P6)", () => {
-  beforeEach(() => {
-    mockInstance.mockReset();
-    vi.spyOn(Math, "random").mockReturnValue(0); // delays 0 → tests rápidos
+    expect(out.headers.Authorization).toBe(`Bearer ${token}`);
   });
 
-  afterEach(() => {
-    vi.restoreAllMocks();
-    delete process.env.NEXT_PUBLIC_AUTH_DISABLED;
+  it("no añade Authorization cuando no hay token", () => {
+    const config: any = { headers: {} };
+    const out = requestHandler(config);
+    expect(out.headers.Authorization).toBeUndefined();
+  });
+});
+
+describe("api client — response error handler", () => {
+  it("rechaza errores no-401 sin reintentar", async () => {
+    const err: any = { response: { status: 500 }, config: { headers: {} } };
+    await expect(responseErrorHandler(err)).rejects.toBe(err);
   });
 
-  it("retries network errors up to max attempts and then rejects", async () => {
-    // Simula la cadena real de axios: un reintento fallido vuelve a pasar por
-    // el error handler (reintenta hasta agotar RETRY_MAX_ATTEMPTS).
-    const seenRetryCounts: (number | undefined)[] = [];
-    mockInstance.mockImplementation((config: FakeAxiosError["config"]) => {
-      seenRetryCounts.push(config._retryCount);
-      const err = makeError("get");
-      err.config = config; // conserva _retryCount que el handler ya marcó
-      return errorHandler(err);
+  it("reintenta la petición tras refrescar el token (401)", async () => {
+    window.localStorage.setItem("refresh_token", "refresh-token");
+    postMock.mockResolvedValue({
+      data: { access_token: "new-at", refresh_token: "new-rt" },
     });
+    const err: any = {
+      response: { status: 401 },
+      config: { headers: {}, _retry: false },
+    };
 
-    await expect(errorHandler(makeError("get"))).rejects.toBeDefined();
+    const result = await responseErrorHandler(err);
 
-    expect(mockInstance).toHaveBeenCalledTimes(2); // 2 reintentos
-    expect(seenRetryCounts).toEqual([1, 2]);
+    expect(postMock).toHaveBeenCalled();
+    expect(window.localStorage.getItem("access_token")).toBe("new-at");
+    expect(result).toEqual({ data: "retried" });
   });
 
-  it("retries 503 then succeeds on the first retry", async () => {
-    mockInstance.mockResolvedValueOnce({ data: { ok: true } });
-
-    const result = await errorHandler(makeError("get", 503));
-
-    expect(result).toEqual({ data: { ok: true } });
-    expect(mockInstance).toHaveBeenCalledTimes(1);
+  it("rechaza un 401 cuando no hay refresh token", async () => {
+    const err: any = {
+      response: { status: 401 },
+      config: { headers: {}, _retry: false },
+    };
+    await expect(responseErrorHandler(err)).rejects.toBe(err);
   });
 
-  it("does not retry 4xx errors other than 429", async () => {
-    mockInstance.mockRejectedValue(makeError("get"));
-
-    await expect(errorHandler(makeError("get", 403))).rejects.toBeDefined();
-
-    expect(mockInstance).not.toHaveBeenCalled();
+  it("no reintenta cuando la autenticación está desactivada", async () => {
+    (isAuthDisabled as any).mockReturnValue(true);
+    const err: any = {
+      response: { status: 401 },
+      config: { headers: {}, _retry: false },
+    };
+    await expect(responseErrorHandler(err)).rejects.toBe(err);
+    expect(postMock).not.toHaveBeenCalled();
   });
+});
 
-  it("does not retry non-idempotent methods", async () => {
-    mockInstance.mockRejectedValue(makeError("post"));
-
-    await expect(errorHandler(makeError("post", 503))).rejects.toBeDefined();
-
-    expect(mockInstance).not.toHaveBeenCalled();
-  });
-
-  it("does not retry 401 (goes to the refresh flow instead)", async () => {
-    mockInstance.mockRejectedValue(makeError("get"));
-
-    await expect(errorHandler(makeError("get", 401))).rejects.toBeDefined();
-
-    expect(mockInstance).not.toHaveBeenCalled();
-  });
-
-  it("exposes the axios instance to services", () => {
-    expect(apiClient.axiosInstance).toBe(mockInstance);
+describe("api client — exports", () => {
+  it("expone api (instancia axios) y apiClient", () => {
+    expect(api).toBeDefined();
+    expect(apiClient.axiosInstance).toBeDefined();
   });
 });

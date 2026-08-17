@@ -23,7 +23,7 @@ vi.mock("firebase/app", () => ({
   initializeApp: mocks.initializeApp,
 }));
 
-import { trackEvent, trackError, type BusinessEventName } from "@/app/services/analytics";
+import { trackEvent, trackError, trackScreenView, type BusinessEventName } from "@/app/services/analytics";
 
 describe("analytics service", () => {
   beforeEach(() => {
@@ -44,6 +44,29 @@ describe("analytics service", () => {
     await trackError("network_timeout", "fetch failed", { screen: "dashboard" });
     // El error llega al listener de logEvent con el contexto.
     expect(mocks.logEvent).toHaveBeenCalled();
+  });
+
+  it("trackScreenView dispatches a custom event and tracks screen_view", async () => {
+    const dispatchSpy = vi.fn();
+    Object.defineProperty(globalThis, "window", {
+      value: { dispatchEvent: dispatchSpy },
+      configurable: true,
+      writable: true,
+    });
+
+    await trackScreenView("dashboard", { role: "admin" });
+
+    expect(dispatchSpy).toHaveBeenCalled();
+    expect(mocks.logEvent).toHaveBeenCalled();
+  });
+
+  it("trackEvent does not throw when logEvent fails", async () => {
+    mocks.logEvent.mockImplementationOnce(() => {
+      throw new Error("telemetry down");
+    });
+    await expect(
+      trackEvent("deal_clicked" as BusinessEventName, {})
+    ).resolves.toBeUndefined();
   });
 
   it("does not throw when analytics is unsupported", async () => {

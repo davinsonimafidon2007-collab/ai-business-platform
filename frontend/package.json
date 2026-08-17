@@ -24,7 +24,8 @@
     "cap:open:android": "npm run check:cap-config && npx cap open android",
     "cap:build:android": "npm run cap:sync:android && cd android && gradlew.bat assembleDebug",
     "generate:pin": "bash scripts/generate-pin.sh",
-    "analyze:bundle": "bash scripts/analyze-bundle.sh"
+    "analyze:bundle": "bash scripts/analyze-bundle.sh",
+    "pwa:generate": "pwa-asset-generator --icon-only --manifest public/manifest.json"
   },
   "dependencies": {
     "@capacitor/android": "^6.2.1",
@@ -53,6 +54,7 @@
     "firebase": "^12.16.0",
     "lucide-react": "^1.27.0",
     "next": "^15.2.0",
+    "next-pwa": "^5.6.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-hook-form": "^7.83.0",
@@ -63,6 +65,7 @@
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.6",
+    "@playwright/test": "^1.62.1",
     "@tailwindcss/postcss": "^4.0.0",
     "@testing-library/jest-dom": "^7.0.0",
     "@testing-library/react": "^16.3.2",
