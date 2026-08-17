@@ -48,12 +48,38 @@ _FUEL_CODE_MAP = {
 }
 
 
+NEXT_DATA_OK = "ok"
+"""``__NEXT_DATA__`` presente y legible; ``results`` puede ser ``[]`` cuando
+la página no tiene resultados (caso legítimo)."""
+
+NEXT_DATA_ABSENT = "absent"
+"""No hay script ``__NEXT_DATA__`` en la página. El caller decide (fallback
+HTML); no es un error estructural por sí solo."""
+
+NEXT_DATA_INVALID = "invalid"
+"""Hay script ``__NEXT_DATA__`` pero su contenido no es JSON válido."""
+
+NEXT_DATA_MISSING_KEY = "missing_key"
+"""JSON válido pero sin ``props.pageProps.listings`` (AutoScout24 cambió la
+estructura)."""
+
+NEXT_DATA_UNPARSED = "unparsed"
+"""``listings`` no vacío pero ningún item se pudo convertir a resultado
+(IDs/estructura de item cambiados)."""
+
+
 def parse_listings_from_next_data(
     html: str,
     base_url: str,
     source_name: str,
-) -> list[VehicleSearchResult]:
+) -> tuple[list[VehicleSearchResult], str]:
     """Extrae listings desde el JSON embebido ``__NEXT_DATA__``.
+
+    En vez de devolver ``[]`` silencioso ante cualquier problema, distingue
+    entre "0 resultados legítimos" (``NEXT_DATA_OK``) y "la estructura cambió"
+    (``NEXT_DATA_INVALID`` / ``NEXT_DATA_MISSING_KEY`` / ``NEXT_DATA_UNPARSED``)
+    para que el provider pueda reportar un ``ProviderParsingError`` y no un
+    "0 resultados" falso cuando AutoScout24 cambie su JSON.
 
     Args:
         html: Página de resultados de búsqueda de AutoScout24.
@@ -61,8 +87,8 @@ def parse_listings_from_next_data(
         source_name: Nombre del source (``autoscout24``).
 
     Returns:
-        Lista de ``VehicleSearchResult`` extraídos (vacía si no hay JSON o
-        no contiene ``listings``).
+        Tupla ``(results, status)`` donde ``status`` es una de las constantes
+        ``NEXT_DATA_*``.
     """
     match = re.search(
         r'<script[^>]+id="__NEXT_DATA__"[^>]*>(.*?)</script>',
@@ -70,21 +96,23 @@ def parse_listings_from_next_data(
         re.DOTALL,
     )
     if not match:
-        return []
+        return [], NEXT_DATA_ABSENT
 
     try:
         payload = json.loads(match.group(1))
     except json.JSONDecodeError as exc:
         logger.warning("autoscout24: __NEXT_DATA__ no es JSON válido: %s", exc)
-        return []
+        return [], NEXT_DATA_INVALID
 
-    listings = (
-        payload.get("props", {})
-        .get("pageProps", {})
-        .get("listings")
-    )
-    if not isinstance(listings, list) or not listings:
-        return []
+    page_props = payload.get("props", {}).get("pageProps", {})
+    listings = page_props.get("listings")
+    if not isinstance(listings, list):
+        logger.warning(
+            "autoscout24: __NEXT_DATA__ sin clave 'listings' en "
+            "props.pageProps (claves: %s) — AutoScout24 cambió la estructura",
+            sorted(page_props.keys()),
+        )
+        return [], NEXT_DATA_MISSING_KEY
 
     results: list[VehicleSearchResult] = []
     for item in listings:
@@ -97,7 +125,15 @@ def parse_listings_from_next_data(
         )
         if parsed is not None:
             results.append(parsed)
-    return results
+
+    if listings and not results:
+        logger.warning(
+            "autoscout24: %d listings en __NEXT_DATA__ pero 0 parseados — "
+            "IDs/estructura de item cambiados",
+            len(listings),
+        )
+        return results, NEXT_DATA_UNPARSED
+    return results, NEXT_DATA_OK
 
 
 def listing_dict_to_result(

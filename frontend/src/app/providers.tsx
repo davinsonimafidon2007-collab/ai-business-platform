@@ -1,65 +1,9 @@
 "use client";
 
-import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
-import { useState, useEffect } from "react";
-import { useAuthStore } from "@/app/store/auth-store";
-import { useThemeStore } from "@/app/store/theme-store";
-import { initGoogleAuth } from "@/app/services/google-auth";
-import { isAuthDisabled } from "@/app/config/app-mode";
-import { useAndroidBackButton } from "@/app/hooks/useAndroidBackButton";
-
-function ThemeInitializer({ children }: { children: React.ReactNode }) {
-  const initialize = useThemeStore((state) => state.initialize);
-
-  useEffect(() => {
-    initialize();
-  }, [initialize]);
-
-  return <>{children}</>;
-}
-
-function AuthInitializer({ children }: { children: React.ReactNode }) {
-  const initialize = useAuthStore((state) => state.initialize);
-  const logout = useAuthStore((state) => state.logout);
-  const queryClient = useQueryClient();
-
-  useEffect(() => {
-    initialize();
-
-    // Escucha el evento "auth:logout" que emite el API client cuando un refresh
-    // falla (401). Evita importar el store desde el client (sin dependencia
-    // circular) y garantiza que store + query cache queden coherentes.
-    const onAuthLogout = () => {
-      queryClient.clear();
-      logout();
-    };
-    window.addEventListener("auth:logout", onAuthLogout);
-    return () => window.removeEventListener("auth:logout", onAuthLogout);
-  }, [initialize, logout, queryClient]);
-
-  return <>{children}</>;
-}
-
-function GoogleAuthInitializer({ children }: { children: React.ReactNode }) {
-  useEffect(() => {
-    // Auth desactivada (uso personal): no inicializar Firebase/Google Login.
-    if (!isAuthDisabled()) {
-      initGoogleAuth();
-    }
-  }, []);
-
-  return <>{children}</>;
-}
-
-/**
- * Mounts native-app navigation effects (Android hardware back button) a single
- * time, at the top of the provider tree. Do NOT re-mount per page to avoid
- * duplicate listeners.
- */
-function NativeNavigationEffects({ children }: { children: React.ReactNode }) {
-  useAndroidBackButton();
-  return <>{children}</>;
-}
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { useState } from "react";
+import { OfflineBanner } from "@/app/hooks/use-offline";
+import { ToastProvider } from "@/app/components/ui/ToastProvider";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
@@ -67,9 +11,12 @@ export function Providers({ children }: { children: React.ReactNode }) {
       new QueryClient({
         defaultOptions: {
           queries: {
-            staleTime: 60 * 1000,
-            retry: 1,
-            refetchOnWindowFocus: false,
+            staleTime: 30_000,
+            retry: (failureCount, error) => {
+              if (error instanceof Error && error.message.includes("401")) return false;
+              if (error instanceof Error && error.message.includes("429")) return false;
+              return failureCount < 2;
+            },
           },
         },
       })
@@ -77,13 +24,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <ThemeInitializer>
-        <AuthInitializer>
-          <GoogleAuthInitializer>
-            <NativeNavigationEffects>{children}</NativeNavigationEffects>
-          </GoogleAuthInitializer>
-        </AuthInitializer>
-      </ThemeInitializer>
+      <OfflineBanner />
+      <ToastProvider />
+      {children}
     </QueryClientProvider>
   );
 }

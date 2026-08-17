@@ -1,21 +1,14 @@
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from logging import getLogger
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 
-from app.api.v1.admin_api_keys import router as admin_api_keys_router
-from app.api.v1.admin_status import router as admin_status_router
-from app.api.v1.api_keys import router as api_keys_router
-from app.api.v1.auth import router as auth_router
+from app.api.v1.mobile import router as mobile_router
 from app.api.v1.router import api_router
 from app.api.v1.routes.health import router as health_router
-from app.api.v1.search_orders import router as search_orders_router
-from app.api.v1.searches import router as searches_router
-from app.api.v1.users import router as users_router
-from app.api.v1.vehicles import router as vehicles_router
-from app.api.v1.mobile import router as mobile_router
 from app.core.config import settings
 from app.core.exception_handlers import register_exception_handlers
 from app.core.logging import setup_logging
@@ -30,6 +23,8 @@ from app.middleware.rate_limit_middleware import RateLimitMiddleware
 from app.middleware.request_id import RequestIdMiddleware
 
 setup_logging()
+
+logger_main = getLogger("app.main")
 
 # ---------------------------------------------------------------------------
 # Startup validation — refuse to boot with insecure defaults
@@ -80,6 +75,23 @@ async def scheduler_lifespan(app: FastAPI) -> AsyncGenerator[None]:
     await init_redis()
     await db_manager.init()
 
+    # TASK-009: Recuperar al arrancar las órdenes de búsqueda que quedaron en
+    # RUNNING (crash/reinicio anterior) reencolándolas a PENDING para que el
+    # job de procesado las retome. Un solo UPDATE atómico, sin umbral de
+    # antigüedad: al boot no puede haber workers procesando.
+    try:
+        from app.repositories.search_order_repository import SearchOrderRepository
+
+        async with db_manager.get_session() as session:
+            recovered = await SearchOrderRepository(session).recover_all_running()
+        if recovered:
+            logger_main.warning(
+                "Startup recovery: reenqueued %d stuck RUNNING search order(s) -> PENDING",
+                recovered,
+            )
+    except Exception:
+        logger_main.exception("Failed to recover stuck RUNNING search orders on startup")
+
     context = JobContext(db_manager=db_manager, settings=settings)
     scheduler: Scheduler = create_scheduler(context)
 
@@ -129,14 +141,6 @@ app.add_middleware(
     allow_headers=settings.cors_headers_list,
 )
 
-app.include_router(auth_router, prefix="/api/v1")
-app.include_router(api_keys_router, prefix="/api/v1")
-app.include_router(admin_api_keys_router, prefix="/api/v1")
-app.include_router(admin_status_router, prefix="/api/v1")
-app.include_router(searches_router, prefix="/api/v1")
-app.include_router(search_orders_router, prefix="/api/v1")
-app.include_router(users_router, prefix="/api/v1")
-app.include_router(vehicles_router, prefix="/api/v1")
 app.include_router(api_router, prefix="/api/v1")
 app.include_router(mobile_router, prefix="/api/v1")
 # Health compuesto (DB + Redis) también en raíz para el healthcheck de Docker.
@@ -185,4 +189,3 @@ def custom_openapi() -> dict:
 
 
 app.openapi = custom_openapi  # type: ignore
-

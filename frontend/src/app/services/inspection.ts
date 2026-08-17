@@ -1,4 +1,5 @@
 import { api } from './api/client';
+import { getApiBaseUrl } from '../config/api-url';
 import type {
   InspectionSession,
   InspectionSessionDetail,
@@ -11,7 +12,7 @@ import type {
   VisionAnalysis,
 } from '../types/inspection';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_BASE_URL = getApiBaseUrl();
 
 export const inspectionService = {
   async createSession(data: CreateSessionRequest): Promise<InspectionSession> {

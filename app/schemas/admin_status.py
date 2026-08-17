@@ -68,3 +68,15 @@ class AdminSystemStatus(BaseModel):
     canary: ProviderCanaryStatus
     jobs: list[JobMetricsRead] = []  # nuevo (G.4)
     providers: ProvidersStatus = ProvidersStatus()  # ADMIN.1
+    selector_health: dict[str, dict[str, int]] = {}
+    """Hits/misses acumulados de selectores de scraping (TASK-017)."""
+
+
+class SelectorHealthRead(BaseModel):
+    """Resumen por selector con ratio de acierto (TASK-017)."""
+
+    key: str
+    hits: int
+    misses: int
+    total: int
+    hit_ratio: float

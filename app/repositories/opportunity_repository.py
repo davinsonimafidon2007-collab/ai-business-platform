@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from uuid import UUID
 
 from sqlalchemy import func, select
@@ -9,6 +10,7 @@ from sqlalchemy.orm import selectinload
 from app.core.limits import clamp_limit
 from app.models.opportunity import Opportunity
 from app.models.vehicle import Vehicle
+from app.repositories.cursor_pagination import CursorPaginator
 
 
 class OpportunityRepository:
@@ -185,6 +187,37 @@ class OpportunityRepository:
 
         return items, total
 
+    async def list_export(
+        self,
+        *,
+        user_id: str,
+        date_from: datetime | None = None,
+        date_to: datetime | None = None,
+        max_rows: int = 5000,
+    ) -> list[Opportunity]:
+        """Lista oportunidades del usuario para export (TASK-018).
+
+        Filtra por rango de ``created_at`` inclusive (si se indica) e incluye
+        el vehículo (selectinload). Tope duro de filas (PERF-001).
+        """
+        query = (
+            select(Opportunity)
+            .options(selectinload(Opportunity.vehicle))
+            .where(Opportunity.vehicle_id.in_(
+                select(Vehicle.id).where(Vehicle.user_id == user_id)
+            ))
+        )
+        if date_from is not None:
+            query = query.where(Opportunity.created_at >= date_from)
+        if date_to is not None:
+            query = query.where(Opportunity.created_at <= date_to)
+        query = (
+            query.order_by(Opportunity.created_at.desc(), Opportunity.id.desc())
+            .limit(max_rows)
+        )
+        result = await self.session.execute(query)
+        return list(result.scalars().all())
+
     async def delete(self, opportunity: Opportunity) -> None:
         """Deletes an opportunity record.
 
@@ -204,4 +237,35 @@ class OpportunityRepository:
             select(func.count(Opportunity.id))
         )
         return result.scalar() or 0
+
+    async def list_cursor(
+        self,
+        cursor: str | None = None,
+        limit: int = 20,
+        user_id: str | None = None,
+    ) -> tuple[list[Opportunity], int, bool, str | None]:
+        """Pagina las oportunidades con keyset (TASK-019).
+
+        Devuelve ``(items, total, has_more, next_cursor)`` ordenado por
+        ``created_at DESC, id DESC``. Con ``user_id`` filtra por vehículos
+        del usuario (join). Los items incluyen ``Opportunity.vehicle``.
+        """
+        limit = clamp_limit(limit)
+        where: list = [Opportunity.vehicle_id.is_not(None)]
+        if user_id is not None:
+            where = [
+                *where,
+                Opportunity.vehicle_id.in_(
+                    select(Vehicle.id).where(Vehicle.user_id == user_id)
+                ),
+            ]
+
+        paginator = CursorPaginator(self.session, Opportunity)
+        # Van con eager-load del vehicle en la query de items del paginator.
+        return await paginator.paginate(
+            cursor,
+            limit,
+            where=where,
+            options=[selectinload(Opportunity.vehicle)],
+        )
 

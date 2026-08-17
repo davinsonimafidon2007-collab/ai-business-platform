@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { Providers } from "@/app/providers";
+import { OfflineBanner } from "@/app/hooks/use-offline";
 
 export const metadata: Metadata = {
   title: "AI Business Platform",
@@ -23,7 +24,10 @@ export default function RootLayout({
   return (
     <html lang="es" suppressHydrationWarning>
       <body className="antialiased">
-        <Providers>{children}</Providers>
+        <Providers>
+          <OfflineBanner />
+          {children}
+        </Providers>
       </body>
     </html>
   );

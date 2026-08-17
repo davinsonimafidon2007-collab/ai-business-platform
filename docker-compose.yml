@@ -7,9 +7,10 @@ services:
     command: >
       sh -c "for i in 1 2 3 4 5; do uv run --no-sync alembic upgrade head && break || echo 'Waiting for DB...' && sleep 3; done && uv run --no-sync uvicorn app.main:app --host 0.0.0.0 --port 8000"
     ports:
-      - "8000:8000"
+      - "${API_PORT:-8000}:8000"
     volumes:
       - .:/app
+      - uploads_data:/app/uploads/inspection_photos
     environment:
       PYTHONUNBUFFERED: "1"
       DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/ai_business_platform
@@ -18,6 +19,8 @@ services:
       ENVIRONMENT: "${ENVIRONMENT:-development}"
       APP_URL: "${APP_URL:-http://localhost:3000}"
       ENABLE_SCHEDULER: "${ENABLE_SCHEDULER:-true}"
+      ENABLE_MOBILE_DE: "${ENABLE_MOBILE_DE:-false}"
+      PROVIDER_HTTP_PROXY: "${PROVIDER_HTTP_PROXY:-}"
       FIREBASE_CREDENTIALS_JSON: "${FIREBASE_CREDENTIALS_JSON}"
       # Uso personal (PERS.CLOSE.1): sin este passthrough el contenedor arranca
       # con AUTH_DISABLED vacío (=false) y la API responde 401 aunque el .env
@@ -32,10 +35,12 @@ services:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      # TASK-004: liveness puro (proceso vivo) para que Docker no reinicie la
+      # API mientras las dependencias (DB/Redis) aún arrancan.
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health/live"]
       interval: 30s
       timeout: 10s
-      retries: 3
+      retries: 10
       start_period: 40s
 
   frontend:
@@ -43,9 +48,11 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
     ports:
-      - "3000:3000"
+      - "${FRONTEND_PORT:-3000}:3000"
     environment:
-      NEXT_PUBLIC_API_URL: "${NEXT_PUBLIC_API_URL:-http://api:8000}"
+      # GRAVE.004: el frontend se sirve desde el HOST (puerto 3000), así que
+      # el navegador no puede resolver 'api'; apuntamos a localhost:8000.
+      NEXT_PUBLIC_API_URL: "${NEXT_PUBLIC_API_URL:-http://localhost:8000}"
       NEXT_PUBLIC_AUTH_DISABLED: "${NEXT_PUBLIC_AUTH_DISABLED:-false}"
     depends_on:
       - api
@@ -84,7 +91,6 @@ services:
 
 volumes:
   postgres_data:
-    name: ai_platform_postgres_data
   redis_data:
-    name: ai_platform_redis_data
+  uploads_data:
 

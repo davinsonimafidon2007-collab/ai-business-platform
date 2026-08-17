@@ -14,6 +14,21 @@ if TYPE_CHECKING:
     from app.models.user import User
 
 
+def _default_search_providers() -> list[str]:
+    """Providers por defecto para una búsqueda (AS24-first, CRIT.001).
+
+    AutoScout24 (DE + ES) y los fixtures ES se consultan siempre; mobile.de
+    solo si ``settings.enable_mobile_de`` (requiere proxy residencial, sino
+    403 anti-bot desde IPs datacenter).
+    """
+    from app.core.config import settings
+
+    providers = ["autoscout24", "autoscout24_es", "es_market_fixture", "coches_net_fixture"]
+    if getattr(settings, "enable_mobile_de", True):
+        providers.insert(0, "mobile_de")
+    return providers
+
+
 # =============================================================================
 # Modelo SQLAlchemy (persistencia)
 # =============================================================================
@@ -61,7 +76,7 @@ class SearchRequest(BaseModel):
     Attributes:
         query: Término de búsqueda (URL o texto).
         max_results: Número máximo de resultados a devolver.
-        providers: Lista de providers a utilizar (ej: ["mobile_de", "autoscout24"]).
+        providers: Lista de providers a utilizar (ej: ["autoscout24", "mobile_de"]).
         country: País de destino para la importación.
         budget_min: Presupuesto mínimo (EUR).
         budget_max: Presupuesto máximo (EUR).
@@ -69,7 +84,7 @@ class SearchRequest(BaseModel):
 
     query: str = Field(..., min_length=1, description="Término de búsqueda")
     max_results: int = Field(default=20, ge=1, le=100, description="Máximo de resultados")
-    providers: list[str] = Field(default_factory=lambda: ["mobile_de", "autoscout24", "autoscout24_es", "es_market_fixture", "coches_net_fixture"])
+    providers: list[str] = Field(default_factory=_default_search_providers)
     country: str = Field(default="ES", max_length=10)
     budget_min: float | None = Field(default=None, ge=0)
     budget_max: float | None = Field(default=None, ge=0)

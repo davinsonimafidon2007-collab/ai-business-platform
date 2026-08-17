@@ -47,6 +47,15 @@ if [ -z "${GOOGLE_WEB_CLIENT_ID:-}" ]; then
     echo "WARNING: GOOGLE_WEB_CLIENT_ID not set. Google Auth plugin may not work."
 fi
 
+# 6. CRIT.002: fail if capacitor.config.ts still has REPLACE_ME placeholders
+if [ -f "capacitor.config.ts" ] && grep -qE "REPLACE_ME|YOUR_|CHANGE_ME" capacitor.config.ts; then
+    echo "ERROR (CRIT.002): capacitor.config.ts still contains placeholder values."
+    echo "  Fill in real Google OAuth client IDs (or remove the GoogleAuth block) before building."
+    ERRORS=$((ERRORS + 1))
+else
+    echo "OK: no placeholder values in capacitor.config.ts"
+fi
+
 if [ $ERRORS -gt 0 ]; then
     echo "=== FAILED: $ERRORS error(s) found ==="
     exit 1

@@ -165,11 +165,13 @@ class SearchEngineService:
         """
         registry = self._provider_registry
 
-        # Registrar mobile_de si no esta ya registrado
-        try:
-            registry.get("mobile_de")
-        except KeyError:
-            registry.register(self._mobile_de_provider)
+        # Registrar mobile_de si no esta ya registrado y está habilitado
+        # (CRIT.001: opcional, requiere proxy residencial anti-bot).
+        if getattr(settings, "enable_mobile_de", True):
+            try:
+                registry.get("mobile_de")
+            except KeyError:
+                registry.register(self._mobile_de_provider)
 
         # Registrar autoscout24 si no esta ya registrado
         try:

@@ -42,6 +42,38 @@ class TestAutoScout24HtmlRegression:
         results = provider._parse_search_results(html, "https://www.autoscout24.de/lst")
         assert results == []
 
+    # --- TASK-016: drift de selectores críticos ---
+
+    def test_search_results_extract_price_selectors(self) -> None:
+        """El selector de precio sigue extrayendo valores en el fixture.
+
+        Si el markup de AS24 cambia (clase/atributo del precio), esto falla y
+        avisa de drift antes de que afecte a producción.
+        """
+        html = _read("autoscout24_search_results.html")
+        provider = AutoScout24Provider()
+        results = provider._parse_search_results(html, "https://www.autoscout24.de/lst")
+        prices = [r.price for r in results if r.price is not None]
+        assert prices, "ningún resultado extrajo precio: drift en selector de precio"
+        assert all(p > 0 for p in prices)
+
+    def test_search_results_extract_mileage_selectors(self) -> None:
+        """El selector de kilometraje sigue extrayendo valores en el fixture."""
+        html = _read("autoscout24_search_results.html")
+        provider = AutoScout24Provider()
+        results = provider._parse_search_results(html, "https://www.autoscout24.de/lst")
+        mileages = [r.mileage for r in results if r.mileage is not None]
+        assert mileages, "ningún resultado extrajo kilometraje: drift en selector"
+        assert all(m > 0 for m in mileages)
+
+    def test_search_results_extract_external_ids(self) -> None:
+        """Los enlaces/detalles siguen extrayendo external_id (drift guard)."""
+        html = _read("autoscout24_search_results.html")
+        provider = AutoScout24Provider()
+        results = provider._parse_search_results(html, "https://www.autoscout24.de/lst")
+        assert len(results) >= 1
+        assert all(r.external_id for r in results)
+
 
 class TestMobileDeHtmlRegression:
     def test_search_results_parse_at_least_one(self) -> None:
@@ -56,3 +88,31 @@ class TestMobileDeHtmlRegression:
         provider = MobileDeProvider()
         results = provider._parse_search_results(html, "https://suchen.mobile.de/fahrzeuge/search.html")
         assert results == []
+
+    # --- TASK-016: drift de selectores críticos ---
+
+    def test_search_results_extract_price_selectors(self) -> None:
+        """El selector de precio sigue extrayendo valores en el fixture."""
+        html = _read("mobile_de_search_results.html")
+        provider = MobileDeProvider()
+        results = provider._parse_search_results(html, "https://suchen.mobile.de/fahrzeuge/search.html")
+        prices = [r.price for r in results if r.price is not None]
+        assert prices, "ningún resultado extrajo precio: drift en selector de precio"
+        assert all(p > 0 for p in prices)
+
+    def test_search_results_extract_mileage_selectors(self) -> None:
+        """El selector de kilometraje sigue extrayendo valores en el fixture."""
+        html = _read("mobile_de_search_results.html")
+        provider = MobileDeProvider()
+        results = provider._parse_search_results(html, "https://suchen.mobile.de/fahrzeuge/search.html")
+        mileages = [r.mileage for r in results if r.mileage is not None]
+        assert mileages, "ningún resultado extrajo kilometraje: drift en selector"
+        assert all(m > 0 for m in mileages)
+
+    def test_search_results_extract_external_ids(self) -> None:
+        """Los enlaces/detalles siguen extrayendo external_id (drift guard)."""
+        html = _read("mobile_de_search_results.html")
+        provider = MobileDeProvider()
+        results = provider._parse_search_results(html, "https://suchen.mobile.de/fahrzeuge/search.html")
+        assert len(results) >= 1
+        assert all(r.external_id for r in results)

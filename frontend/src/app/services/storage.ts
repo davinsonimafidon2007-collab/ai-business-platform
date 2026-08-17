@@ -1,24 +1,23 @@
-import { Capacitor } from "@capacitor/core";
-import { Preferences } from "@capacitor/preferences";
+"use client";
 
-/**
- * secureStorage — almacenamiento seguro de credenciales/sensibles.
- *
- * - En plataforma nativa (Capacitor) delega en `@capacitor/preferences`
- *   (persistencia segura del WebView).
- * - En web/fallback persiste en localStorage con ofuscación base64 (no
- *   texto plano) bajo el prefijo `abp_secure_` para no dejar los tokens
- *   legibles.
- *
- * Todas las operaciones son async y devuelven Promesas para que el contrato
- * sea idéntico tanto en nativo como en web.
- */
+import { Capacitor } from "@capacitor/core";
 
 export const SECURE_PREFIX = "abp_secure_";
 
-const isNative = (): boolean => Capacitor.isNativePlatform();
+let nativePreferences:
+  | typeof import("@capacitor/preferences").Preferences
+  | null = null;
 
-// UTF-8 → base64 seguro (btoa no soporta multibyte directamente).
+async function getPreferences() {
+  if (!nativePreferences) {
+    const { Preferences } = await import("@capacitor/preferences");
+    nativePreferences = Preferences;
+  }
+  return nativePreferences;
+}
+
+const isNative = Capacitor.isNativePlatform();
+
 function encode(value: string): string {
   if (typeof btoa !== "undefined") {
     return btoa(unescape(encodeURIComponent(value)));
@@ -38,38 +37,65 @@ function decode(value: string): string {
 }
 
 export const secureStorage = {
-  async set(key: string, value: string): Promise<void> {
-    if (isNative()) {
-      await Preferences.set({ key, value });
-      return;
+  async get(key: string): Promise<string | null> {
+    if (isNative) {
+      try {
+        const Preferences = await getPreferences();
+        const { value } = await Preferences.get({ key });
+        return value ?? null;
+      } catch (err) {
+        console.warn("Native storage get failed, falling back to localStorage:", err);
+      }
     }
-    localStorage.setItem(SECURE_PREFIX + key, encode(value));
+    if (typeof window !== "undefined") {
+      const raw = window.localStorage.getItem(SECURE_PREFIX + key);
+      return raw === null ? null : decode(raw);
+    }
+    return null;
   },
 
-  async get(key: string): Promise<string | null> {
-    if (isNative()) {
-      const { value } = await Preferences.get({ key });
-      return value ?? null;
+  async set(key: string, value: string): Promise<void> {
+    if (isNative) {
+      try {
+        const Preferences = await getPreferences();
+        await Preferences.set({ key, value });
+        return;
+      } catch (err) {
+        console.warn("Native storage set failed, falling back to localStorage:", err);
+      }
     }
-    const raw = localStorage.getItem(SECURE_PREFIX + key);
-    return raw === null ? null : decode(raw);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(SECURE_PREFIX + key, encode(value));
+    }
   },
 
   async remove(key: string): Promise<void> {
-    if (isNative()) {
-      await Preferences.remove({ key });
-      return;
+    if (isNative) {
+      try {
+        const Preferences = await getPreferences();
+        await Preferences.remove({ key });
+        return;
+      } catch (err) {
+        console.warn("Native storage remove failed:", err);
+      }
     }
-    localStorage.removeItem(SECURE_PREFIX + key);
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem(SECURE_PREFIX + key);
+    }
   },
 
   async clear(): Promise<void> {
-    if (isNative()) {
-      await Preferences.clear();
-      return;
+    if (isNative) {
+      try {
+        const Preferences = await getPreferences();
+        await Preferences.clear();
+      } catch (err) {
+        console.warn("Native storage clear failed:", err);
+      }
+    } else if (typeof window !== "undefined") {
+      Object.keys(window.localStorage)
+        .filter((k) => k.startsWith(SECURE_PREFIX))
+        .forEach((k) => window.localStorage.removeItem(k));
     }
-    Object.keys(localStorage)
-      .filter((k) => k.startsWith(SECURE_PREFIX))
-      .forEach((k) => localStorage.removeItem(k));
   },
 };

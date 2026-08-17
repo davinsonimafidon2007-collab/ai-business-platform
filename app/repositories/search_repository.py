@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.core.limits import clamp_limit
+from app.core.limits import clamp_limit, clamp_skip
 from app.models.search import Search
 
 
@@ -25,6 +25,7 @@ class SearchRepository:
         return result.scalar_one_or_none()
 
     async def list_all(self, skip: int = 0, limit: int = 100) -> list[Search]:
+        skip = clamp_skip(skip)
         limit = clamp_limit(limit)
         result = await self.session.execute(
             select(Search)
@@ -36,6 +37,7 @@ class SearchRepository:
         return list(result.scalars().all())
 
     async def list_by_user(self, user_id: str, skip: int = 0, limit: int = 100) -> list[Search]:
+        skip = clamp_skip(skip)
         limit = clamp_limit(limit)
         result = await self.session.execute(
             select(Search)

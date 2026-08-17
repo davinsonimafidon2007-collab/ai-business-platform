@@ -13,6 +13,7 @@ from app.exceptions import (
 from app.models.password_reset_token import PasswordResetToken
 from app.notifications.email_provider import EmailProvider
 from app.repositories.password_reset_token_repository import PasswordResetTokenRepository
+from app.repositories.refresh_token_repository import RefreshTokenRepository
 from app.repositories.user_repository import UserRepository
 from app.services.auth_service import password_hasher
 
@@ -28,10 +29,12 @@ class PasswordResetService:
         user_repository: UserRepository,
         token_repository: PasswordResetTokenRepository,
         email_provider: EmailProvider | None = None,
+        refresh_token_repository: RefreshTokenRepository | None = None,
     ) -> None:
         self.user_repository = user_repository
         self.token_repository = token_repository
         self.email_provider = email_provider
+        self.refresh_token_repository = refresh_token_repository
 
     @staticmethod
     def _generate_token() -> str:
@@ -112,6 +115,12 @@ class PasswordResetService:
 
         user.hashed_password = password_hasher.hash(new_password)
         await self.user_repository.update(user)
+
+        # TASK-003: invalidar sesiones activas (refresh_tokens) tras el reset
+        if self.refresh_token_repository is not None:
+            await self.refresh_token_repository.revoke_all_by_user_id(
+                token_record.user_id
+            )
 
         return token_record.user_id
 

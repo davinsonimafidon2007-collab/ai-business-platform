@@ -1,12 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { searchService } from "@/app/services/search";
 import type {
-  DashboardStats,
   SearchAPIRequest,
   SearchAPIResponse,
   SearchFilters,
   SearchHistory,
 } from "@/app/types/vehicle";
+import type { DashboardStats } from "@/app/types/search-orders";
 
 export function useSearchVehicles() {
   const queryClient = useQueryClient();

@@ -20,8 +20,8 @@ class VehicleService:
     async def get_vehicle(self, vehicle_id: str | UUID) -> Vehicle | None:
         return await self.repository.get_by_id(vehicle_id)
 
-    async def get_vehicle_by_external_id(self, source: str, external_id: str) -> Vehicle | None:
-        return await self.repository.get_by_external_id(source, external_id)
+    async def get_vehicle_by_external_id(self, source: str, external_id: str, user_id: str | None = None) -> Vehicle | None:
+        return await self.repository.get_by_external_id(source, external_id, user_id)
 
     async def list_vehicles_by_user(self, user_id: str, skip: int = 0, limit: int = 100) -> list[Vehicle]:
         return await self.repository.list_by_user(user_id, skip=skip, limit=limit)
@@ -56,23 +56,26 @@ class VehicleService:
         """
         return await provider.search(query, **kwargs)
 
-    async def import_from_provider_result(self, result: VehicleSearchResult) -> Vehicle:
+    async def import_from_provider_result(self, result: VehicleSearchResult, user_id: str) -> Vehicle:
         """Convierte un DTO de provider en un modelo Vehicle y lo persiste.
 
-        Si el vehículo ya existe (mismo source + external_id), lo actualiza.
-        Si no existe, lo crea.
+        Si el vehículo ya existe (mismo user_id + source + external_id),
+        lo actualiza. Si no existe, lo crea. Usa user_id cuando está
+        disponible para garantizar consistencia multi-tenant.
 
         Args:
             result: DTO con los datos del vehículo desde el provider.
+            user_id: Usuario asociado (opcional, pero recomendado).
 
         Returns:
             El modelo Vehicle creado o actualizado.
         """
-        existing = await self.repository.get_by_external_id(result.source, result.external_id)
+        existing = await self.repository.get_by_external_id(result.source, result.external_id, user_id)
         if existing is not None:
             return await self._update_from_dto(existing, result)
 
         data = {
+            "user_id": user_id,
             "source": result.source,
             "external_id": result.external_id,
             "url": result.url,
@@ -96,7 +99,7 @@ class VehicleService:
             "currency": result.currency,
             "vin": result.vin,
             "description": result.description,
-            "images": ",".join(result.images) if result.images else None,
+            "images": list(result.images) if result.images else None,
             "equipment": ",".join(result.equipment) if result.equipment else None,
         }
         vehicle = Vehicle(**data)
@@ -148,7 +151,7 @@ class VehicleService:
         if result.description is not None:
             update_data["description"] = result.description
         if result.images:
-            update_data["images"] = ",".join(result.images)
+            update_data["images"] = list(result.images)
         if result.equipment:
             update_data["equipment"] = ",".join(result.equipment)
 

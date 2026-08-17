@@ -43,7 +43,7 @@ describe("useLogout", () => {
   it("vacía la caché de React Query y resetea store + localStorage", async () => {
     const { Wrapper, queryClient } = createWrapper();
     queryClient.setQueryData(["vehicles"], [{ id: "1" }]);
-    useAuthStore
+    await useAuthStore
       .getState()
       .setSession({ accessToken: "at", refreshToken: "rt", user });
 

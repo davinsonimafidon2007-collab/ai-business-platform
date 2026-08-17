@@ -40,6 +40,12 @@ def _no_db(monkeypatch: pytest.MonkeyPatch):
     from app.api.v1 import opportunities as opportunities_module
     from app.database import get_db_session
 
+    # Mock the lifespan database and redis init to prevent actual connections
+    monkeypatch.setattr("app.core.redis.init_redis", AsyncMock())
+    monkeypatch.setattr("app.core.redis.close_redis", AsyncMock())
+    monkeypatch.setattr("app.database.db_manager.init", AsyncMock())
+    monkeypatch.setattr("app.database.db_manager.shutdown", AsyncMock())
+
     async def _fake_session():
         yield MagicMock()
 

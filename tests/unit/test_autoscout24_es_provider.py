@@ -22,6 +22,7 @@ def test_source_name_and_base_url() -> None:
 def test_not_registered_when_flag_false(monkeypatch) -> None:
     monkeypatch.setattr(settings, "enable_autoscout24_es", False)
     monkeypatch.setattr(settings, "enable_es_market_fixture", False)
+    monkeypatch.setattr(settings, "enable_mobile_de", True)
     ProviderRegistry.ensure_default_providers()
     assert "autoscout24_es" not in ProviderRegistry.list_providers()
     assert "mobile_de" in ProviderRegistry.list_providers()

@@ -118,12 +118,47 @@ class OpportunityAlertService:
             return False
         return True
 
-    def _in_cooldown(self, vehicle_key: str) -> bool:
-        """Comprueba si el vehicle_id está en cooldown."""
+    def _in_cooldown(self, vehicle_key: str, channel: str = "email") -> bool:
+        """Comprueba si el vehicle_id está en cooldown (memoria del proceso)."""
         last = self._last_sent.get(vehicle_key)
         if not last:
             return False
         return datetime.now(UTC) - last < timedelta(hours=self._cooldown)
+
+    @staticmethod
+    def _cooldown_key(vehicle_id: str, channel: str = "email") -> str:
+        """Clave Redis del cooldown para un vehículo y canal (TASK-005)."""
+        return f"alert:cooldown:{channel}:{vehicle_id}"
+
+    async def _cooldown_active(self, vehicle_id: str, channel: str = "email") -> bool:
+        """¿El vehicle_id está en cooldown? Redis si está disponible, si no memoria.
+
+        TASK-005: el cooldown se persiste en Redis (sobrevive reinicios y se
+        comparte entre réplicas). Si Redis no está disponible (tests / dev sin
+        Redis), se usa el dict ``_last_sent`` del proceso como fallback.
+        """
+        from app.core.redis import cache_get
+
+        raw = await cache_get(self._cooldown_key(vehicle_id, channel))
+        if raw is None:
+            return self._in_cooldown(vehicle_id)
+        try:
+            last = datetime.fromisoformat(raw)
+            return datetime.now(UTC) - last < timedelta(hours=self._cooldown)
+        except ValueError:
+            # Valor corrupto: se ignora (y se reescribe al siguiente envío).
+            return self._in_cooldown(vehicle_id)
+
+    async def _mark_sent(self, vehicle_id: str, channel: str = "email") -> None:
+        """Registra el envío en memoria y persiste el cooldown en Redis."""
+        self._last_sent[vehicle_id] = datetime.now(UTC)
+        from app.core.redis import cache_set
+
+        await cache_set(
+            self._cooldown_key(vehicle_id, channel),
+            self._last_sent[vehicle_id].isoformat(),
+            ttl_seconds=self._cooldown * 3600,
+        )
 
     # ------------------------------------------------------------------
     # API pública
@@ -162,13 +197,13 @@ class OpportunityAlertService:
             or getattr(vehicle, "id", None)
             or getattr(opportunity, "id", "")
         )
-        if self._in_cooldown(vid):
+        if await self._cooldown_active(vid, "email"):
             logger.info("opportunity_alert: cooldown vehicle_id=%s", vid)
             return False
 
         subject, body = self._build_message(opportunity, vehicle)
         await self._send(user_email, subject, body)
-        self._last_sent[vid] = datetime.now(UTC)
+        await self._mark_sent(vid, "email")
         return True
 
     # ------------------------------------------------------------------

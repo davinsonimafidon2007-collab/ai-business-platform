@@ -23,6 +23,14 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/ai_business_platform"
     jwt_secret_key: str = ""
     jwt_algorithm: str = "HS256"
+    jwt_previous_secrets: list[str] = []
+    """Claves JWT anteriores usadas al rotar ``jwt_secret_key``.
+
+    TASK-015: durante la rotación de credenciales, los tokens firmados con la
+    clave anterior deben seguir siendo válidos hasta que expiren. Se puede
+    definir como lista separada por comas en ``JWT_PREVIOUS_SECRETS``. El
+    decode intenta primero la clave actual y después estas previas.
+    """
 
     auth_disabled: bool = False
     """Si True, no exige JWT: inyecta usuario local ADMIN (uso personal).
@@ -190,12 +198,21 @@ class Settings(BaseSettings):
     provider_http_max_retries: int = 3
     provider_http_retry_backoff_min: int = 1
     provider_http_retry_backoff_max: int = 60
+    # TASK-010: tamaño máximo de descarga HTML (bytes). Evita fugas de memoria
+    # con respuestas gigantes; se aplica leyendo en streaming con corte.
+    provider_http_max_html_bytes: int = 10 * 1024 * 1024
     # Proxy residencial (ej. http://user:pass@host:port). Vacío = sin proxy.
     provider_http_proxy: str = ""
     # Cookie header de navegador real (ej. "sid=abc; consent=1")
     provider_http_cookies: str = ""
     # Delay mínimo entre peticiones (ms). 0 = off. Prod: 800–1500
     provider_http_min_delay_ms: int = 0
+
+    # mobile.de (CRIT.001). Fuente secundaria opcional. Sin proxy residencial
+    # (PROVIDER_HTTP_PROXY) la mayoría de IPs reciben 403 anti-bot. Por
+    # defecto desactivado para evitar retries en fuentes caídas; activar
+    # solo cuando haya proxy disponible. AutoScout24 DE es primaria.
+    enable_mobile_de: bool = False
 
     # =========================================================================
     # Scheduler / Jobs configuration
@@ -392,6 +409,30 @@ class Settings(BaseSettings):
 
     opportunity_alert_cooldown_hours: int = 24
     """Do not re-send an alert for the same vehicle_id within N hours."""
+
+    # =========================================================================
+    # Telegram alerts (notification task)
+    # =========================================================================
+    telegram_bot_token: str = ""
+    """Telegram Bot API token. Empty -> Telegram alerts disabled (log-only)."""
+
+    telegram_chat_id: str = ""
+    """Telegram chat_id (o @canal) where opportunity alerts are sent."""
+
+    telegram_alert_enabled: bool = True
+    """Master toggle for Telegram opportunity alerts."""
+
+    telegram_alert_min_recommendation: str = "BUY"
+    """Minimum recommendation to trigger a Telegram alert (BUY | CONSIDER)."""
+
+    telegram_alert_min_margin_percent: float = 0.0
+    """Minimum net profit margin (%) to trigger a Telegram alert (0 = solo por recomendación)."""
+
+    telegram_alert_min_score: float = 0.0
+    """Minimum opportunity_score to trigger a Telegram alert (0 = only by recommendation)."""
+
+    telegram_alert_cooldown_hours: int = 6
+    """Do not re-send a Telegram alert for the same vehicle_id within N hours."""
 
     # =========================================================================
     # Redis configuration

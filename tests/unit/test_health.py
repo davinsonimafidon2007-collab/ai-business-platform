@@ -116,3 +116,26 @@ async def test_health_db_down_redis_error() -> None:
     assert body["checks"]["database"] == "error"
     assert body["checks"]["redis"] == "error"
 
+
+@pytest.mark.asyncio
+async def test_health_live_always_ok() -> None:
+    """Liveness (TASK-004): /health/live responde 200 sin tocar DB/Redis."""
+    # No se parchean _check_database/_check_redis a propósito: el liveness no
+    # debe consultar dependencias, así que /health/live funciona incluso con
+    # DB/Redis caídos.
+    response = client.get("/health/live")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "ok"
+    assert body["checks"]["api"] == "ok"
+
+
+@pytest.mark.asyncio
+async def test_health_live_registered_in_api_prefix() -> None:
+    """/api/v1/health/live también existe (mismo router montado en raíz)."""
+    response = client.get("/api/v1/health/live")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "ok"
+

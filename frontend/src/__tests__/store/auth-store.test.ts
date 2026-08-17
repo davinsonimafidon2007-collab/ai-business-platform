@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { useAuthStore, TOKEN_KEYS, getTokenExpiry, decodeJwtPayload } from "@/app/store/auth-store";
+import { secureStorage, SECURE_PREFIX } from "@/app/services/storage";
 import type { User } from "@/app/types/auth";
 
 const user: User = {
@@ -17,7 +18,8 @@ const b64url = (obj: object) =>
 const makeJwt = (payload: object) => `header.${b64url(payload)}.signature`;
 
 describe("auth-store", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    await secureStorage.clear();
     window.localStorage.clear();
     useAuthStore.setState({
       user: null,
@@ -26,8 +28,8 @@ describe("auth-store", () => {
     });
   });
 
-  it("setSession persiste tokens + user y autentica", () => {
-    useAuthStore
+  it("setSession persiste tokens + user y autentica", async () => {
+    await useAuthStore
       .getState()
       .setSession({ accessToken: "at", refreshToken: "rt", user });
 
@@ -35,18 +37,18 @@ describe("auth-store", () => {
     expect(state.isAuthenticated).toBe(true);
     expect(state.isLoading).toBe(false);
     expect(state.user?.email).toBe("user@example.com");
-    expect(window.localStorage.getItem(TOKEN_KEYS.accessToken)).toBe("at");
-    expect(window.localStorage.getItem(TOKEN_KEYS.refreshToken)).toBe("rt");
-    expect(window.localStorage.getItem(TOKEN_KEYS.user)).toBe(
+    expect(await secureStorage.get(TOKEN_KEYS.accessToken)).toBe("at");
+    expect(await secureStorage.get(TOKEN_KEYS.refreshToken)).toBe("rt");
+    expect(await secureStorage.get(TOKEN_KEYS.user)).toBe(
       JSON.stringify(user)
     );
   });
 
-  it("initialize hidrata desde localStorage cuando hay token + user", () => {
-    window.localStorage.setItem(TOKEN_KEYS.accessToken, "at");
-    window.localStorage.setItem(TOKEN_KEYS.user, JSON.stringify(user));
+  it("initialize hidrata desde localStorage cuando hay token + user", async () => {
+    await secureStorage.set(TOKEN_KEYS.accessToken, "at");
+    await secureStorage.set(TOKEN_KEYS.user, JSON.stringify(user));
 
-    useAuthStore.getState().initialize();
+    await useAuthStore.getState().initialize();
 
     const state = useAuthStore.getState();
     expect(state.isAuthenticated).toBe(true);
@@ -54,63 +56,63 @@ describe("auth-store", () => {
     expect(state.user?.email).toBe("user@example.com");
   });
 
-  it("initialize marca no autenticado y deja de cargar sin token", () => {
-    useAuthStore.getState().initialize();
+  it("initialize marca no autenticado y deja de cargar sin token", async () => {
+    await useAuthStore.getState().initialize();
 
     const state = useAuthStore.getState();
     expect(state.isAuthenticated).toBe(false);
     expect(state.isLoading).toBe(false);
   });
 
-  it("initialize no rompe con user JSON inválido", () => {
-    window.localStorage.setItem(TOKEN_KEYS.accessToken, "at");
-    window.localStorage.setItem(TOKEN_KEYS.user, "{invalid json");
+  it("initialize no rompe con user JSON inválido", async () => {
+    await secureStorage.set(TOKEN_KEYS.accessToken, "at");
+    await secureStorage.set(TOKEN_KEYS.user, "{invalid json");
 
-    useAuthStore.getState().initialize();
+    await useAuthStore.getState().initialize();
 
     const state = useAuthStore.getState();
     expect(state.isAuthenticated).toBe(false);
     expect(state.isLoading).toBe(false);
   });
 
-  it("logout limpia estado y localStorage", () => {
-    useAuthStore
+  it("logout limpia estado y localStorage", async () => {
+    await useAuthStore
       .getState()
       .setSession({ accessToken: "at", refreshToken: "rt", user });
 
-    useAuthStore.getState().logout();
+    await useAuthStore.getState().logout();
 
     const state = useAuthStore.getState();
     expect(state.isAuthenticated).toBe(false);
     expect(state.user).toBeNull();
     expect(state.isLoading).toBe(false);
-    expect(window.localStorage.getItem(TOKEN_KEYS.accessToken)).toBeNull();
-    expect(window.localStorage.getItem(TOKEN_KEYS.refreshToken)).toBeNull();
-    expect(window.localStorage.getItem(TOKEN_KEYS.user)).toBeNull();
+    expect(await secureStorage.get(TOKEN_KEYS.accessToken)).toBeNull();
+    expect(await secureStorage.get(TOKEN_KEYS.refreshToken)).toBeNull();
+    expect(await secureStorage.get(TOKEN_KEYS.user)).toBeNull();
   });
 
-  it("initialize no hidrata sesión con access token expirado y limpia storage", () => {
+  it("initialize no hidrata sesión con access token expirado y limpia storage", async () => {
     const expiredToken = makeJwt({ exp: Math.floor(Date.now() / 1000) - 1000 });
-    window.localStorage.setItem(TOKEN_KEYS.accessToken, expiredToken);
-    window.localStorage.setItem(TOKEN_KEYS.refreshToken, "rt");
-    window.localStorage.setItem(TOKEN_KEYS.user, JSON.stringify(user));
+    await secureStorage.set(TOKEN_KEYS.accessToken, expiredToken);
+    await secureStorage.set(TOKEN_KEYS.refreshToken, "rt");
+    await secureStorage.set(TOKEN_KEYS.user, JSON.stringify(user));
 
-    useAuthStore.getState().initialize();
+    await useAuthStore.getState().initialize();
 
     const state = useAuthStore.getState();
     expect(state.isAuthenticated).toBe(false);
     expect(state.isLoading).toBe(false);
-    expect(window.localStorage.getItem(TOKEN_KEYS.accessToken)).toBeNull();
-    expect(window.localStorage.getItem(TOKEN_KEYS.refreshToken)).toBeNull();
-    expect(window.localStorage.getItem(TOKEN_KEYS.user)).toBeNull();
+    expect(await secureStorage.get(TOKEN_KEYS.accessToken)).toBeNull();
+    expect(await secureStorage.get(TOKEN_KEYS.refreshToken)).toBeNull();
+    expect(await secureStorage.get(TOKEN_KEYS.user)).toBeNull();
   });
 
-  it("initialize hidrata sesión cuando el token no está expirado", () => {
+  it("initialize hidrata sesión cuando el token no está expirado", async () => {
     const validToken = makeJwt({ exp: Math.floor(Date.now() / 1000) + 3600 });
-    window.localStorage.setItem(TOKEN_KEYS.accessToken, validToken);
-    window.localStorage.setItem(TOKEN_KEYS.user, JSON.stringify(user));
+    await secureStorage.set(TOKEN_KEYS.accessToken, validToken);
+    await secureStorage.set(TOKEN_KEYS.user, JSON.stringify(user));
 
-    useAuthStore.getState().initialize();
+    await useAuthStore.getState().initialize();
 
     const state = useAuthStore.getState();
     expect(state.isAuthenticated).toBe(true);

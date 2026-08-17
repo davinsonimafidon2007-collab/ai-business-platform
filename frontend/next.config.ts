@@ -17,6 +17,7 @@ const withPWA = require("next-pwa")({
 // La config de webpack es un función que puede devolver undefined para
 // cohexistir con otras configs (bundle-analyzer).
 const nextConfig: NextConfig = {
+  output: "export",
   images: {
     unoptimized: true,
   },

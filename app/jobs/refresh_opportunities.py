@@ -38,11 +38,13 @@ class RefreshOpportunityJob(Job):
                 from app.repositories.vehicle_repository import VehicleRepository
                 from app.services.evaluation_engine import EvaluationEngine
                 from app.services.opportunity_alert_service import OpportunityAlertService
+                from app.services.telegram_alert_service import TelegramAlertService
 
                 opp_repo = OpportunityRepository(session)
                 vehicle_repo = VehicleRepository(session)
                 user_repo = UserRepository(session)
                 alert_service = OpportunityAlertService()
+                telegram_service = TelegramAlertService()
                 engine = EvaluationEngine(
                     import_cost_profile=getattr(
                         settings, "default_import_cost_profile", None
@@ -109,6 +111,45 @@ class RefreshOpportunityJob(Job):
                             except Exception:
                                 logger.warning(
                                     "opportunity_alert failed for vehicle %s",
+                                    vehicle.id,
+                                    exc_info=True,
+                                )
+
+                            # Push notification (TASK-010, FASE 5): FCM al dueño
+                            # del vehículo. Dry-run si Firebase no está configurado.
+                            try:
+                                owner = await user_repo.get_by_id(vehicle.user_id)
+                                if owner is not None:
+                                    from app.services.push_service import (
+                                        notify_opportunity_created,
+                                    )
+
+                                    await notify_opportunity_created(
+                                        user_id=str(owner.id),
+                                        opportunity_data={
+                                            "brand": getattr(vehicle, "brand", ""),
+                                            "model": getattr(vehicle, "model", ""),
+                                            "roi": getattr(opp, "roi", None),
+                                            "id": str(getattr(opp, "id", "")),
+                                        },
+                                    )
+                            except Exception:
+                                logger.warning(
+                                    "push_notification failed for vehicle %s",
+                                    vehicle.id,
+                                    exc_info=True,
+                                )
+
+                            # Alertas Telegram (Task C.3): notify al canal configurado
+                            try:
+                                await telegram_service.send_opportunity_alert(
+                                    opportunity=opp,
+                                    vehicle=vehicle,
+                                    evaluation=result,
+                                )
+                            except Exception:
+                                logger.warning(
+                                    "telegram_alert failed for vehicle %s",
                                     vehicle.id,
                                     exc_info=True,
                                 )

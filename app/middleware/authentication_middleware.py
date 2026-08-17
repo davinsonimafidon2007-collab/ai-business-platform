@@ -18,6 +18,7 @@ from app.services.user_service import UserService
 # Paths that should not require authentication
 PUBLIC_PATHS: set[str] = {
     "/health",
+    "/health/live",
     "/docs",
     "/redoc",
     "/openapi.json",

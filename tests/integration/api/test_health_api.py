@@ -6,6 +6,7 @@ health `/health` debe responder 200 y reportar checks de api/database/redis.
 
 from __future__ import annotations
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -13,6 +14,7 @@ from app.main import app
 client = TestClient(app)
 
 
+@pytest.mark.integration_db
 def test_health_composite_returns_200_and_checks() -> None:
     """GET /health → 200 con checks de api/database/redis."""
     response = client.get("/health")
@@ -27,6 +29,7 @@ def test_health_composite_returns_200_and_checks() -> None:
     assert isinstance(body["providers"], list)
 
 
+@pytest.mark.integration_db
 def test_health_api_v1_also_reports_checks() -> None:
     """GET /api/v1/health mantiene el mismo contrato compuesto."""
     response = client.get("/api/v1/health")

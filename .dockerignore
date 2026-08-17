@@ -9,6 +9,8 @@ htmlcov
 .coverage
 tests/
 frontend/
+docs/
+scripts/
 android/
 node_modules/
 npm-debug.log*

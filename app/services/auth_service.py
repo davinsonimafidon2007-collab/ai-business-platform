@@ -90,7 +90,20 @@ class AuthService:
         return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
 
     def decode_access_token(self, token: str) -> dict[str, Any]:
-        try:
-            return jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
-        except JWTError as exc:
-            raise AuthenticationError("Invalid or expired token") from exc
+        """Decodifica un JWT intentando la clave actual y las previas.
+
+        TASK-015: si ``jwt_secret_key`` se ha rotado, los tokens firmados con
+        ``jwt_previous_secrets`` siguen siendo válidos hasta su expiración.
+        """
+        keys = [settings.jwt_secret_key, *settings.jwt_previous_secrets]
+        last_error: JWTError | None = None
+        for key in keys:
+            if not key:
+                continue
+            try:
+                return jwt.decode(
+                    token, key, algorithms=[settings.jwt_algorithm]
+                )
+            except JWTError as exc:
+                last_error = exc
+        raise AuthenticationError("Invalid or expired token") from last_error

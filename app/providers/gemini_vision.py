@@ -79,6 +79,9 @@ class GeminiVisionProvider:
         http_client: Optional pre-configured httpx.AsyncClient.
     """
 
+    provider_name = "gemini"
+    simulated = False
+
     def __init__(
         self,
         api_key: str,

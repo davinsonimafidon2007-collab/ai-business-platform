@@ -123,7 +123,15 @@ async def get_dashboard_stats(
     recent_vehicles_rows = (await session.execute(vehicles_stmt)).all()
     recent_vehicles = []
     for vehicle, evaluation in recent_vehicles_rows:
-        images = (vehicle.images or "").split(",")
+        # CRIT.004: la columna es JSON (lista) desde la migración k3l4m5n6o7p8.
+        # Soportar legacy string (CSV) por si una fila quedó sin migrar.
+        raw_images = vehicle.images
+        if isinstance(raw_images, list):
+            images = [str(i) for i in raw_images if i]
+        elif isinstance(raw_images, str):
+            images = [i.strip() for i in raw_images.split(",") if i.strip()]
+        else:
+            images = []
         recent_vehicles.append(
             {
                 "id": vehicle.id,
@@ -132,7 +140,7 @@ async def get_dashboard_stats(
                 "year": vehicle.year,
                 "price": vehicle.price,
                 "currency": vehicle.currency,
-                "image_url": images[0].strip() if images and images[0].strip() else None,
+                "image_url": images[0] if images else None,
                 "score": evaluation.score if evaluation else None,
                 "classification": evaluation.classification if evaluation else None,
                 "estimated_profit": (

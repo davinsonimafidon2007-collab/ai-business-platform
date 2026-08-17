@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from app.models.api_key import ApiKey
     from app.models.deal import Deal
     from app.models.inspection import InspectionSession
+    from app.models.push_token import PushToken
     from app.models.refresh_token import RefreshToken
     from app.models.search import Search
     from app.models.search_history import SearchHistory
@@ -73,6 +74,12 @@ class User(Base):
     )
     refresh_tokens: Mapped[list[RefreshToken]] = relationship(
         "RefreshToken",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+    push_tokens: Mapped[list[PushToken]] = relationship(
+        "PushToken",
         back_populates="user",
         cascade="all, delete-orphan",
         passive_deletes=True,

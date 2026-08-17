@@ -100,9 +100,11 @@ class CostBreakdown:
     # ------------------------------------------------------------------
     # Explicación por componente (labels legibles, domain en español)
     # ------------------------------------------------------------------
-    # (key dentro del dataclass, label mostrable, agrupación fija/variable)
+    # (key dentro del dataclass, label mostrable, agrupación fixed/variable)
+    # MED.001: kind siempre en inglés ("fixed"/"variable") para que el API
+    # y el frontend no dependan del idioma del backend.
     _COMPONENTS: ClassVar[tuple[tuple[str, str, str], ...]] = (
-        ("purchase_price", "Precio de compra", "fijo"),
+        ("purchase_price", "Precio de compra", "fixed"),
         ("transport_cost", "Transporte", "fixed"),
         ("registration_cost", "Matriculación", "fixed"),
         ("inspection_cost", "ITV / inspección", "fixed"),
@@ -115,7 +117,7 @@ class CostBreakdown:
     def components(self) -> list[dict[str, Any]]:
         """Devuelve cada componente con clave, label legible, agrupación y
         amount (EUR). Cada elemento es dict con ``key``, ``label``, ``kind``
-        (``fixed``/``variable``/``fijo``) y ``amount``. Útil para exponer el
+        (``fixed``/``variable``) y ``amount``. Útil para exponer el
         breakdown en APIs/front sin duplicar nombres técnicos.
         """
         return [
@@ -383,10 +385,12 @@ class ProfitAnalyzer:
         paperwork_cost = profile.paperwork_cost
         base_miscellaneous = profile.miscellaneous_cost
 
-        # IEDMT: impuesto especial por CO₂ (solo España, co2 disponible)
+        # IEDMT: impuesto especial por CO₂ (solo España, co2 disponible).
+        # GRAVE.008: es un % de la base imponible (purchase_price), no un
+        # importe fijo por tramo.
         from app.services.iedmt import iedmt_tax
 
-        iedmt = iedmt_tax(co2_gkm) if co2_gkm else 0.0
+        iedmt = iedmt_tax(co2_gkm, purchase_price) if co2_gkm else 0.0
 
         # Costes variables (porcentaje sobre el precio de compra)
         # Si hay IEDMT, se suma al tax_rate base

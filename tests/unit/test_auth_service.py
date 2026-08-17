@@ -188,3 +188,67 @@ async def test_authenticate_with_google_propagates_verify_error(monkeypatch) -> 
     service = AuthService(repository)
     with pytest.raises(AuthenticationError, match="Firebase is not configured"):
         await service.authenticate_with_google(id_token="tok")
+
+
+# --- Rotación de claves JWT (TASK-015) ---
+
+def test_decode_with_rotated_key_still_valid(monkeypatch) -> None:
+    """Un token firmado con la clave anterior se decodifica durante la rotación."""
+    from app.core.config import settings
+
+    old_key = "a" * 40
+    new_key = "b" * 40
+    monkeypatch.setattr(settings, "jwt_secret_key", old_key)
+    monkeypatch.setattr(settings, "jwt_previous_secrets", [])
+
+    repository = AsyncMock()
+    service = AuthService(repository)
+    token = service.create_access_token(user_id="user-123")
+
+    # Rotamos: la clave actual es nueva, la antigua queda como previa.
+    monkeypatch.setattr(settings, "jwt_secret_key", new_key)
+    monkeypatch.setattr(settings, "jwt_previous_secrets", [old_key])
+
+    payload = service.decode_access_token(token)
+    assert payload["sub"] == "user-123"
+
+
+def test_decode_rejects_token_when_previous_keys_do_not_match(monkeypatch) -> None:
+    """Con claves incorrectas (actual y previas) el token se rechaza."""
+    from app.core.config import settings
+    from app.exceptions import AuthenticationError
+
+    key = "c" * 40
+    monkeypatch.setattr(settings, "jwt_secret_key", key)
+    monkeypatch.setattr(settings, "jwt_previous_secrets", [])
+
+    repository = AsyncMock()
+    service = AuthService(repository)
+    token = service.create_access_token(user_id="user-456")
+
+    # Ni la clave actual ni la previa coinciden con la del token.
+    monkeypatch.setattr(settings, "jwt_secret_key", "d" * 40)
+    monkeypatch.setattr(settings, "jwt_previous_secrets", ["e" * 40])
+
+    with pytest.raises(AuthenticationError, match="Invalid or expired token"):
+        service.decode_access_token(token)
+
+
+def test_decode_uses_previous_key_only_when_current_fails(monkeypatch) -> None:
+    """Se intenta primero la clave actual; si falla, la previa."""
+    from app.core.config import settings
+
+    old_key = "f" * 40
+    new_key = "g" * 40
+    monkeypatch.setattr(settings, "jwt_secret_key", old_key)
+    monkeypatch.setattr(settings, "jwt_previous_secrets", [])
+
+    repository = AsyncMock()
+    service = AuthService(repository)
+    token = service.create_access_token(user_id="user-789")
+
+    monkeypatch.setattr(settings, "jwt_secret_key", new_key)
+    monkeypatch.setattr(settings, "jwt_previous_secrets", [old_key])
+
+    # Decode exitoso vía clave previa (la actual no firma este token).
+    assert service.decode_access_token(token)["sub"] == "user-789"

@@ -7,6 +7,8 @@ from app.providers.registry import ProviderRegistry
 from app.repositories.vehicle_repository import VehicleRepository
 from app.services.vehicle_service import VehicleService
 
+TEST_USER_ID = "123e4567-e89b-12d3-a456-426614174000"
+
 
 class MockVehicleRepository(VehicleRepository):
     """Mock repository for testing."""
@@ -27,10 +29,11 @@ class MockVehicleRepository(VehicleRepository):
                 return v
         return None
 
-    async def get_by_external_id(self, source: str, external_id: str) -> Vehicle | None:
+    async def get_by_external_id(self, source: str, external_id: str, user_id: str | None = None) -> Vehicle | None:
         for v in self.vehicles.values():
             if v.source == source and v.external_id == external_id:
-                return v
+                if user_id is None or str(v.user_id) == str(user_id):
+                    return v
         return None
 
     async def list_all(self, skip: int = 0, limit: int = 100) -> list[Vehicle]:
@@ -137,7 +140,7 @@ async def test_import_from_provider_creates_new_vehicle(vehicle_service):
         equipment=["GPS", "Leather seats"],
     )
 
-    vehicle = await vehicle_service.import_from_provider_result(result)
+    vehicle = await vehicle_service.import_from_provider_result(result, user_id=TEST_USER_ID)
 
     assert vehicle.id is not None
     assert vehicle.source == "mock_provider"
@@ -151,7 +154,7 @@ async def test_import_from_provider_creates_new_vehicle(vehicle_service):
     assert vehicle.fuel_type == "Diesel"
     assert vehicle.transmission == "Automatic"
     assert vehicle.mileage == 15000
-    assert vehicle.images == "img1.jpg,img2.jpg"
+    assert vehicle.images == ["img1.jpg", "img2.jpg"]
     assert vehicle.equipment == "GPS,Leather seats"
 
 
@@ -168,7 +171,7 @@ async def test_import_from_provider_updates_existing_vehicle(vehicle_service):
         price=35000.0,
         currency="EUR",
     )
-    vehicle1 = await vehicle_service.import_from_provider_result(result1)
+    vehicle1 = await vehicle_service.import_from_provider_result(result1, user_id=TEST_USER_ID)
     original_updated_at = vehicle1.updated_at
 
     # Second import with updated data
@@ -186,7 +189,7 @@ async def test_import_from_provider_updates_existing_vehicle(vehicle_service):
     import asyncio
     await asyncio.sleep(0.1)  # Ensure timestamp changes
 
-    vehicle2 = await vehicle_service.import_from_provider_result(result2)
+    vehicle2 = await vehicle_service.import_from_provider_result(result2, user_id=TEST_USER_ID)
 
     assert vehicle2.id == vehicle1.id
     assert vehicle2.price == 32000.0  # Updated price
@@ -211,7 +214,7 @@ async def test_import_from_provider_with_none_values(vehicle_service):
         fuel_type=None,
     )
 
-    vehicle = await vehicle_service.import_from_provider_result(result)
+    vehicle = await vehicle_service.import_from_provider_result(result, user_id=TEST_USER_ID)
 
     assert vehicle.source == "mock_provider"
     assert vehicle.external_id == "ext-partial"
@@ -240,7 +243,7 @@ async def test_import_from_provider_empty_lists(vehicle_service):
         equipment=[],
     )
 
-    vehicle = await vehicle_service.import_from_provider_result(result)
+    vehicle = await vehicle_service.import_from_provider_result(result, user_id=TEST_USER_ID)
 
     assert vehicle.images is None
     assert vehicle.equipment is None
@@ -256,7 +259,7 @@ async def test_search_and_import_workflow(vehicle_service):
     assert len(search_results) == 1
 
     # Import first result
-    vehicle = await vehicle_service.import_from_provider_result(search_results[0])
+    vehicle = await vehicle_service.import_from_provider_result(search_results[0], user_id=TEST_USER_ID)
     assert vehicle.brand == "BMW"
     assert vehicle.model == "X5"
 
@@ -264,3 +267,33 @@ async def test_search_and_import_workflow(vehicle_service):
     retrieved = await vehicle_service.get_vehicle_by_external_id("mock_provider", "ext-1")
     assert retrieved is not None
     assert retrieved.id == vehicle.id
+
+
+@pytest.mark.asyncio
+async def test_import_same_vehicle_for_different_users_isolated(vehicle_service):
+    """GRAVE-007: el mismo anuncio (source + external_id) importado por distintos
+    usuarios no colisiona: cada usuario tiene su propio Vehicle (multi-tenant)."""
+    result = VehicleSearchResult(
+        source="mock_provider",
+        external_id="ext-shared",
+        brand="Audi",
+        model="A4",
+        year=2021,
+        price=30000.0,
+        currency="EUR",
+    )
+
+    other_user = "999e4567-e89b-12d3-a456-426614174999"
+
+    vehicle_a = await vehicle_service.import_from_provider_result(result, user_id=TEST_USER_ID)
+    vehicle_b = await vehicle_service.import_from_provider_result(result, user_id=other_user)
+
+    assert vehicle_a.id != vehicle_b.id
+    assert vehicle_a.user_id == TEST_USER_ID
+    assert vehicle_b.user_id == other_user
+
+    # La búsqueda por usuario respeta el aislamiento.
+    retrieved_a = await vehicle_service.get_vehicle_by_external_id("mock_provider", "ext-shared", user_id=TEST_USER_ID)
+    retrieved_b = await vehicle_service.get_vehicle_by_external_id("mock_provider", "ext-shared", other_user)
+    assert retrieved_a is not None and retrieved_a.id == vehicle_a.id
+    assert retrieved_b is not None and retrieved_b.id == vehicle_b.id

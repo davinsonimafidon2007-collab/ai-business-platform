@@ -141,12 +141,15 @@ describe("Deep Links Integration", () => {
 describe("Data States Integration", () => {
   it("should render loading", () => {
     render(
-      React.createElement(DataState, {
-        isLoading: true,
-        isError: false,
-        data: undefined,
-        children: () => null,
-      })
+      React.createElement(
+        DataState,
+        {
+          isLoading: true,
+          isError: false,
+          data: undefined,
+        },
+        () => null
+      )
     );
     expect(screen.getByText("Cargando...")).toBeInTheDocument();
   });
@@ -154,14 +157,17 @@ describe("Data States Integration", () => {
   it("should render error with retry", () => {
     const onRetry = vi.fn();
     render(
-      React.createElement(DataState, {
-        isLoading: false,
-        isError: true,
-        data: undefined,
-        error: new Error("fail"),
-        onRetry,
-        children: () => null,
-      })
+      React.createElement(
+        DataState,
+        {
+          isLoading: false,
+          isError: true,
+          data: undefined,
+          error: new Error("fail"),
+          onRetry,
+        },
+        () => null
+      )
     );
     fireEvent.click(screen.getByText("Intentar de nuevo"));
     expect(onRetry).toHaveBeenCalled();
@@ -170,17 +176,20 @@ describe("Data States Integration", () => {
   it("should render empty with action", () => {
     const onAction = vi.fn();
     render(
-      React.createElement(DataState, {
-        isLoading: false,
-        isError: false,
-        data: [],
-        emptyProps: {
-          icon: "inbox",
-          title: "Empty",
-          action: { label: "Create", onClick: onAction },
+      React.createElement(
+        DataState,
+        {
+          isLoading: false,
+          isError: false,
+          data: [],
+          emptyProps: {
+            icon: "inbox",
+            title: "Empty",
+            action: { label: "Create", onClick: onAction },
+          },
         },
-        children: () => null,
-      })
+        () => null
+      )
     );
     fireEvent.click(screen.getByText("Create"));
     expect(onAction).toHaveBeenCalled();

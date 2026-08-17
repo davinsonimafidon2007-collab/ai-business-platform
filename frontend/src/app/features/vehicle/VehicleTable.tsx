@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from "react";
 import { VehicleRow } from "./VehicleRow";
+import { VehicleCard } from "./VehicleCard";
 import { Button } from "@/app/components/ui/button";
 import { ScoreBadge, ProfitBadge, OpportunityBadge, RecommendationBadge, NegotiationBadge } from "@/app/components/ui/ScoreBadge";
 import type { SearchResultItem } from "@/app/types/vehicle";
@@ -109,11 +110,11 @@ export function VehicleTable({ vehicles, onSelectVehicle, selectedVehicleId }: V
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-secondary-500 dark:text-secondary-400">
           {vehicles.length} vehículos encontrados
         </p>
-        <div className="relative">
+        <div className="relative w-full sm:w-auto">
           <input
             type="text"
             value={searchTerm}
@@ -122,13 +123,23 @@ export function VehicleTable({ vehicles, onSelectVehicle, selectedVehicleId }: V
               setCurrentPage(1);
             }}
             placeholder="Buscar en resultados..."
-            className="block w-64 rounded-lg border border-secondary-300 bg-white px-3 py-2 pl-8 text-sm dark:border-secondary-600 dark:bg-secondary-700 dark:text-secondary-100"
+            className="block w-full rounded-lg border border-secondary-300 bg-white px-3 py-2 pl-8 text-sm dark:border-secondary-600 dark:bg-secondary-700 dark:text-secondary-100 sm:w-64"
           />
           <span className="pointer-events-none absolute left-2.5 top-2.5 text-secondary-400">🔍</span>
         </div>
       </div>
 
-      <div className="overflow-x-auto rounded-lg border border-secondary-200 dark:border-secondary-700">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:hidden">
+        {paginated.map((vehicle, index) => (
+          <VehicleCard
+            key={`${vehicle.source}-${vehicle.external_id}-${index}`}
+            vehicle={vehicle}
+            onClick={() => onSelectVehicle(vehicle)}
+          />
+        ))}
+      </div>
+
+      <div className="hidden overflow-x-auto rounded-lg border border-secondary-200 md:block dark:border-secondary-700">
         <table className="min-w-full divide-y divide-secondary-200 dark:divide-secondary-700">
           <thead className="bg-secondary-50 dark:bg-secondary-800">
             <tr>

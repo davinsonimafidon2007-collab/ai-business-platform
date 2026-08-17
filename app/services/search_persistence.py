@@ -164,7 +164,7 @@ class SearchPersistenceService:
 
         images = getattr(dto, "images", None)
         if images:
-            vehicle.images = ",".join(_stringify(i) for i in images if i)
+            vehicle.images = [str(i) for i in images if i]
 
         equipment = getattr(dto, "equipment", None)
         if equipment:
@@ -198,8 +198,7 @@ class SearchPersistenceService:
             )
         if profit is not None:
             evaluation.estimated_import_cost = (
-                getattr(profit, "transport_cost", None)
-                or evaluation.estimated_import_cost
+                getattr(profit, "total_cost", None) or evaluation.estimated_import_cost
             )
             evaluation.estimated_registration_cost = (
                 getattr(profit, "registration_cost", None)

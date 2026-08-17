@@ -7,20 +7,21 @@ import {
   GoogleAuthProvider,
   signOut,
 } from "firebase/auth";
-import { auth, googleProvider } from "@/app/config/firebase";
+import { auth, googleProvider, firebaseConfigured } from "@/app/config/firebase";
+import {
+  GOOGLE_ANDROID_CLIENT_ID,
+  GOOGLE_IOS_CLIENT_ID,
+  GOOGLE_WEB_CLIENT_ID,
+} from "@/app/config/google-clients";
 import { api } from "@/app/services/api/client";
 import { useAuthStore } from "@/app/store/auth-store";
 import type { AuthResponse, User } from "@/app/types/auth";
 
 // Web client ID from google-services.json (client_type: 3)
-const WEB_CLIENT_ID =
-  process.env.NEXT_PUBLIC_GOOGLE_WEB_CLIENT_ID ||
-  "983773208764-oevega4uglktmrisjrh41teq5mjb270n.apps.googleusercontent.com";
+const WEB_CLIENT_ID = GOOGLE_WEB_CLIENT_ID;
 
 // Android client ID from google-services.json (client_type: 1)
-const ANDROID_CLIENT_ID =
-  process.env.NEXT_PUBLIC_GOOGLE_ANDROID_CLIENT_ID ||
-  "983773208764-7i0hfifq4ni324qnugvj0a79bu09fh4t.apps.googleusercontent.com";
+const ANDROID_CLIENT_ID = GOOGLE_ANDROID_CLIENT_ID;
 
 // The plugin requires initialize() to be called once before signIn() will
 // work on native Android/iOS — without it, signIn() fails silently at the
@@ -30,16 +31,23 @@ export function initGoogleAuth(): void {
   // Rama nativa (Capacitor) no testeable en jsdom → excluida de cobertura.
   /* c8 ignore next */
   if (Capacitor.getPlatform() === "web") return;
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { GoogleAuth } = require("@codetrix-studio/capacitor-google-auth");
-  GoogleAuth.initialize({
-    clientId: WEB_CLIENT_ID,
-    scopes: ["profile", "email"],
-    grantOfflineAccess: true,
-  }).catch((err: unknown) => {
-    // eslint-disable-next-line no-console
-    console.error("GoogleAuth.initialize() failed:", err);
-  });
+  try {
+    const { GoogleAuth } = require("@codetrix-studio/capacitor-google-auth");
+    GoogleAuth.initialize({
+      clientId: WEB_CLIENT_ID,
+      scopes: ["profile", "email"],
+      grantOfflineAccess: true,
+    }).catch((err: unknown) => {
+      console.error("GoogleAuth.initialize() failed:", err);
+    });
+  } catch (err: unknown) {
+    // Plugin nativo no instalado: Google Login no funcionará en Android/iOS.
+    console.error(
+      "Capacitor GoogleAuth plugin not available. Google Login will not work on native. " +
+        "Install @codetrix-studio/capacitor-google-auth and run cap sync.",
+      err,
+    );
+  }
 }
 
 export async function signInWithGoogle(): Promise<void> {
@@ -51,17 +59,33 @@ export async function signInWithGoogle(): Promise<void> {
   if (platform !== "web") {
     // Android / iOS – el plugin nativo devuelve un ID token de Google
     // (emitido por accounts.google.com), NO un ID token de Firebase.
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { GoogleAuth } = require("@codetrix-studio/capacitor-google-auth");
+    let GoogleAuth: {
+      signIn: (opts: Record<string, string>) => Promise<{ authentication?: { idToken?: string } }>;
+    };
+    try {
+      GoogleAuth = require("@codetrix-studio/capacitor-google-auth").GoogleAuth;
+    } catch {
+      throw new Error(
+        "Capacitor GoogleAuth plugin not installed. " +
+          "Run: npm i @codetrix-studio/capacitor-google-auth && npx cap sync",
+      );
+    }
     const response = await GoogleAuth.signIn({
       clientId: WEB_CLIENT_ID,
       androidClientId: ANDROID_CLIENT_ID,
-      iosClientId: WEB_CLIENT_ID,
+      iosClientId: GOOGLE_IOS_CLIENT_ID,
     });
 
     const nativeIdToken = response.authentication?.idToken ?? null;
     if (!nativeIdToken) {
       throw new Error("No se recibió el token nativo de Google");
+    }
+
+    if (!auth || !firebaseConfigured) {
+      throw new Error(
+        "Google login requiere NEXT_PUBLIC_FIREBASE_* configuradas " +
+          "(ver frontend/.env.example)",
+      );
     }
 
     // Intercambiamos el token nativo de Google por una sesión de Firebase,
@@ -71,6 +95,12 @@ export async function signInWithGoogle(): Promise<void> {
     idToken = await firebaseResult.user.getIdToken();
   } else {
     // Web – use Firebase Auth popup
+    if (!auth || !googleProvider || !firebaseConfigured) {
+      throw new Error(
+        "Google login requiere NEXT_PUBLIC_FIREBASE_* configuradas " +
+          "(ver frontend/.env.example)",
+      );
+    }
     const result = await signInWithPopup(auth, googleProvider);
     idToken = await result.user.getIdToken();
   }
@@ -86,8 +116,8 @@ export async function signInWithGoogle(): Promise<void> {
 
   const userRes = await api.get<User>("/auth/me");
   // Persistencia unificada via setSession (mismo contrato que login/register).
-  // setSession guarda access_token/refresh_token/user en localStorage.
-  useAuthStore.getState().setSession({
+  // setSession guarda access_token/refresh_token/user en el storage seguro.
+  await useAuthStore.getState().setSession({
     accessToken: authRes.data.access_token,
     refreshToken: authRes.data.refresh_token,
     user: userRes.data,
@@ -99,10 +129,13 @@ export async function signOutOfGoogle(): Promise<void> {
   // Rama nativa (Capacitor) no testeable en jsdom → excluida de cobertura.
   /* c8 ignore next */
   if (platform !== "web") {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { GoogleAuth } = require("@codetrix-studio/capacitor-google-auth");
-    await GoogleAuth.signOut();
-  } else {
+    try {
+      const { GoogleAuth } = require("@codetrix-studio/capacitor-google-auth");
+      await GoogleAuth.signOut();
+    } catch {
+      // Plugin not available — sign out is a no-op on native.
+    }
+  } else if (auth) {
     await signOut(auth);
   }
 }
