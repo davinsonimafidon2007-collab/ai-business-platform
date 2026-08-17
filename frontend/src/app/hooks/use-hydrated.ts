@@ -1,27 +1,25 @@
-"""Hydration-safe hooks for client-only state.
+"use client";
 
-Use these hooks when you need to read localStorage or other browser-only
-APIs without causing SSR hydration mismatches.
-"""
+import { useEffect, useState } from "react";
 
-from __future__ import annotations
+/**
+ * useHydrated — hook seguro para estado solo-cliente.
+ *
+ * Devuelve `false` durante el primer render (SSR) y `true` justo después de
+ * que el componente se haya hidratado en el cliente (via useEffect). Úsalo
+ * para diferir lecturas de browser-only APIs (localStorage, matchMedia…)
+ * y evitar hydration mismatches:
+ *
+ *   const isHydrated = useHydrated();
+ *   if (!isHydrated) return <Skeleton />;
+ *   // Aquí ya es seguro leer localStorage/etc.
+ */
+export function useHydrated() {
+  const [hydrated, setHydrated] = useState(false);
 
-from typing import TypeVar
+  useEffect(() => {
+    setHydrated(true);
+  }, []);
 
-from typing_extensions import TypeGuard
-
-T = TypeVar("T")
-
-
-def useIsHydrated() -> bool:
-    """Returns True only after the component has hydrated on the client.
-
-    Use this to guard against localStorage reads during SSR::
-
-        const isHydrated = useIsHydrated();
-        if (!isHydrated) return <Skeleton />;
-        // Safe to read localStorage here
-    """
-    # This is a simplified version — in production you'd use a state hook.
-    # For now, return True (client code runs after hydration via useEffect).
-    return True
+  return hydrated;
+}
