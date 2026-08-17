@@ -27,6 +27,8 @@ const ANDROID_CLIENT_ID =
 // native layer and no account picker ever appears. Call this once at app
 // startup (see Providers in app/providers.tsx).
 export function initGoogleAuth(): void {
+  // Rama nativa (Capacitor) no testeable en jsdom → excluida de cobertura.
+  /* c8 ignore next */
   if (Capacitor.getPlatform() === "web") return;
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { GoogleAuth } = require("@codetrix-studio/capacitor-google-auth");
@@ -44,6 +46,8 @@ export async function signInWithGoogle(): Promise<void> {
   let idToken: string | null = null;
   const platform = Capacitor.getPlatform();
 
+  // Rama nativa (Capacitor) no testeable en jsdom → excluida de cobertura.
+  /* c8 ignore next */
   if (platform !== "web") {
     // Android / iOS – el plugin nativo devuelve un ID token de Google
     // (emitido por accounts.google.com), NO un ID token de Firebase.
@@ -92,6 +96,8 @@ export async function signInWithGoogle(): Promise<void> {
 
 export async function signOutOfGoogle(): Promise<void> {
   const platform = Capacitor.getPlatform();
+  // Rama nativa (Capacitor) no testeable en jsdom → excluida de cobertura.
+  /* c8 ignore next */
   if (platform !== "web") {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { GoogleAuth } = require("@codetrix-studio/capacitor-google-auth");
