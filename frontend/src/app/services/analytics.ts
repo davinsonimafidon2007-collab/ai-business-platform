@@ -98,7 +98,10 @@ export async function trackEvent(
   const analytics = await getAnalyticsInstance();
   if (!analytics) return;
   try {
-    logEvent(analytics, name, params);
+    // `name` es BusinessEventName (incluye 'screen_view' y eventos de negocio
+    // custom). Firebase tipa 'screen_view' como evento predefinido en otro
+    // overload, lo que rompe la unión → casteo a `never` (no altera runtime).
+    logEvent(analytics, name as never, params);
   } catch {
     // nunca romper la app por telemetría
   }
