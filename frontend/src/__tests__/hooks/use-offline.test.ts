@@ -3,7 +3,7 @@ import {
   offlineCache,
   OFFLINE_CACHE_KEY,
   MAX_ITEMS,
-} from "@/app/hooks/use-offline";
+} from "@/app/hooks/offline-cache";
 
 const query = { key: "bmw-320d" };
 const entry = { query, results: [1, 2], resultCount: 2 };

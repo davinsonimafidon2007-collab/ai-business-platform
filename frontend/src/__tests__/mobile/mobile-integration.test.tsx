@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
-import React from "react";
 
 // ---------------------------------------------------------------------------
 // Mocks hoisteados — se usan en vi.mock (que Vitest mueve al tope del archivo).
@@ -25,7 +24,7 @@ vi.mock("@capacitor/preferences", () => ({ Preferences: mocks.mockPreferences })
 // Importaciones reales (los mocks interceptan @capacitor/... internamente).
 // ---------------------------------------------------------------------------
 import { secureStorage, SECURE_PREFIX } from "@/app/services/storage";
-import { offlineCache } from "@/app/hooks/use-offline";
+import { offlineCache } from "@/app/hooks/offline-cache";
 import {
   parseDeepLink,
   resolveDeepLinkRoute,
@@ -141,15 +140,9 @@ describe("Deep Links Integration", () => {
 describe("Data States Integration", () => {
   it("should render loading", () => {
     render(
-      React.createElement(
-        DataState,
-        {
-          isLoading: true,
-          isError: false,
-          data: undefined,
-        },
-        () => null
-      )
+      <DataState isLoading isError={false} data={undefined}>
+        {() => null}
+      </DataState>
     );
     expect(screen.getByText("Cargando...")).toBeInTheDocument();
   });
@@ -157,17 +150,15 @@ describe("Data States Integration", () => {
   it("should render error with retry", () => {
     const onRetry = vi.fn();
     render(
-      React.createElement(
-        DataState,
-        {
-          isLoading: false,
-          isError: true,
-          data: undefined,
-          error: new Error("fail"),
-          onRetry,
-        },
-        () => null
-      )
+      <DataState
+        isLoading={false}
+        isError
+        data={undefined}
+        error={new Error("fail")}
+        onRetry={onRetry}
+      >
+        {() => null}
+      </DataState>
     );
     fireEvent.click(screen.getByText("Intentar de nuevo"));
     expect(onRetry).toHaveBeenCalled();
@@ -176,20 +167,18 @@ describe("Data States Integration", () => {
   it("should render empty with action", () => {
     const onAction = vi.fn();
     render(
-      React.createElement(
-        DataState,
-        {
-          isLoading: false,
-          isError: false,
-          data: [],
-          emptyProps: {
-            icon: "inbox",
-            title: "Empty",
-            action: { label: "Create", onClick: onAction },
-          },
-        },
-        () => null
-      )
+      <DataState
+        isLoading={false}
+        isError={false}
+        data={[]}
+        emptyProps={{
+          icon: "inbox",
+          title: "Empty",
+          action: { label: "Create", onClick: onAction },
+        }}
+      >
+        {() => null}
+      </DataState>
     );
     fireEvent.click(screen.getByText("Create"));
     expect(onAction).toHaveBeenCalled();

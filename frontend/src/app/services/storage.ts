@@ -16,7 +16,9 @@ async function getPreferences() {
   return nativePreferences;
 }
 
-const isNative = Capacitor.isNativePlatform();
+function isNativePlatform(): boolean {
+  return Capacitor.isNativePlatform();
+}
 
 function encode(value: string): string {
   if (typeof btoa !== "undefined") {
@@ -38,7 +40,7 @@ function decode(value: string): string {
 
 export const secureStorage = {
   async get(key: string): Promise<string | null> {
-    if (isNative) {
+    if (isNativePlatform()) {
       try {
         const Preferences = await getPreferences();
         const { value } = await Preferences.get({ key });
@@ -55,7 +57,7 @@ export const secureStorage = {
   },
 
   async set(key: string, value: string): Promise<void> {
-    if (isNative) {
+    if (isNativePlatform()) {
       try {
         const Preferences = await getPreferences();
         await Preferences.set({ key, value });
@@ -70,7 +72,7 @@ export const secureStorage = {
   },
 
   async remove(key: string): Promise<void> {
-    if (isNative) {
+    if (isNativePlatform()) {
       try {
         const Preferences = await getPreferences();
         await Preferences.remove({ key });
@@ -85,7 +87,7 @@ export const secureStorage = {
   },
 
   async clear(): Promise<void> {
-    if (isNative) {
+    if (isNativePlatform()) {
       try {
         const Preferences = await getPreferences();
         await Preferences.clear();

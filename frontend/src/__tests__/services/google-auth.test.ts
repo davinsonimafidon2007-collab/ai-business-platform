@@ -1,10 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import {
-  signInWithGoogle,
-  signOutOfGoogle,
-  initGoogleAuth,
-} from "@/app/services/google-auth";
+import { signInWithGoogle, signOutOfGoogle, initGoogleAuth } from "@/app/services/google-auth";
 import { useAuthStore } from "@/app/store/auth-store";
+import { secureStorage } from "@/app/services/storage";
 import type { User } from "@/app/types/auth";
 
 vi.mock("@capacitor/core", () => ({
@@ -19,6 +16,7 @@ vi.mock("firebase/auth", () => ({
 vi.mock("@/app/config/firebase", () => ({
   auth: {},
   googleProvider: { providerId: "google.com" },
+  firebaseConfigured: true,
 }));
 vi.mock("@/app/services/api/client", () => ({
   api: { post: vi.fn(), get: vi.fn() },
@@ -74,8 +72,9 @@ describe("google-auth (web)", () => {
     const state = useAuthStore.getState();
     expect(state.isAuthenticated).toBe(true);
     expect(state.user?.email).toBe("test@example.com");
-    expect(window.localStorage.getItem("access_token")).toBe("at");
-    expect(window.localStorage.getItem("refresh_token")).toBe("rt");
+    // El storage seguro web persiste bajo SECURE_PREFIX con encode.
+    expect(await secureStorage.get("access_token")).toBe("at");
+    expect(await secureStorage.get("refresh_token")).toBe("rt");
   });
 
   it("signInWithGoogle throws when no ID token is returned", async () => {

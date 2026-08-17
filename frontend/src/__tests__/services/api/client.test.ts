@@ -42,44 +42,47 @@ vi.mock("@/app/config/app-mode", () => ({
 
 import { apiClient, api } from "@/app/services/api/client";
 import { isAuthDisabled } from "@/app/config/app-mode";
+import { secureStorage } from "@/app/services/storage";
 
 // Los interceptores se registran en el constructor (import del módulo), así
 // que capturamos los handlers UNA vez aquí (no en beforeEach, que los limpiaría).
 const requestHandler = requestUseMock.mock.calls[0]?.[0];
 const responseErrorHandler = responseUseMock.mock.calls[0]?.[1];
 
-beforeEach(() => {
+beforeEach(async () => {
   vi.clearAllMocks();
   window.localStorage.clear();
   (isAuthDisabled as any).mockReturnValue(false);
 });
 
 describe("api client — request interceptor", () => {
-  it("añade el header Authorization cuando hay un token válido", () => {
+  it("añade el header Authorization cuando hay un token válido", async () => {
     const token = "x".repeat(20);
-    window.localStorage.setItem("access_token", token);
+    await secureStorage.set("access_token", token);
 
     const config: any = { headers: {} };
-    const out = requestHandler(config);
+    const out = await requestHandler(config);
 
     expect(out.headers.Authorization).toBe(`Bearer ${token}`);
   });
 
-  it("no añade Authorization cuando no hay token", () => {
+  it("no añade Authorization cuando no hay token", async () => {
     const config: any = { headers: {} };
-    const out = requestHandler(config);
+    const out = await requestHandler(config);
     expect(out.headers.Authorization).toBeUndefined();
   });
 });
 
 describe("api client — response error handler", () => {
   it("rechaza errores no-401 sin reintentar", async () => {
-    const err: any = { response: { status: 500 }, config: { headers: {} } };
+    // 400 (4xx no-reintentable) → rechaza directo. Nota: 5xx/429/red en
+    // métodos idempotentes SÍ son reintentables (retry P6); por eso usamos 400.
+    const err: any = { response: { status: 400 }, config: { headers: {} } };
     await expect(responseErrorHandler(err)).rejects.toBe(err);
   });
 
   it("reintenta la petición tras refrescar el token (401)", async () => {
-    window.localStorage.setItem("refresh_token", "refresh-token");
+    await secureStorage.set("refresh_token", "refresh-token");
     postMock.mockResolvedValue({
       data: { access_token: "new-at", refresh_token: "new-rt" },
     });
@@ -91,7 +94,7 @@ describe("api client — response error handler", () => {
     const result = await responseErrorHandler(err);
 
     expect(postMock).toHaveBeenCalled();
-    expect(window.localStorage.getItem("access_token")).toBe("new-at");
+    expect(await secureStorage.get("access_token")).toBe("new-at");
     expect(result).toEqual({ data: "retried" });
   });
 
