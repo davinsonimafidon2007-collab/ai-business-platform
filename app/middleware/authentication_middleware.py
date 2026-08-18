@@ -65,9 +65,20 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
         auth_header = request.headers.get("Authorization")
         api_key_header = request.headers.get("X-API-Key")
 
+        raw_cookie = getattr(request, "cookies", {})
+        cookie_token = raw_cookie.get("access_token") if hasattr(raw_cookie, "get") else None
+        if not isinstance(cookie_token, str):
+            cookie_token = None
+
+        jwt_token = None
         if auth_header and auth_header.startswith("Bearer "):
+            jwt_token = auth_header[7:]
+        elif cookie_token:
+            jwt_token = cookie_token
+
+        if jwt_token:
             try:
-                user = await self._authenticate_jwt(auth_header[7:])
+                user = await self._authenticate_jwt(jwt_token)
                 request.state.user = user
                 request.state.auth_method = "jwt"
             except AuthenticationError:
