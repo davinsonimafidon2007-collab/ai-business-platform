@@ -18,6 +18,7 @@ def test_ensure_default_providers_registers_de(monkeypatch: pytest.MonkeyPatch) 
 
     monkeypatch.setattr(settings, "default_import_cost_profile", "GERMANY")
     monkeypatch.setattr(settings, "enable_es_market_fixture", False)
+    monkeypatch.setattr(settings, "enable_coches_net_fixture", False)
     monkeypatch.setattr(settings, "enable_mobile_de", True)
 
     ProviderRegistry.ensure_default_providers()

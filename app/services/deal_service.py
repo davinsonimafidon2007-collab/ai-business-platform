@@ -239,3 +239,16 @@ class DealService:
         deal.updated_at = now
 
         return await self.repository.update(deal)
+
+    async def delete(self, deal_id: str, user_id: str) -> None:
+        """Elimina un deal propio (TASK-021).
+
+        Args:
+            deal_id: Id del deal a eliminar.
+            user_id: Dueño del deal (ownership check).
+
+        Raises:
+            HTTPException 404: Si el deal no existe o no pertenece al usuario.
+        """
+        deal = await self.get(deal_id, user_id)
+        await self.repository.delete(deal)

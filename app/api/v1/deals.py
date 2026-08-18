@@ -128,3 +128,13 @@ async def update_deal_simulation(
         profile_name=payload.profile_name,
     )
     return DealRead.model_validate(deal)
+
+
+@router.delete("/{deal_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_deal(
+    deal_id: str,
+    service: DealService = Depends(get_deal_service),
+    current_user: User = Depends(get_current_user),
+) -> None:
+    """Elimina un deal propio (TASK-021). 404 si no existe o es ajeno."""
+    await service.delete(deal_id, current_user.id)

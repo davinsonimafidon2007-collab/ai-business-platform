@@ -6,19 +6,23 @@ import csv
 import io
 from datetime import UTC, date, datetime, time
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.schemas.opportunity import (
+    OpportunityCreate,
     OpportunityListResponse,
     OpportunityRead,
+    OpportunityUpdate,
     OpportunityVehicleSummary,
 )
 from app.database import get_db_session
 from app.dependencies.auth import get_current_user
 from app.models.opportunity import Opportunity
 from app.models.user import User
+from app.models.vehicle import Vehicle
 from app.repositories.opportunity_repository import OpportunityRepository
 from app.schemas.pagination import CursorPage
 from app.services.recommendation_labels import recommendation_label_es, risk_label_es
@@ -208,3 +212,110 @@ async def export_opportunities_csv(
         date_to=end_dt,
     )
     return _csv_stream(opps)
+
+
+async def _get_owned_opportunity(
+    session: AsyncSession,
+    user_id: str,
+    opportunity_id: str,
+) -> Opportunity:
+    """Obtiene una oportunidad validando ownership por join con el vehículo.
+
+    La tabla ``opportunities`` no tiene ``user_id``; la propiedad se resuelve
+    por el vehículo asociado (misma regla que ``list_filtered``). Devuelve la
+    oportunidad con el vehículo eager-loaded o lanza 404.
+    """
+    result = await session.execute(
+        select(Opportunity)
+        .join(Vehicle, Vehicle.id == Opportunity.vehicle_id)
+        .where(
+            Opportunity.id == opportunity_id,
+            Vehicle.user_id == user_id,
+        )
+    )
+    opportunity = result.scalar_one_or_none()
+    if opportunity is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Opportunity not found",
+        )
+    return opportunity
+
+
+@router.post("", response_model=OpportunityRead, status_code=status.HTTP_201_CREATED)
+async def create_opportunity(
+    payload: OpportunityCreate,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db_session),
+) -> OpportunityRead:
+    """Registra una oportunidad manualmente (TASK-021).
+
+    Requiere un ``vehicle_id`` que pertenezca al usuario autenticado. Los
+    campos analíticos (score, ROI, recomendación, riesgo, beneficio) se
+    guardan tal cual se reciben.
+    """
+    vehicle_result = await session.execute(
+        select(Vehicle.id).where(
+            Vehicle.id == payload.vehicle_id,
+            Vehicle.user_id == current_user.id,
+        )
+    )
+    if vehicle_result.scalar_one_or_none() is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Vehicle not found",
+        )
+
+    opportunity = Opportunity(
+        vehicle_id=payload.vehicle_id,
+        opportunity_score=payload.score,
+        profit=payload.estimated_profit,
+        roi=payload.roi_percentage,
+        recommendation=payload.recommendation,
+        risk=payload.risk_level,
+        engine_version=payload.engine_version,
+        analyzed_at=datetime.now(UTC),
+    )
+    opportunity = await OpportunityRepository(session).save(opportunity)
+    return _to_opportunity_read(opportunity)
+
+
+@router.patch("/{opportunity_id}", response_model=OpportunityRead)
+async def update_opportunity(
+    opportunity_id: str,
+    payload: OpportunityUpdate,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db_session),
+) -> OpportunityRead:
+    """Actualiza los campos analíticos de una oportunidad propia (TASK-021)."""
+    opportunity = await _get_owned_opportunity(
+        session, current_user.id, opportunity_id
+    )
+
+    updates = {
+        "opportunity_score": payload.score,
+        "profit": payload.estimated_profit,
+        "roi": payload.roi_percentage,
+        "recommendation": payload.recommendation,
+        "risk": payload.risk_level,
+    }
+    for attr, value in updates.items():
+        if value is not None:
+            setattr(opportunity, attr, value)
+
+    await session.commit()
+    await session.refresh(opportunity)
+    return _to_opportunity_read(opportunity)
+
+
+@router.delete("/{opportunity_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_opportunity(
+    opportunity_id: str,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db_session),
+) -> None:
+    """Elimina una oportunidad propia (TASK-021)."""
+    opportunity = await _get_owned_opportunity(
+        session, current_user.id, opportunity_id
+    )
+    await OpportunityRepository(session).delete(opportunity)

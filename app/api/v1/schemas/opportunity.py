@@ -58,3 +58,34 @@ class OpportunityListResponse(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+class OpportunityCreate(BaseModel):
+    """Cuerpo para registrar una oportunidad manualmente (TASK-021).
+
+    Solo exige ``vehicle_id`` (el vehículo debe pertenecer al usuario).
+    El resto de campos son el resultado del análisis de oportunidad y se
+    persisten tal cual (score, ROI, recomendación, riesgo, beneficio).
+    """
+
+    vehicle_id: str
+    score: float | None = None
+    estimated_profit: float | None = None
+    roi_percentage: float | None = None
+    recommendation: str | None = None
+    risk_level: str | None = None
+    engine_version: str | None = None
+
+
+class OpportunityUpdate(BaseModel):
+    """Cuerpo para actualizar una oportunidad (TASK-021).
+
+    Solo los campos analíticos son editables; ``vehicle_id`` no se puede
+    cambiar (el vínculo es inmutable).
+    """
+
+    score: float | None = None
+    estimated_profit: float | None = None
+    roi_percentage: float | None = None
+    recommendation: str | None = None
+    risk_level: str | None = None

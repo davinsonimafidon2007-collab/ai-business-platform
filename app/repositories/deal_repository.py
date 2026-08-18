@@ -142,3 +142,12 @@ class DealRepository:
         await self.session.commit()
         await self.session.refresh(deal)
         return deal
+
+    async def delete(self, deal: Deal) -> None:
+        """Deletes a deal record.
+
+        Args:
+            deal: The Deal instance to delete.
+        """
+        await self.session.delete(deal)
+        await self.session.commit()
