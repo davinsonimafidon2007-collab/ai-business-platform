@@ -28,6 +28,7 @@ class ApiClient {
       headers: {
         "Content-Type": "application/json",
       },
+      withCredentials: true,
       timeout: 30000,
     });
 
@@ -146,7 +147,8 @@ class ApiClient {
 
         const response = await axios.post(
           `${API_BASE_URL}/api/v1/auth/refresh`,
-          { refresh_token: refreshToken }
+          { refresh_token: refreshToken },
+          { withCredentials: true }
         );
 
         const { access_token, refresh_token: newRefreshToken } = response.data;

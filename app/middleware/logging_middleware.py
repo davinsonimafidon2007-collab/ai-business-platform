@@ -30,6 +30,7 @@ from app.middleware.request_id import get_request_id_from_state
 from app.utils.correlation import get_correlation_id
 
 logger = logging.getLogger("app.access")
+security_logger = logging.getLogger("app.security")
 
 
 class AccessLogMiddleware(BaseHTTPMiddleware):
@@ -84,3 +85,12 @@ class AccessLogMiddleware(BaseHTTPMiddleware):
                 log_data["request_id"],
             )
 
+        if status_code in (401, 403, 429) or log_data["path"].startswith("/api/v1/auth"):
+            security_logger.warning(
+                "SECURITY_EVENT path=%s method=%s status=%d ip=%s ua=%s",
+                log_data["path"],
+                log_data["method"],
+                status_code,
+                log_data["ip"],
+                log_data["user_agent"],
+            )

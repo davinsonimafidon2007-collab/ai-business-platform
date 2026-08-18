@@ -1,8 +1,10 @@
 "use client";
 
 import { Capacitor } from "@capacitor/core";
+import CryptoJS from "crypto-js";
 
 export const SECURE_PREFIX = "abp_secure_";
+const SECRET_KEY = process.env.NEXT_PUBLIC_STORAGE_SECRET || "default-secret-abp";
 
 let nativePreferences:
   | typeof import("@capacitor/preferences").Preferences
@@ -20,19 +22,22 @@ function isNativePlatform(): boolean {
   return Capacitor.isNativePlatform();
 }
 
-function encode(value: string): string {
-  if (typeof btoa !== "undefined") {
-    return btoa(unescape(encodeURIComponent(value)));
-  }
-  return Buffer.from(value, "utf-8").toString("base64");
+export function encryptData(data: string): string {
+  return CryptoJS.AES.encrypt(data, SECRET_KEY).toString();
 }
 
-function decode(value: string): string {
+export function decryptData(encrypted: string): string {
   try {
-    if (typeof atob !== "undefined") {
-      return decodeURIComponent(escape(atob(value)));
+    const bytes = CryptoJS.AES.decrypt(encrypted, SECRET_KEY);
+    const decrypted = bytes.toString(CryptoJS.enc.Utf8);
+    if (!decrypted) {
+      // Fallback for legacy base64 encoded data
+      if (typeof atob !== "undefined") {
+        return decodeURIComponent(escape(atob(encrypted)));
+      }
+      return Buffer.from(encrypted, "base64").toString("utf-8");
     }
-    return Buffer.from(value, "base64").toString("utf-8");
+    return decrypted;
   } catch {
     return "";
   }
@@ -51,7 +56,7 @@ export const secureStorage = {
     }
     if (typeof window !== "undefined") {
       const raw = window.localStorage.getItem(SECURE_PREFIX + key);
-      return raw === null ? null : decode(raw);
+      return raw === null ? null : decryptData(raw);
     }
     return null;
   },
@@ -67,7 +72,7 @@ export const secureStorage = {
       }
     }
     if (typeof window !== "undefined") {
-      window.localStorage.setItem(SECURE_PREFIX + key, encode(value));
+      window.localStorage.setItem(SECURE_PREFIX + key, encryptData(value));
     }
   },
 

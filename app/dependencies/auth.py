@@ -51,12 +51,18 @@ async def get_current_user(
     if hasattr(request.state, "user") and request.state.user:
         return request.state.user
 
-    # Fall back to JWT Bearer token authentication
-    if credentials is None or not credentials.credentials:
+    # Fall back to JWT Bearer token or cookie authentication
+    raw_cookie = getattr(request, "cookies", {})
+    cookie_token = raw_cookie.get("access_token") if hasattr(raw_cookie, "get") else None
+    if not isinstance(cookie_token, str):
+        cookie_token = None
+
+    token = credentials.credentials if credentials and credentials.credentials else cookie_token
+    if not token:
         raise AuthenticationError("Not authenticated")
 
     auth_service = AuthService(UserRepository(session))
-    payload = auth_service.decode_access_token(credentials.credentials)
+    payload = auth_service.decode_access_token(token)
 
     user_id = payload.get("sub")
     if not user_id:
