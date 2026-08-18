@@ -25,6 +25,8 @@ const config: CapacitorConfig = {
   webDir: 'out',
   server: {
     androidScheme,
+    // MOB-P1-009: hosts de App Links aceptados (deep links http/https).
+    allowNavigation: ['aibusiness.app', 'app.aibusiness.com', 'aibusiness.platform'],
   },
   plugins: {
     Camera: {
@@ -34,6 +36,23 @@ const config: CapacitorConfig = {
       clientId: GOOGLE_WEB_CLIENT_ID,
       androidClientId: GOOGLE_ANDROID_CLIENT_ID,
       iosClientId: GOOGLE_IOS_CLIENT_ID,
+      // MOB-P1-001: token nativo de Google -> intercambio por Firebase.
+      scopes: ['profile', 'email'],
+      forceCodeForRefreshToken: true,
+    },
+    PushNotifications: {
+      // MOB-P2-001: opciones de presentación al recibir push en foreground.
+      presentationOptions: ['badge', 'sound', 'alert'],
+    },
+    SplashScreen: {
+      launchShowDuration: 2000,
+      launchAutoHide: true,
+      androidScaleType: 'CENTER_CROP',
+    },
+    Preferences: {
+      // MOB-P2-003: persistencia local (IndexedDB/localStorage en web,
+      // Preferences nativas en Android/iOS).
+      storage: 'local',
     },
   },
 };

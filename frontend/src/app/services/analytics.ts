@@ -17,20 +17,11 @@ import { initializeApp, type FirebaseApp } from "firebase/app";
  */
 
 const firebaseConfig = {
-  apiKey:
-    process.env.NEXT_PUBLIC_FIREBASE_API_KEY ||
-    "AIzaSyDKQU1xQlH_v6Y79-69phr2jsQ4QWuWe_o",
-  authDomain:
-    process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN ||
-    "ai-business-platform-e7043.firebaseapp.com",
-  projectId:
-    process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ||
-    "ai-business-platform-e7043",
-  storageBucket:
-    process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET ||
-    "ai-business-platform-e7043.firebasestorage.app",
-  messagingSenderId:
-    process.env.NEXT_PUBLIC_FIREBASE_SENDER_ID || "983773208764",
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || undefined,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || undefined,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || undefined,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || undefined,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_SENDER_ID || undefined,
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || undefined,
   measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID || undefined,
 };
