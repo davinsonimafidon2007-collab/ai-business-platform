@@ -1,0 +1,71 @@
+# docker-compose.logging.yml — Logging centralizado opcional (Bloque 6 / DEVOPS).
+#
+# Fluentd (recoge logs vía forward) → Elasticsearch → Kibana.
+# NO se arranca con `docker compose up` por defecto: se activa con el perfil
+# `logging`. Es opcional (🟢 en el Bloque 6); el proyecto ya emite logging
+# estructurado JSON (request_id/correlation_id/duration_ms).
+#
+#   docker compose --profile logging up -d
+#
+# Para que los contenedores de la API emitan logs a Fluentd, añade a
+# docker-compose.yml (o usa --log-driver):
+#   logging:
+#     driver: fluentd
+#     options:
+#       fluentd-address: localhost:24224
+#       tag: ai-business.{.Name}
+#
+# Puertos host: fluentd 24224, elasticsearch 9200, kibana 5601.
+
+services:
+  fluentd:
+    image: fluent/fluentd-kubernetes-daemonset:v1-debian-elasticsearch
+    profiles: ["logging"]
+    container_name: abp_fluentd
+    volumes:
+      - ./logging/fluentd.conf:/fluentd/etc/fluent.conf:ro
+    ports:
+      - "24224:24224"
+    restart: unless-stopped
+    depends_on:
+      - elasticsearch
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.9.0
+    profiles: ["logging"]
+    container_name: abp_elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+    ports:
+      - "9200:9200"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9200/_cluster/health || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.9.0
+    profiles: ["logging"]
+    container_name: abp_kibana
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    ports:
+      - "5601:5601"
+    restart: unless-stopped
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+
+volumes:
+  es_data:
+    name: abp_es_data

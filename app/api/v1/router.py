@@ -18,6 +18,7 @@ from app.api.v1.auth import router as auth_router
 from app.api.v1.budget_search import router as budget_search_router
 from app.api.v1.dashboard import router as dashboard_router
 from app.api.v1.deals import router as deals_router
+from app.api.v1.metrics import router as metrics_router
 from app.api.v1.notifications import router as notifications_router
 from app.api.v1.opportunities import router as opportunities_router
 from app.api.v1.routes.health import router as health_router
@@ -44,6 +45,7 @@ api_router.include_router(search_orders_router)
 api_router.include_router(users_router)
 api_router.include_router(vehicles_crud_router)
 api_router.include_router(health_router)
+api_router.include_router(metrics_router)
 api_router.include_router(inspection_router)
 api_router.include_router(search_router)
 api_router.include_router(vehicles_provider_router)

@@ -55,8 +55,16 @@ services:
       NEXT_PUBLIC_API_URL: "${NEXT_PUBLIC_API_URL:-http://localhost:8001}"
       NEXT_PUBLIC_AUTH_DISABLED: "${NEXT_PUBLIC_AUTH_DISABLED:-false}"
     depends_on:
-      - api
+      api:
+        condition: service_healthy
     restart: unless-stopped
+    healthcheck:
+      # Bloque 6: healthcheck del frontend (GET / en el puerto interno 3000).
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)}).on('error', () => process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
   db:
     image: postgres:16-alpine
@@ -89,8 +97,85 @@ services:
       retries: 10
     restart: unless-stopped
 
+  prometheus:
+    # Bloque 6 / DEVOPS: observabilidad opcional. Solo se arranca con
+    #   docker compose --profile obs up -d
+    image: prom/prometheus:v2.53.0
+    profiles: ["obs"]
+    container_name: abp_prometheus
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=15d
+    ports:
+      - "9090:9090"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:9090/-/healthy || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  grafana:
+    # Bloque 6 / DEVOPS: dashboard provisionado (monitoring/grafana/).
+    # Acceso: http://localhost:3002  (admin / $GRAFANA_ADMIN_PASSWORD)
+    image: grafana/grafana:11.1.0
+    profiles: ["obs"]
+    container_name: abp_grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: "${GRAFANA_ADMIN_PASSWORD:-admin}"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./monitoring/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "3002:3000"
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:3000/api/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  node_exporter:
+    # Bloque 6 / DEVOPS: métricas de sistema (perfil obs).
+    image: prom/node-exporter:v1.8.2
+    profiles: ["obs"]
+    container_name: abp_node_exporter
+    command:
+      - --path.rootfs=/host
+    ports:
+      - "9100:9100"
+    restart: unless-stopped
+
+  postgres_exporter:
+    # Bloque 6 / DEVOPS: métricas de PostgreSQL (perfil obs). Habla con la
+    # BD en la red interna docker (db:5432), no host.
+    image: prometheuscommunity/postgres-exporter:v0.15.0
+    profiles: ["obs"]
+    container_name: abp_postgres_exporter
+    environment:
+      DATA_SOURCE_NAME: "postgresql://postgres:postgres@db:5432/ai_business_platform?sslmode=disable"
+    ports:
+      - "9187:9187"
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+
 volumes:
   postgres_data:
   redis_data:
   uploads_data:
+  prometheus_data:
+    name: abp_prometheus_data
+  grafana_data:
+    name: abp_grafana_data
 

@@ -1,0 +1,18 @@
+# Git attributes — forzar LF en scripts shell para que funcionen igual en
+# Windows (git-bash), CI y servidores de despliegue (Bloque 6 / DEVOPS).
+# Sin esto, core.autocrlf=true genera CRLF y los scripts fallan con
+# "command not found" ($'\r').
+
+*.sh text eol=lf
+
+# Archivos sensibles: nunca normalizar
+.env eol=unsafe
+.env.* eol=unsafe
+*.jks binary
+*.keystore binary
+
+# End of line normalizado para YAML/JSON/conf
+*.yml text
+*.yaml text
+*.json text
+*.conf text

@@ -1,0 +1,74 @@
+# Deploy — despliegue a staging y producción (Bloque 6 / DEVOPS).
+#
+# - Tag semántico `v*` (p.ej. v1.2.0) → staging.
+# - Tag `v*` sobre release-* o confirmación manual → producción (environment).
+#
+# Requiere secrets del repositorio:
+#   STAGING_HOST, STAGING_USER, STAGING_KEY (SSH private key)
+#   PRODUCTION_HOST, PRODUCTION_USER, PRODUCTION_KEY
+#
+# Cada environment usa `environment:` (protección con reviewers opcional) y
+# sobreescribe APP_ENV/COMPOSE_FILE vía variables del environment.
+#
+# El despliegue asume un servidor con: git, docker + compose plugin, y el
+# proyecto clonado en /opt/ai-business-platform con un `.env` propio por
+# entorno (ver docs/deployment.md).
+
+name: Deploy
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  staging:
+    name: Deploy to staging
+    runs-on: ubuntu-latest
+    environment: staging
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.STAGING_HOST }}
+          username: ${{ secrets.STAGING_USER }}
+          key: ${{ secrets.STAGING_KEY }}
+          script: |
+            set -e
+            cd /opt/ai-business-platform
+            git fetch --all --tags
+            git checkout ${{ github.ref_name }}
+            # Health checks docker + stack principal (api, frontend, db, redis)
+            docker compose --profile obs up -d --build
+            docker compose ps
+            # Validación post-despliegue
+            ./scripts/validate_deployment.sh http://localhost
+
+  production:
+    name: Deploy to production
+    runs-on: ubuntu-latest
+    environment: production
+    needs: staging
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.PRODUCTION_HOST }}
+          username: ${{ secrets.PRODUCTION_USER }}
+          key: ${{ secrets.PRODUCTION_KEY }}
+          script: |
+            set -e
+            cd /opt/ai-business-platform
+            git fetch --all --tags
+            git checkout ${{ github.ref_name }}
+            docker compose --profile obs up -d --build
+            docker compose ps
+            ./scripts/validate_deployment.sh http://localhost

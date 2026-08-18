@@ -54,12 +54,18 @@ frontend/.next/
 frontend/out/
 *.tsbuildinfo
 npm-debug.log*
+# Artefactos de build PWA (Next.js generateSW) y de tests E2E (Playwright).
+frontend/public/sw.js
+frontend/public/workbox-*.js
+frontend/test-results/
 
 # Environment files
 .env
 .env.*
 # Excepción: templates de entorno que sí se versionan (incluidos subdirs).
 !.env.example
+!.env.staging.example
+!.env.production.example
 !**/.env.example
 
 # Build

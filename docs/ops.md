@@ -130,18 +130,27 @@ El access log (`app/middleware/logging_middleware.py`) ya emite por request:
   (Sentry) obligatorio. Si algún día se quiere, el hook queda documentado aquí
   como opcional, sin añadir dependencia en este task.
 
-### Fase 2 (documentada, no bloqueante)
+### Fase 2 (implementada en Bloque 6)
 
-- Exponer `/metrics` Prometheus desde la API (aún no existe).
-- `docker-compose.obs.yml` ya prepara el perfil `obs` (Prometheus + Grafana):
+El stack Prometheus/Grafana ya existe (ver `docs/deployment.md` §5):
+
+- **`GET /metrics`** — endpoint público (sin auth) que expone las métricas de
+  negocio en formato Prometheus text/plain para scraping interno del perfil
+  `obs` (`app/api/v1/metrics.py`). El mismo payload sigue disponible protegido
+  en `GET /api/v1/admin/metrics` (ADR-003).
+- **`monitoring/prometheus.yml`** — scrape targets `api:8000`,
+  `node_exporter:9100`, `postgres_exporter:9187`.
+- **`docker-compose.yml`** (servicios `prometheus`/`grafana`/`node_exporter`/
+  `postgres_exporter` con `profiles: ["obs"]`) — Prometheus + Grafana +
+  exporters (perfil `obs`; Grafana en `http://localhost:3002`,
+  admin/$GRAFANA_ADMIN_PASSWORD), con provisionado automático de datasource y
+  dashboard.
 
 ```bash
 docker compose --profile obs up -d
-# Prometheus: http://localhost:9090 · Grafana: http://localhost:3001 (admin/$GRAFANA_ADMIN_PASSWORD)
+# Prometheus: http://localhost:9090 · Grafana: http://localhost:3002
+# Dashboard provisionado: "AI Business Platform"
 ```
-
-- `app/telemetry/` es un placeholder a la espera de esa fase. No se añaden
-  dependencias `opentelemetry-*` aquí.
 
 ---
 
@@ -180,12 +189,16 @@ python scripts/smoke_smtp.py --job-failure --to ops@example.com
 
 ---
 
-## 5. Observabilidad fase 2 (opcional)
+## 5. Observabilidad (implementada en Bloque 6)
 
-Stack completo Prometheus/Grafana/OpenTelemetry queda como **fase 2 documentada
-y no bloqueante**. Se puede activar con el perfil `obs` de
-`docker-compose.obs.yml` cuando la API exponga `/metrics`. No se fuerza en
-`docker compose up` por defecto ni en CI.
+Stack completo Prometheus/Grafana con perfil `obs` (ver `docs/deployment.md`
+§5). La API expone `/metrics` sin auth para scraping interno y
+`/api/v1/admin/metrics` protegido con el mismo payload.
+
+```bash
+docker compose --profile obs up -d
+# Prometheus: http://localhost:9090 · Grafana: http://localhost:3002
+```
 
 ---
 
@@ -199,3 +212,5 @@ y no bloqueante**. Se puede activar con el perfil `obs` de
 6. Alertas de jobs documentadas en `.env.example` + esta doc.
 7. Tests unitarios de health verdes.
 8. No se fuerza Grafana en `docker compose up` por defecto (perfil `obs`).
+9. `/metrics` público expone métricas y `/api/v1/admin/metrics` sigue protegido.
+10. Perfil `obs` provisiona Grafana en 3002 con datasource + dashboard.
