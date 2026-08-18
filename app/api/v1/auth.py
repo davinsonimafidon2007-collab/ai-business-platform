@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Body, Depends, Request, status
+from fastapi import APIRouter, Body, Depends, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.database import get_db_session
 from app.dependencies.auth import get_current_user
 from app.exceptions import AuthenticationError
@@ -70,6 +71,7 @@ async def register_user(
 @router.post("/login", response_model=TokenResponse)
 async def login_user(
     request: Request,
+    response: Response,
     payload: LoginRequest,
     auth_service: AuthService = Depends(get_auth_service),
     refresh_service: RefreshTokenService = Depends(get_refresh_token_service),
@@ -89,12 +91,32 @@ async def login_user(
     await audit_service.log_login_success(
         user.id, ip_address=_client_ip(request), user_agent=_user_agent(request)
     )
+
+    is_prod = settings.environment == "production"
+    response.set_cookie(
+        key="access_token",
+        value=access_token,
+        httponly=True,
+        secure=is_prod,
+        samesite="lax",
+        max_age=settings.jwt_access_token_expire_minutes * 60,
+    )
+    response.set_cookie(
+        key="refresh_token",
+        value=refresh_token,
+        httponly=True,
+        secure=is_prod,
+        samesite="lax",
+        max_age=settings.jwt_refresh_token_expire_minutes * 60,
+    )
+
     return TokenResponse(access_token=access_token, refresh_token=refresh_token)
 
 
 @router.post("/google", response_model=TokenResponse)
 async def google_login(
     request: Request,
+    response: Response,
     payload: GoogleAuthRequest,
     auth_service: AuthService = Depends(get_auth_service),
     refresh_service: RefreshTokenService = Depends(get_refresh_token_service),
@@ -107,19 +129,39 @@ async def google_login(
     await audit_service.log_login_success(
         user.id, ip_address=_client_ip(request), user_agent=_user_agent(request)
     )
+
+    is_prod = settings.environment == "production"
+    response.set_cookie(
+        key="access_token",
+        value=access_token,
+        httponly=True,
+        secure=is_prod,
+        samesite="lax",
+        max_age=settings.jwt_access_token_expire_minutes * 60,
+    )
+    response.set_cookie(
+        key="refresh_token",
+        value=refresh_token,
+        httponly=True,
+        secure=is_prod,
+        samesite="lax",
+        max_age=settings.jwt_refresh_token_expire_minutes * 60,
+    )
+
     return TokenResponse(access_token=access_token, refresh_token=refresh_token)
 
 
 @router.post("/refresh", response_model=TokenResponse)
 async def refresh_access_token(
     request: Request,
-    payload: dict[str, Any] = Body(...),
+    response: Response,
+    payload: dict[str, Any] | None = Body(None),
     auth_service: AuthService = Depends(get_auth_service),
     refresh_service: RefreshTokenService = Depends(get_refresh_token_service),
     audit_service: AuditService = Depends(get_audit_service),
     session: AsyncSession = Depends(get_db_session),
 ) -> TokenResponse:
-    refresh_token = payload.get("refresh_token")
+    refresh_token = (payload or {}).get("refresh_token") or request.cookies.get("refresh_token")
     if not refresh_token:
         raise AuthenticationError("Refresh token is required")
 
@@ -140,17 +182,36 @@ async def refresh_access_token(
         user_id, ip_address=_client_ip(request), user_agent=_user_agent(request)
     )
 
+    is_prod = settings.environment == "production"
+    response.set_cookie(
+        key="access_token",
+        value=new_access_token,
+        httponly=True,
+        secure=is_prod,
+        samesite="lax",
+        max_age=settings.jwt_access_token_expire_minutes * 60,
+    )
+    response.set_cookie(
+        key="refresh_token",
+        value=new_refresh_token,
+        httponly=True,
+        secure=is_prod,
+        samesite="lax",
+        max_age=settings.jwt_refresh_token_expire_minutes * 60,
+    )
+
     return TokenResponse(access_token=new_access_token, refresh_token=new_refresh_token)
 
 
 @router.post("/logout")
 async def logout(
     request: Request,
-    payload: dict[str, Any] = Body(...),
+    response: Response,
+    payload: dict[str, Any] | None = Body(None),
     refresh_service: RefreshTokenService = Depends(get_refresh_token_service),
     audit_service: AuditService = Depends(get_audit_service),
 ) -> dict[str, str]:
-    refresh_token = payload.get("refresh_token")
+    refresh_token = (payload or {}).get("refresh_token") or request.cookies.get("refresh_token")
     if refresh_token:
         try:
             decoded = refresh_service.decode_refresh_token(refresh_token)
@@ -162,6 +223,9 @@ async def logout(
             await audit_service.log_logout(
                 user_id, ip_address=_client_ip(request), user_agent=_user_agent(request)
             )
+
+    response.delete_cookie("access_token")
+    response.delete_cookie("refresh_token")
     return {"message": "Logged out successfully"}
 
 

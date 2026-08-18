@@ -21,6 +21,7 @@ from app.jobs.scheduler import Scheduler
 from app.middleware.authentication_middleware import AuthenticationMiddleware
 from app.middleware.logging_middleware import AccessLogMiddleware
 from app.middleware.rate_limit_middleware import RateLimitMiddleware
+from app.middleware.redirect_https import HTTPSRedirectMiddleware
 from app.middleware.request_id import RequestIdMiddleware
 
 setup_logging()
@@ -132,6 +133,8 @@ app.add_middleware(RateLimitMiddleware)
 app.add_middleware(AuthenticationMiddleware)
 app.add_middleware(AccessLogMiddleware)
 app.add_middleware(RequestIdMiddleware)
+if settings.environment != "development" or settings.https_redirect:
+    app.add_middleware(HTTPSRedirectMiddleware)
 
 # Configuración CORS (debe ser el último middleware añadido, primero en ejecutarse)
 app.add_middleware(
