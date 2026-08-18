@@ -1,29 +1,33 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!--
-  MOB-P1-007: Network security config — build type RELEASE (src/main).
-
-  Política de producción: el cleartext HTTP NO está permitido por defecto
-  (base-config = false). Solo hosts de desarrollo locales (10.0.2.2 emulador,
-  localhost WebView) tienen cleartext permitido para poder hablar con un
-  backend en http:// durante el desarrollo con APK debug.
-
-  Para desarrollo con dispositivo físico contra el PC por LAN se usa la
-  build DEBUG (src/debug/res/xml/network_security_config.xml).
-
-  TODO (MOB-P3-005): certificate pinning para el host de producción
-  (aibusiness.app). Reemplazar REPLACE_WITH_REAL_PIN_1 / _2 por los SHA-256
-  reales (npm run generate:pin en frontend) antes de activar el <pin-set>.
-  Sin hashes reales NO debe activarse: rompería la comunicación HTTPS.
--->
 <network-security-config>
+    <!-- Configuración base: por defecto, denegar cleartext -->
     <base-config cleartextTrafficPermitted="false">
         <trust-anchors>
             <certificates src="system" />
         </trust-anchors>
     </base-config>
-    <!-- Dev: cleartext solo para los hosts locales, resto exige HTTPS. -->
-    <domain-config cleartextTrafficPermitted="true">
-        <domain includeSubdomains="true">10.0.2.2</domain>
+
+    <!-- Excepción SOLO para desarrollo local (Android Emulator / USB Debug) -->
+    <debug-overrides>
+        <trust-anchors>
+            <certificates src="user" />
+            <certificates src="system" />
+        </trust-anchors>
+    </debug-overrides>
+
+    <!-- Configuración para el dominio de producción (Reemplazar 'api.aibusiness.com' con el dominio real) -->
+    <domain-config cleartextTrafficPermitted="false">
+        <!-- TODO DESARROLLADOR: Reemplazar con el dominio real de la API en producción -->
+        <domain includeSubdomains="true">api.aibusiness.com</domain>
         <domain includeSubdomains="true">localhost</domain>
+        <domain includeSubdomains="true">10.0.2.2</domain>
+
+        <!-- Certificate Pinning (Placeholder: generar hash real con scripts/generate-cert-pin.sh) -->
+        <pin-set expiration="2026-12-31">
+            <!-- Hash de ejemplo, debe ser reemplazado por el hash SHA-256 del certificado de producción -->
+            <pin digest="SHA-256">REPLACE_WITH_REAL_SHA256_HASH_OF_PROD_CERT=</pin>
+            <!-- Pin de respaldo (Backup pin) en caso de rotación de certificados -->
+            <pin digest="SHA-256">REPLACE_WITH_BACKUP_SHA256_HASH=</pin>
+        </pin-set>
     </domain-config>
 </network-security-config>

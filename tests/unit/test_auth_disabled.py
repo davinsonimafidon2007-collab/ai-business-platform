@@ -201,21 +201,21 @@ def test_auth_disabled_forbidden_in_production(
         )
 
 
-def test_auth_disabled_allowed_in_production_with_override(
+def test_auth_disabled_strictly_forbidden_in_production(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Con ALLOW_AUTH_DISABLED_IN_PROD=true sí arranca (asumido por el operador)."""
+    """AUTH_DISABLED=true en producción es estrictamente imposible (hard fail sin excepciones)."""
     monkeypatch.setenv("AUTH_DISABLED_IN_TESTS", "true")
 
-    cfg = Settings(
-        environment="production",
-        auth_disabled=True,
-        allow_auth_disabled_in_prod=True,
-        jwt_secret_key="x" * 40,
-        cors_origins="https://app.example.com",
-    )
+    with pytest.raises(ValidationError) as exc_info:
+        Settings(
+            environment="production",
+            auth_disabled=True,
+            jwt_secret_key="x" * 40,
+            cors_origins="https://app.example.com",
+        )
 
-    assert cfg.auth_disabled is True
+    assert "CRITICAL SECURITY ERROR" in str(exc_info.value)
 
 
 class FakeUserRepository:

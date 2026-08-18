@@ -43,10 +43,9 @@ if len(settings.jwt_secret_key) < 32:
         "It must be at least 32 characters long."
     )
 
-# PERS.CLOSE.1 — AUTH_DISABLED fail-fast: in production with auth disabled the
-# app refuses to boot (anyone reaching the port would be ADMIN). Only an
-# explicit ALLOW_AUTH_DISABLED_IN_PROD=true overrides this.
-settings.auth_disabled_forbidden_in_production()
+# La validación de AUTH_DISABLED ahora es manejada de forma infalible
+# por el model_validator de Pydantic en app/core/config.py.
+# Si estamos en producción y auth_disabled=True, la app ni siquiera iniciará.
 
 # SEC-001 — Firebase fail-fast: in production with FIREBASE_REQUIRED=true the
 # app must not boot without Firebase credentials (Google Login would be dead).

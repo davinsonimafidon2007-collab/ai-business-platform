@@ -40,14 +40,6 @@ class Settings(BaseSettings):
     ADMIN. En producción real dejar ``false``.
     """
 
-    allow_auth_disabled_in_prod: bool = False
-    """Override explícito para permitir ``AUTH_DISABLED=true`` en production.
-
-    Por defecto la app **no arranca** si ``environment=production`` y
-    ``auth_disabled=true`` (fail-fast, PERS.CLOSE.1). Solo poner a ``true`` si
-    sabes que el puerto no está expuesto públicamente.
-    """
-
     @model_validator(mode="after")
     def validate_jwt_secret_for_env(self) -> "Settings":
         if self.environment == "test":
@@ -115,22 +107,13 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def auth_disabled_forbidden_in_production(self) -> "Settings":
-        """production + AUTH_DISABLED=true → no arranca (PERS.CLOSE.1).
-
-        Con la auth desactivada cualquiera con acceso al puerto sería ADMIN.
-        Solo se permite con el override explícito
-        ``ALLOW_AUTH_DISABLED_IN_PROD=true``.
+        """SEGURIDAD CRÍTICA: Impide absolutamente que AUTH_DISABLED sea True
+        en un entorno de producción. No hay excepciones.
         """
-        if (
-            self.environment == "production"
-            and self.auth_disabled
-            and not self.allow_auth_disabled_in_prod
-        ):
+        if self.environment == "production" and self.auth_disabled:
             raise ValueError(
-                "AUTH_DISABLED=true no está permitido con ENVIRONMENT=production: "
-                "cualquiera con acceso al puerto sería ADMIN. Usa AUTH_DISABLED=false "
-                "o, si el puerto no es público y lo asumes, "
-                "ALLOW_AUTH_DISABLED_IN_PROD=true."
+                "CRITICAL SECURITY ERROR: AUTH_DISABLED cannot be True in 'production' environment. "
+                "This is a hard fail to prevent accidental public exposure of admin endpoints."
             )
         return self
 
