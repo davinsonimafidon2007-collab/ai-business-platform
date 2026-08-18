@@ -7,7 +7,7 @@ services:
     command: >
       sh -c "for i in 1 2 3 4 5; do uv run --no-sync alembic upgrade head && break || echo 'Waiting for DB...' && sleep 3; done && uv run --no-sync uvicorn app.main:app --host 0.0.0.0 --port 8000"
     ports:
-      - "${API_PORT:-8000}:8000"
+      - "${API_PORT:-8001}:8000"
     volumes:
       - .:/app
       - uploads_data:/app/uploads/inspection_photos
@@ -17,7 +17,7 @@ services:
       REDIS_URL: redis://redis:6379/0
       JWT_SECRET_KEY: "${JWT_SECRET_KEY}"
       ENVIRONMENT: "${ENVIRONMENT:-development}"
-      APP_URL: "${APP_URL:-http://localhost:3000}"
+      APP_URL: "${APP_URL:-http://localhost:3001}"
       ENABLE_SCHEDULER: "${ENABLE_SCHEDULER:-true}"
       ENABLE_MOBILE_DE: "${ENABLE_MOBILE_DE:-false}"
       PROVIDER_HTTP_PROXY: "${PROVIDER_HTTP_PROXY:-}"
@@ -48,11 +48,11 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
     ports:
-      - "${FRONTEND_PORT:-3000}:3000"
+      - "${FRONTEND_PORT:-3001}:3000"
     environment:
-      # GRAVE.004: el frontend se sirve desde el HOST (puerto 3000), así que
-      # el navegador no puede resolver 'api'; apuntamos a localhost:8000.
-      NEXT_PUBLIC_API_URL: "${NEXT_PUBLIC_API_URL:-http://localhost:8000}"
+      # GRAVE.004: el frontend se sirve desde el HOST (puerto 3001), así que
+      # el navegador no puede resolver 'api'; apuntamos a localhost:8001.
+      NEXT_PUBLIC_API_URL: "${NEXT_PUBLIC_API_URL:-http://localhost:8001}"
       NEXT_PUBLIC_AUTH_DISABLED: "${NEXT_PUBLIC_AUTH_DISABLED:-false}"
     depends_on:
       - api
@@ -65,7 +65,7 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -78,7 +78,7 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT:-6380}:6379"
     volumes:
       - redis_data:/data
     command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
