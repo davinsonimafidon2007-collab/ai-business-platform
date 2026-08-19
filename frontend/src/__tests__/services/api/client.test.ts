@@ -98,6 +98,28 @@ describe("api client — response error handler", () => {
     expect(result).toEqual({ data: "retried" });
   });
 
+  it("reintenta la petición en caso de error 500/429 (retry P6)", async () => {
+    const err: any = {
+      response: { status: 500 },
+      config: { method: "get", headers: {}, _retryCount: 0 },
+    };
+
+    const promise = responseErrorHandler(err);
+    const result = await promise;
+    expect(result).toEqual({ data: "retried" });
+  });
+
+  it("respeta Retry-After header en status 429", async () => {
+    const err: any = {
+      response: { status: 429, headers: { "retry-after": "1" } },
+      config: { method: "get", headers: {}, _retryCount: 0 },
+    };
+
+    const promise = responseErrorHandler(err);
+    const result = await promise;
+    expect(result).toEqual({ data: "retried" });
+  });
+
   it("rechaza un 401 cuando no hay refresh token", async () => {
     const err: any = {
       response: { status: 401 },

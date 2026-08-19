@@ -108,7 +108,7 @@ function EmptyActivity() {
 export default function DashboardPage() {
   const user = useAuthStore((s) => s.user);
   const networkStatus = useNetworkStatus();
-  const isOffline = networkStatus === "offline";
+  const isOffline = !networkStatus.isOnline;
   const { data: history, isLoading: historyLoading, isError: historyError, refetch: refetchHistory } = useSearchHistory();
   const { data: stats, isLoading: statsLoading, isError: statsError, refetch: refetchStats } = useDashboardStats();
   const { data: opportunities, isLoading: oppLoading, isError: oppError, refetch: refetchOpps } = useQuery({
@@ -296,4 +296,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-

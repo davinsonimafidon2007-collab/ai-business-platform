@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { Providers } from "@/app/providers";
-import { OfflineBanner } from "@/app/hooks/use-offline";
+import { NetworkStatusProvider } from "@/components/NetworkStatusProvider";
 import { MobileBootstrap } from "@/app/components/MobileBootstrap";
 
 export const metadata: Metadata = {
@@ -27,8 +27,9 @@ export default function RootLayout({
       <body className="antialiased">
         <Providers>
           <MobileBootstrap />
-          <OfflineBanner />
-          {children}
+          <NetworkStatusProvider>
+            {children}
+          </NetworkStatusProvider>
         </Providers>
       </body>
     </html>

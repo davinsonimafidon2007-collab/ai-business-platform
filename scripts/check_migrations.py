@@ -3,7 +3,7 @@ Verificación de migraciones Alembic.
 
 Checks:
 1. `alembic heads` devuelve exactamente 1 head.
-2. Ese head es `n5o6p7q8r9s0`.
+2. Ese head es `p2q3r4s5t6u7`.
 3. (Opcional) La cadena es lineal desde `2f6d3d5a7b2c` hasta el head.
 
 Uso:
@@ -21,7 +21,7 @@ import re
 import subprocess
 import sys
 
-EXPECTED_HEAD = "n5o6p7q8r9s0"
+EXPECTED_HEAD = "p2q3r4s5t6u7"
 EXPECTED_ROOT = "2f6d3d5a7b2c"
 
 

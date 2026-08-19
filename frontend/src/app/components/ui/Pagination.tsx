@@ -20,21 +20,24 @@ export function Pagination({ currentPage, totalPages, onPageChange }: Pagination
   });
 
   return (
-    <div className="flex items-center justify-center gap-1.5 mt-6">
+    <nav className="flex items-center justify-center gap-1.5 mt-6" aria-label="Navegación de páginas">
       <button
         onClick={() => onPageChange(currentPage - 1)}
         disabled={currentPage === 1}
-        className="w-9 h-9 rounded-lg flex items-center justify-center text-secondary-400 hover:text-white hover:bg-[#1a1a24] disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
+        aria-label="Página anterior"
+        className="w-9 h-9 rounded-lg flex items-center justify-center text-secondary-400 hover:text-white hover:bg-[#1a1a24] disabled:opacity-30 disabled:hover:bg-transparent transition-colors cursor-pointer"
       >
-        <ChevronLeft className="w-4 h-4" />
+        <ChevronLeft className="w-4 h-4" aria-hidden="true" />
       </button>
 
       {pages.map((page) => (
         <button
           key={page}
           onClick={() => onPageChange(page)}
+          aria-label={`Página ${page}`}
+          aria-current={currentPage === page ? "page" : undefined}
           className={cn(
-            "w-9 h-9 rounded-lg text-xs font-semibold transition-colors",
+            "w-9 h-9 rounded-lg text-xs font-semibold transition-colors cursor-pointer",
             currentPage === page
               ? "bg-primary-600 text-white"
               : "text-secondary-400 hover:text-white hover:bg-[#1a1a24]"
@@ -47,10 +50,11 @@ export function Pagination({ currentPage, totalPages, onPageChange }: Pagination
       <button
         onClick={() => onPageChange(currentPage + 1)}
         disabled={currentPage === totalPages}
-        className="w-9 h-9 rounded-lg flex items-center justify-center text-secondary-400 hover:text-white hover:bg-[#1a1a24] disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
+        aria-label="Página siguiente"
+        className="w-9 h-9 rounded-lg flex items-center justify-center text-secondary-400 hover:text-white hover:bg-[#1a1a24] disabled:opacity-30 disabled:hover:bg-transparent transition-colors cursor-pointer"
       >
-        <ChevronRight className="w-4 h-4" />
+        <ChevronRight className="w-4 h-4" aria-hidden="true" />
       </button>
-    </div>
+    </nav>
   );
 }
