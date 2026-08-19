@@ -43,6 +43,9 @@ export function VehicleDrawer({ vehicle, onClose }: VehicleDrawerProps) {
       <div className="fixed inset-0 z-40 bg-black/50" onClick={onClose} />
       <div
         ref={drawerRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Detalle del vehículo"
         className={
           isMobile
             ? "fixed inset-x-0 bottom-0 z-50 max-h-[85vh] overflow-y-auto rounded-t-2xl border-t border-secondary-200 bg-white shadow-xl dark:border-secondary-700 dark:bg-secondary-900"
@@ -58,7 +61,7 @@ export function VehicleDrawer({ vehicle, onClose }: VehicleDrawerProps) {
           <h2 className="text-lg font-bold text-secondary-900 dark:text-secondary-100">
             Detalle del vehículo
           </h2>
-          <Button variant="ghost" size="sm" onClick={onClose}>
+          <Button variant="ghost" size="sm" onClick={onClose} aria-label="Cerrar detalles del vehículo">
             ✕
           </Button>
         </div>
@@ -88,7 +91,7 @@ export function VehicleDrawer({ vehicle, onClose }: VehicleDrawerProps) {
             <InfoItem label="Potencia" value={vehicle.power_hp ? `${vehicle.power_hp} HP` : "-"} />
           </div>
 
-{/* Vehicle Score */}
+          {/* Vehicle Score */}
           {vs && (
             <Section title="Puntuación del vehículo">
               <div className="flex items-center gap-3">
@@ -350,7 +353,7 @@ export function VehicleDrawer({ vehicle, onClose }: VehicleDrawerProps) {
               }
             }}
             disabled={!vehicle.external_id}
-            className="block w-full rounded-lg border border-secondary-300 bg-white px-4 py-2.5 text-center text-sm font-medium text-secondary-700 hover:bg-secondary-50 dark:border-secondary-600 dark:bg-secondary-800 dark:text-secondary-300 dark:hover:bg-secondary-700"
+            className="block w-full rounded-lg border border-secondary-300 bg-white px-4 py-2.5 text-center text-sm font-medium text-secondary-700 hover:bg-secondary-50 dark:border-secondary-600 dark:bg-secondary-800 dark:text-secondary-300 dark:hover:bg-secondary-700 cursor-pointer"
           >
             Nueva inspección
           </button>

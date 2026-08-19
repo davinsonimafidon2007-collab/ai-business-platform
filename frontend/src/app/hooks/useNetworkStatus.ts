@@ -1,42 +1,11 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useNetworkStatus as useNetworkStatusBase, NetworkStatusType } from "@/hooks/useNetworkStatus";
 
-/**
- * MOB-P2-006: Hook para detectar estado de red y fallback offline.
- *
- * Cuando la red está caída, las queries pueden servir datos stale desde
- * localStorage (via useCachedQuery) en lugar de mostrar error inmediato.
- */
+export type NetworkStatus = NetworkStatusType;
 
-export type NetworkStatus = "online" | "offline" | "unknown";
-
-function getNetworkStatus(): NetworkStatus {
-  if (typeof window === "undefined") return "unknown";
-  return navigator.onLine ? "online" : "offline";
-}
-
-/**
- * Devuelve el estado actual de la red y se re-actualiza automáticamente
- * cuando cambia la conectividad.
- */
-export function useNetworkStatus(): NetworkStatus {
-  const [status, setStatus] = useState<NetworkStatus>(getNetworkStatus);
-
-  useEffect(() => {
-    const handleOnline = () => setStatus("online");
-    const handleOffline = () => setStatus("offline");
-
-    window.addEventListener("online", handleOnline);
-    window.addEventListener("offline", handleOffline);
-
-    return () => {
-      window.removeEventListener("online", handleOnline);
-      window.removeEventListener("offline", handleOffline);
-    };
-  }, []);
-
-  return status;
+export function useNetworkStatus() {
+  return useNetworkStatusBase();
 }
 
 /**
