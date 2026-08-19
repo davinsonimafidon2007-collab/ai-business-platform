@@ -86,11 +86,6 @@ async def readiness_probe() -> dict[str, object]:
     db_ok = await _check_database()
     redis_state = await _check_redis()
 
-    checks = {
-        "database": db_ok,
-        "redis": redis_state == "ok",
-    }
-
     if not db_ok or redis_state == "error":
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
