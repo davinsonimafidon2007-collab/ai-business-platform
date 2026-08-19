@@ -1,16 +1,9 @@
-"""Health check endpoint (composite — API + DB + Redis).
+"""Health check endpoints (Liveness + Readiness + Composite).
 
-GET /health — Returns API status, version, available providers and the
-state of the underlying dependencies (database and optional Redis).
-
-HTTP semantics:
-- 200 with ``status="ok"``        → API + DB ok (Redis ok or optional).
-- 200 with ``status="degraded"``  → API + DB ok, Redis down/disabled.
-- 503 with ``status="error"``     → database check failed.
-
-The DB check runs ``SELECT 1`` through the shared ``DatabaseManager`` engine
-with a short timeout so it never blocks the event loop for long; the Redis
-check is a soft ``PING`` (see app/core/redis.py for the fail-soft semantics).
+Endpoints:
+- GET /health/live   — Liveness probe (verificación ligera del proceso).
+- GET /health/ready  — Readiness probe (verificación de DB + Redis).
+- GET /health        — Check compuesto de salud con metadatos.
 """
 
 from __future__ import annotations
@@ -18,7 +11,7 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from fastapi import APIRouter, Response, status
+from fastapi import APIRouter, HTTPException, Response, status
 
 from app.api.v1.schemas.health import HealthResponse
 from app.core.config import settings
@@ -28,9 +21,8 @@ from app.providers.registry import ProviderRegistry
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(tags=["Health"])
+router = APIRouter(tags=["health"])
 
-# Short timeouts so /health stays lightweight under dependency hiccups.
 _DB_CHECK_TIMEOUT_S = 2.0
 _REDIS_CHECK_TIMEOUT_S = 2.0
 
@@ -42,8 +34,8 @@ async def _check_database() -> bool:
     """
     try:
         async def _probe() -> None:
-            async with db_manager.engine.connect() as conn:
-                await conn.execute(__import__("sqlalchemy").text("SELECT 1"))
+            async with db_manager.get_session() as session:
+                await session.execute(__import__("sqlalchemy").text("SELECT 1"))
 
         await asyncio.wait_for(_probe(), timeout=_DB_CHECK_TIMEOUT_S)
         return True
@@ -76,13 +68,48 @@ async def _check_redis() -> str:
     "/health/live",
     status_code=status.HTTP_200_OK,
     summary="Liveness — proceso vivo",
-    description="Solo comprueba que el proceso responde, sin depender de DB o "
-    "Redis. Usado por el healthcheck del contenedor (docker-compose) para no "
-    "reiniciar la API cuando las dependencias tardan en arrancar.",
+    description="Solo comprueba que el proceso responde, sin depender de DB o Redis.",
 )
-async def get_health_live() -> dict[str, object]:
-    """Liveness: el proceso está vivo (TASK-004)."""
-    return {"status": "ok", "checks": {"api": "ok"}}
+async def liveness_probe() -> dict[str, object]:
+    """Liveness: el proceso está vivo."""
+    return {"status": "ok", "checks": {"api": "ok"}, "timestamp": "now"}
+
+
+@router.get(
+    "/health/ready",
+    status_code=status.HTTP_200_OK,
+    summary="Readiness — listo para recibir tráfico",
+    description="Comprueba que dependencias críticas (DB, Redis) están disponibles.",
+)
+async def readiness_probe() -> dict[str, object]:
+    """Readiness probe: Verifica DB y Redis."""
+    db_ok = await _check_database()
+    redis_state = await _check_redis()
+
+    checks = {
+        "database": db_ok,
+        "redis": redis_state == "ok",
+    }
+
+    if not db_ok or redis_state == "error":
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "status": "unhealthy",
+                "checks": {
+                    "database": "ok" if db_ok else "error",
+                    "redis": redis_state,
+                },
+            },
+        )
+
+    return {
+        "status": "healthy",
+        "checks": {
+            "database": "ok",
+            "redis": redis_state,
+        },
+    }
 
 
 @router.get(
@@ -90,15 +117,14 @@ async def get_health_live() -> dict[str, object]:
     response_model=HealthResponse,
     status_code=status.HTTP_200_OK,
     summary="Verificar estado del servicio (API + DB + Redis)",
-    description="Devuelve el estado actual de la API, la versión, la lista de "
-    "proveedores registrados y el estado de los componentes database/redis.",
+    description="Devuelve el estado actual de la API, la versión, proveedores y estado de componentes.",
     responses={
         200: {"description": "Servicio operativo o degradado", "model": HealthResponse},
         503: {"description": "Database caída — servicio no operativo", "model": HealthResponse},
     },
 )
-async def get_health(response: Response) -> HealthResponse:
-    """Endpoint de salud y metadatos de la API (composite)."""
+async def health_check(response: Response) -> HealthResponse:
+    """Health check completo: Combina liveness + readiness."""
     providers = ProviderRegistry.list_providers()
 
     db_ok = await _check_database()
@@ -120,8 +146,7 @@ async def get_health(response: Response) -> HealthResponse:
 
     return HealthResponse(
         status=overall,
-        version=settings.app_version,
+        version=getattr(settings, "app_version", "1.0.0"),
         providers=providers,
         checks=checks,
     )
-
