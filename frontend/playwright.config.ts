@@ -1,36 +1,42 @@
-import { defineConfig, devices } from "@playwright/test";
+import { defineConfig, devices } from '@playwright/test';
 
-/**
- * Playwright E2E (web). El proyecto ya dispone de flujos Maestro (móvil) en
- * `e2e/*.yaml`; este runner aporta E2E de navegador para CI web.
- *
- * Para ejecutar localmente:
- *   1. Levanta backend + frontend (docker compose up o `npm run dev`).
- *   2. npx playwright install chromium   # descarga el navegador (1 vez)
- *   3. npx playwright test
- */
 export default defineConfig({
-  testDir: "./e2e",
-  timeout: 30_000,
+  testDir: './e2e',
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   workers: process.env.CI ? 1 : undefined,
-  reporter: [["list"]],
+  reporter: [
+    ['html', { open: 'never' }],
+    ['list'],
+  ],
   use: {
-    baseURL: process.env.PLAYWRIGHT_BASE_URL || "http://localhost:3001",
-    trace: "on-first-retry",
+    baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3001',
+    trace: 'on-first-retry',
+    screenshot: 'only-on-failure',
+    video: 'retain-on-failure',
+    // Esperar a que la red esté idle antes de continuar
+    actionTimeout: 15000,
+    navigationTimeout: 30000,
   },
   projects: [
     {
-      name: "chromium",
-      use: { ...devices["Desktop Chrome"] },
+      name: 'chromium',
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: 'firefox',
+      use: { ...devices['Desktop Firefox'] },
+    },
+    {
+      name: 'mobile-chrome',
+      use: { ...devices['Pixel 5'] },
     },
   ],
   webServer: {
-    command: "npm run dev",
-    url: "http://localhost:3001",
+    command: 'npm run dev',
+    url: 'http://localhost:3001',
     reuseExistingServer: !process.env.CI,
-    timeout: 120_000,
+    timeout: 120000,
   },
 });

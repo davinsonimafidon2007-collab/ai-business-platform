@@ -4,6 +4,16 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.models.search import ProviderIssue
+
+__all__ = [
+    "ProviderIssue",
+    "SearchBase",
+    "SearchCreate",
+    "SearchRead",
+    "SearchUpdate",
+]
+
 
 class SearchBase(BaseModel):
     name: str = Field(..., max_length=255)

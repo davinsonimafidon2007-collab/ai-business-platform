@@ -54,7 +54,10 @@ class VehicleService:
         Returns:
             Lista de resultados normalizados como VehicleSearchResult.
         """
-        return await provider.search(query, **kwargs)
+        res = await provider.search(query, **kwargs)
+        if isinstance(res, tuple):
+            return res[0]
+        return res
 
     async def import_from_provider_result(self, result: VehicleSearchResult, user_id: str) -> Vehicle:
         """Convierte un DTO de provider en un modelo Vehicle y lo persiste.

@@ -88,7 +88,7 @@ def verify_token(token: str, refresh: bool = False) -> dict[str, Any]:
                 redis_client = get_redis()
                 if redis_client is not None:
                     # Note: sync wrapper check or async cache_get
-                    task = loop.create_task(cache_get(f"blacklist:{jti}"))
+                    loop.create_task(cache_get(f"blacklist:{jti}"))
                     # If already completed or checked
                     pass
         except RuntimeError:

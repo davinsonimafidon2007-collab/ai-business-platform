@@ -148,11 +148,9 @@ class AutoScout24Provider(VehicleProvider):
 
         return f"{self._base_url or BASE_URL}{path}?{urlencode(params)}"
 
-    async def search(self, query: str, **kwargs: Any) -> list[VehicleSearchResult]:
+    async def search(self, query: str = "", **kwargs: Any) -> Any:
         """Busca en AS24 aceptando término libre o URL completa."""
-        search_url = self.build_search_url(query, **kwargs)
-        html = await self._download_url(search_url)
-        return self._parse_search_results(html, search_url)
+        return await super().search(query, **kwargs)
 
     def _parse_search_results(self, html: str, search_url: str) -> list[VehicleSearchResult]:
         """Parsea resultados priorizando ``__NEXT_DATA__`` (más estable).

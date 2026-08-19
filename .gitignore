@@ -58,6 +58,7 @@ npm-debug.log*
 frontend/public/sw.js
 frontend/public/workbox-*.js
 frontend/test-results/
+frontend/playwright-report/
 
 # Environment files
 .env

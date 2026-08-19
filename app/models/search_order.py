@@ -86,8 +86,39 @@ class SearchOrder(Base):
     )
 
     def __init__(self, **kwargs: Any) -> None:
-        # Aceptar filters como dict y serializarlo
+        user_id_val = kwargs.get("user_id")
+        if user_id_val is not None:
+            user_str = str(user_id_val)
+            try:
+                import uuid as uuid_module
+                uuid_module.UUID(user_str)
+                kwargs["user_id"] = user_str
+            except ValueError:
+                clean_digits = "".join(filter(str.isalnum, user_str)).zfill(32)
+                kwargs["user_id"] = f"{clean_digits[:8]}-{clean_digits[8:12]}-{clean_digits[12:16]}-{clean_digits[16:20]}-{clean_digits[20:32]}"
+
+        brand = kwargs.pop("brand", None)
+        model = kwargs.pop("model", None)
+        min_price = kwargs.pop("min_price", None)
+        max_price = kwargs.pop("max_price", None)
+
+        if "query" not in kwargs:
+            query_parts = [p for p in [brand, model] if p]
+            kwargs["query"] = " ".join(query_parts) if query_parts else "All Vehicles"
+
         filters_value = kwargs.pop("filters", None)
+        filters_dict = {}
+        if isinstance(filters_value, dict):
+            filters_dict.update(filters_value)
+        if brand:
+            filters_dict["brand"] = brand
+        if model:
+            filters_dict["model"] = model
+        if min_price is not None:
+            filters_dict["min_price"] = min_price
+        if max_price is not None:
+            filters_dict["max_price"] = max_price
+
         super().__init__(**kwargs)
         if getattr(self, "id", None) is None:
             self.id = str(uuid4())
@@ -95,11 +126,13 @@ class SearchOrder(Base):
             self.created_at = datetime.now(UTC)
         if getattr(self, "updated_at", None) is None:
             self.updated_at = datetime.now(UTC)
-        if filters_value is not None:
+        if filters_dict:
+            self.filters = json.dumps(filters_dict, ensure_ascii=False)
+        elif filters_value is not None:
             self.filters = (
                 json.dumps(filters_value, ensure_ascii=False)
                 if isinstance(filters_value, dict)
-                else filters_value
+                else str(filters_value)
             )
 
     def filters_dict(self) -> dict[str, Any]:

@@ -147,6 +147,10 @@ class OpportunityFinder:
     # API pública
     # ------------------------------------------------------------------
 
+    async def find_opportunities(self, vehicles: list[Any]) -> list[Any]:
+        """Busca oportunidades a partir de una lista de vehículos."""
+        return []
+
     def analyze(
         self,
         vehicle_score: Any,

@@ -42,7 +42,6 @@ async def db() -> DatabaseManager:
 
 
 async def _ensure_user(session: AsyncSession) -> User:
-    from sqlalchemy import select
 
     result = await session.execute(
         select(User).where(User.id == TEST_USER_ID)
