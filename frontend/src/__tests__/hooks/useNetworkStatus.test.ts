@@ -19,6 +19,7 @@ describe("useNetworkStatus", () => {
       configurable: true,
       value: originalOnLine,
     });
+    vi.unstubAllGlobals();
   });
 
   test("initializes with online status", () => {

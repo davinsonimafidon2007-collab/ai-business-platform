@@ -1,4 +1,4 @@
-﻿import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 
 import { useThemeStore } from "@/app/store/theme-store";
 
@@ -70,6 +70,26 @@ describe("useThemeStore", () => {
     expect(useThemeStore.getState().theme).toBe("light");
     expect(document.documentElement.classList.contains("dark")).toBe(false);
   });
+
+  it("listens to system theme changes when no stored theme", () => {
+    let listenerFn: ((e: { matches: boolean }) => void) | undefined;
+    const mediaQuery = {
+      matches: false,
+      addEventListener: vi.fn((_event, fn) => {
+        listenerFn = fn;
+      }),
+      addListener: vi.fn(),
+    };
+    vi.stubGlobal("matchMedia", vi.fn().mockReturnValue(mediaQuery));
+
+    useThemeStore.getState().initialize();
+    expect(mediaQuery.addEventListener).toHaveBeenCalledWith("change", expect.any(Function));
+
+    if (listenerFn) {
+      listenerFn({ matches: true });
+      expect(useThemeStore.getState().theme).toBe("dark");
+    }
+  });
 });
 
 describe("useThemeStore SSR branches", () => {
@@ -105,4 +125,3 @@ describe("useThemeStore SSR branches", () => {
     }
   });
 });
-
