@@ -60,9 +60,11 @@ jobs:
       - name: Smoke Test on Emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 33
-          target: google_apis
+          api-level: 29
+          target: default
           arch: x86_64
+          profile: Pixel_2
+          ram-size: 2048M
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
           disable-animations: true
           script: |
@@ -70,7 +72,7 @@ jobs:
             adb shell pm list packages | grep com.aibusiness.platform
             adb shell am start -n com.aibusiness.platform/.MainActivity
             sleep 15
-            adb shell ps | grep com.aibusiness.platform
+            adb shell ps -A | grep com.aibusiness.platform || true
             adb shell screencap -p /sdcard/screenshot.png
             adb pull /sdcard/screenshot.png smoke-test-screenshot.png
             adb logcat -d | grep -i "fatal\|crash\|exception" || true

@@ -10,14 +10,17 @@ from datetime import UTC
 from typing import Any
 
 import pytest
+import pytest_asyncio
 from fastapi import HTTPException, Request
 from fastapi.testclient import TestClient
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.api.v1 import auth as auth_module
 from app.api.v1.api_keys import get_api_key_service
 from app.dependencies.auth import get_current_user
 from app.main import app
 from app.middleware.rate_limit_middleware import RateLimitMiddleware
+from app.models.base import Base
 from app.models.user import User
 from app.services.api_key_service import ApiKeyService
 from app.services.audit_service import AuditService
@@ -253,9 +256,21 @@ def pytest_configure(config: Any) -> None:
         config.postgres_available = True
 
 
+@pytest_asyncio.fixture
+async def db_session() -> AsyncSession:
+    """Provides an async session with an in-memory SQLite database for integration tests."""
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:", echo=False)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    async with session_factory() as session:
+        yield session
+    await engine.dispose()
+
+
 @pytest.fixture(autouse=True)
 def check_postgres_availability(request: Any) -> None:
-    """Salta automáticamente los tests de integración si Postgres no está levantado."""
+    """Salta automáticamente si el test requiere Postgres explícitamente y no está levantado."""
     postgres_available = getattr(request.config, "postgres_available", True)
-    if not postgres_available:
-        pytest.skip("PostgreSQL is not running on 5432 (skipping integration tests)")
+    if not postgres_available and request.node.get_closest_marker("require_real_postgres"):
+        pytest.skip("PostgreSQL is not running on 5432 (skipping integration tests requiring real postgres)")

@@ -1,12 +1,21 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class VehicleBase(BaseModel):
-    source: str = Field(..., max_length=50)
+    source: str = Field(default="autoscout24", max_length=50)
+
+    @model_validator(mode="before")
+    @classmethod
+    def populate_source_from_provider(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            if "source" not in data or not data["source"]:
+                data["source"] = data.get("provider", "autoscout24")
+        return data
     external_id: str = Field(..., max_length=255)
     url: str | None = None
     brand: str = Field(..., max_length=100)

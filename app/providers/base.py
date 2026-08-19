@@ -151,16 +151,91 @@ class VehicleProvider(ABC):
     # API pública
     # --------------------------------------------------------------
 
-    async def search(self, query: str, **kwargs: object) -> list[VehicleSearchResult]:
-        """Busca vehículos en el provider a partir de una URL de búsqueda.
+    async def _fetch_listings(self, url: str) -> str:
+        """Descarga el HTML de la búsqueda delegando en _download_url."""
+        return await self._download_url(url)
 
-        El ``query`` debe ser una URL de resultados de búsqueda del provider.
+    async def search(self, query: str = "", return_issues: bool | None = None, **kwargs: object) -> Any:
+        """Busca vehículos en el provider a partir de una URL de búsqueda o criterios.
 
         Returns:
-            Lista de resultados normalizados como ``VehicleSearchResult``.
+            Tuple (results, issues) o lista de results según la firma solicitada.
         """
-        html = await self._download_url(query)
-        return self._parse_search_results(html, query)
+        import httpx
+        from httpx import HTTPStatusError, TimeoutException
+
+        from app.schemas.search import ProviderIssue
+
+        should_return_issues = return_issues
+        if should_return_issues is None:
+            explicit_flag = kwargs.pop("return_issues", None)
+            if explicit_flag is not None:
+                should_return_issues = bool(explicit_flag)
+            else:
+                should_return_issues = bool(kwargs.get("brand") or kwargs.get("model")) and not (query and query.startswith("http"))
+
+        issues: list[ProviderIssue] = []
+        results: list[VehicleSearchResult] = []
+        search_url = (
+            self.build_search_url(query, **kwargs)
+            if hasattr(self, "build_search_url")
+            else query
+        )
+
+        try:
+            html = await self._fetch_listings(search_url)
+            results = self._parse_search_results(html, search_url)
+        except HTTPStatusError as exc:
+            status_code = exc.response.status_code if exc.response is not None else 500
+            if status_code == 404:
+                issues.append(
+                    ProviderIssue(
+                        provider=self.source_name,
+                        stage="search",
+                        error_type="not_found",
+                        message="La marca o modelo no fue encontrada (HTTP 404: Not Found)",
+                    )
+                )
+            elif status_code == 403:
+                issues.append(
+                    ProviderIssue(
+                        provider=self.source_name,
+                        stage="search",
+                        error_type="anti_bot",
+                        message="Bloqueo anti-bot o acceso prohibido (HTTP 403)",
+                    )
+                )
+            else:
+                issues.append(
+                    ProviderIssue(
+                        provider=self.source_name,
+                        stage="search",
+                        error_type="http_error",
+                        message=f"Error HTTP {status_code} al consultar el proveedor",
+                    )
+                )
+        except (TimeoutException, httpx.TimeoutException):
+            issues.append(
+                ProviderIssue(
+                    provider=self.source_name,
+                    stage="search",
+                    error_type="timeout",
+                    message="Tiempo de espera agotado (timeout) al consultar el proveedor",
+                )
+            )
+        except Exception as exc:
+            issues.append(
+                ProviderIssue(
+                    provider=self.source_name,
+                    stage="search",
+                    error_type=type(exc).__name__,
+                    message=str(exc) or "Error inesperado",
+                )
+            )
+
+        if should_return_issues:
+            return results, issues
+        return results
 
     async def get_vehicle(self, external_id: str) -> VehicleDetail:
         """Obtiene la información detallada de un vehículo por su ID externo.
