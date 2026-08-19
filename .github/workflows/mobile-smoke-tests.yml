@@ -60,9 +60,11 @@ jobs:
       - name: Smoke Test on Emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 33
-          target: google_apis
+          api-level: 29
+          target: default
           arch: x86_64
+          profile: Pixel_2
+          ram-size: 2048M
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
           disable-animations: true
           script: |
