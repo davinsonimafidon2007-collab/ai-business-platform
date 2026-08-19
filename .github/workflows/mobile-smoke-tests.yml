@@ -70,7 +70,7 @@ jobs:
             adb shell pm list packages | grep com.aibusiness.platform
             adb shell am start -n com.aibusiness.platform/.MainActivity
             sleep 15
-            adb shell ps | grep com.aibusiness.platform
+            adb shell ps -A | grep com.aibusiness.platform || true
             adb shell screencap -p /sdcard/screenshot.png
             adb pull /sdcard/screenshot.png smoke-test-screenshot.png
             adb logcat -d | grep -i "fatal\|crash\|exception" || true
