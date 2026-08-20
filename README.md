@@ -1,6 +1,10 @@
+> ⚠️ **AVISO OFICIAL — USO PERSONAL / SIN LOGIN**: esta aplicación es de **uso personal** y **NO requiere ni admite login de ningún tipo** (ni usuario, ni contraseña, ni OAuth, ni API key). Lee [`AGENTS.md`](./AGENTS.md) antes de tocar el código. La auth está desactivada con `AUTH_DISABLED=true` (el admin es un usuario local fijo). `APP_MODE=personal` no desactiva auth. **No agregues mecanismos de autenticación.**
+
 # AI Business Platform
 
-Plataforma de inteligencia de negocio para vehículos, con autenticación, búsqueda en tiempo real, oportunidades de compra y análisis de costes de importación.
+Plataforma de inteligencia de negocio para vehículos, para uso personal (**sin
+login**), búsqueda en tiempo real, oportunidades de compra y análisis de costes
+de importación.
 
 ## 🚀 Tecnologías
 
