@@ -57,11 +57,17 @@ jobs:
           path: frontend/android/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 7
 
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm-rules.rules
+          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm || true
+          sudo chmod 666 /dev/kvm || true
+
       - name: Smoke Test on Emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 30
-          target: google_apis
+          api-level: 29
+          target: default
           arch: x86_64
           profile: Nexus 6
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
@@ -81,5 +87,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: smoke-test-screenshot
-          path: frontend/smoke-test-screenshot.png
+          path: smoke-test-screenshot.png
           retention-days: 3
