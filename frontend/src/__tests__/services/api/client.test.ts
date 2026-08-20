@@ -150,4 +150,27 @@ describe("fetchWithRetry", () => {
 
     vi.unstubAllGlobals();
   });
+
+  it("reintenta ante un TypeError de red y tiene éxito", async () => {
+    const mockFetch = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValueOnce(new Response("ok", { status: 200 }));
+    vi.stubGlobal("fetch", mockFetch);
+
+    const res = await fetchWithRetry("http://localhost/test", {}, 2, 10);
+    expect(res.status).toBe(200);
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+
+    vi.unstubAllGlobals();
+  });
+
+  it("lanza error si retries es 0 tras un TypeError", async () => {
+    const mockFetch = vi.fn().mockRejectedValue(new TypeError("Network error"));
+    vi.stubGlobal("fetch", mockFetch);
+
+    await expect(fetchWithRetry("http://localhost/test", {}, 0, 10)).rejects.toThrow("Network error");
+
+    vi.unstubAllGlobals();
+  });
 });
