@@ -136,8 +136,20 @@ class TelegramAlertService(OpportunityAlertService):
                 else int(getattr(settings, "telegram_alert_cooldown_hours", 6) or 6)
             ),
         )
-        self._bot_token = telegram_bot_token or settings.telegram_bot_token or ""
-        self._chat_id = telegram_chat_id or settings.telegram_chat_id or ""
+                # Un token/chat explícitamente vacío ("") deshabilita Telegram (dry-run)
+        # y NO debe caer al fallback de settings, que leería credenciales reales
+        # del .env (ver config.py: Empty -> disabled). Sólo None (omisión) usa
+        # settings.telegram_alert_* para inyección en producción.
+        self._bot_token = (
+            telegram_bot_token
+            if telegram_bot_token is not None
+            else (settings.telegram_bot_token or "")
+        )
+        self._chat_id = (
+            telegram_chat_id
+            if telegram_chat_id is not None
+            else (settings.telegram_chat_id or "")
+        )
 
     def _passes_threshold(self, opportunity: Any) -> bool:
         """Umbral de recommendation/score (heredado) + filtro de margen (Telegram)."""
