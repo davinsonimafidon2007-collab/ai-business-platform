@@ -14,6 +14,7 @@ from app.api.v1.schemas.deal import (
 )
 from app.database import get_db_session
 from app.dependencies.auth import get_current_user
+from app.models.deal import DealStatus
 from app.models.user import User
 from app.repositories.deal_repository import DealRepository
 from app.repositories.vehicle_repository import VehicleRepository
