@@ -80,14 +80,18 @@ class SearchResultAnalyzer:
         # 1. Scoring
         vehicle_score = self._vehicle_scorer.score(vehicle)
 
-        # 2. Mercado — prefiere estimate_async si existe, fallback a estimate.
-        #    Solo se propaga comparable_providers cuando no es None, para
-        #    mantener compatibilidad total con los callers/mocks existentes
-        #    (default = registry o COMPARABLE_PROVIDERS de settings).
-        estimate_method = getattr(self._market_estimator, "estimate_async", None)
+        # 2. Mercado — prefiere estimate_async si existe y es corutina real,
+        #    fallback a estimate. Solo se propaga comparable_providers cuando
+        #    no es None, para mantener compatibilidad total con los
+        #    callers/mocks existentes (default = registry o COMPARABLE_PROVIDERS
+        #    de settings).
+        estimate_async = getattr(self._market_estimator, "estimate_async", None)
+        has_async_estimate = estimate_async is not None and inspect.iscoroutinefunction(
+            estimate_async
+        )
         if comparable_providers:
-            if estimate_method is not None:
-                market_estimation = await estimate_method(
+            if has_async_estimate:
+                market_estimation = await estimate_async(
                     vehicle, comparable_providers=comparable_providers
                 )
             else:
@@ -99,8 +103,8 @@ class SearchResultAnalyzer:
                 else:
                     market_estimation = result
         else:
-            if estimate_method is not None:
-                market_estimation = await estimate_method(vehicle)
+            if has_async_estimate:
+                market_estimation = await estimate_async(vehicle)
             else:
                 result = self._market_estimator.estimate(vehicle)
                 if inspect.iscoroutine(result):

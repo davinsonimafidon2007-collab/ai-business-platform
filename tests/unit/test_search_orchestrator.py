@@ -373,11 +373,11 @@ class TestOrchestratorInstantiation:
             opportunity_finder=opportunity_finder,
         )
         assert orchestrator is not None
-        assert hasattr(orchestrator, "search")
-        assert hasattr(orchestrator, "summarize")
-        assert hasattr(orchestrator, "top")
-        assert hasattr(orchestrator, "filter")
-        assert hasattr(orchestrator, "sort")
+        assert callable(orchestrator.search)
+        assert callable(orchestrator.summarize)
+        assert callable(orchestrator.top)
+        assert callable(orchestrator.filter)
+        assert callable(orchestrator.sort)
 
     def test_orchestrator_uses_dependency_injection(
         self,

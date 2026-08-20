@@ -37,6 +37,7 @@ from app.services.profit_coherence import build_coherence_warnings
 from app.services.provider_issue_labels import build_provider_issue_payloads
 from app.services.recommendation_labels import recommendation_label_es, risk_label_es
 from app.services.search_engine import SearchEngineService
+from app.models.user import User
 
 router = APIRouter(tags=["Search"])
 

@@ -24,3 +24,11 @@ class HealthResponse(BaseModel):
         default_factory=dict,
         description="Estado de los sub-checks: api / database / redis",
     )
+
+
+class ReadyResponse(BaseModel):
+    """Respuesta del endpoint de readiness."""
+
+    status: str = Field(..., description="Estado general: ok o degraded")
+    db: bool = Field(..., description="PostgreSQL accesible")
+    redis: bool = Field(..., description="Redis accesible")

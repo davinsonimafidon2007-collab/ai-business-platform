@@ -12,11 +12,16 @@ from app.models.deal import DealStatus
 class DealCreate(BaseModel):
     """Body de creación de un deal.
 
-    Requiere al menos uno de ``opportunity_id`` o ``vehicle_id``.
+    Se puede vincular por ``vehicle_id`` interno o por ``source`` +
+    ``external_id``. Si se envía el par `source` + `external_id` sin
+    `vehicle_id`, el backend resuelve el vehículo del usuario antes de
+    crear el deal.
     """
 
     opportunity_id: str | None = None
     vehicle_id: str | None = None
+    source: str | None = None
+    external_id: str | None = None
     notes: str | None = None
     contact_channel: str | None = None
 

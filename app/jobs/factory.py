@@ -22,6 +22,9 @@ from app.services.job_failure_alert_service import JobFailureAlertService
 def create_scheduler(context: JobContext) -> Scheduler:
     """Create and configure a Scheduler with all standard jobs.
 
+    TASK 5 — el scheduler espera a Redis antes de registrar jobs;
+    si Redis no está disponible, sigue con los jobs que no lo necesitan.
+
     Args:
         context: Shared ``JobContext`` with DB manager and settings.
 

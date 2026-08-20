@@ -68,6 +68,8 @@ export async function fetchDeals(
 export async function createDeal(body: {
   opportunity_id?: string;
   vehicle_id?: string;
+  source?: string;
+  external_id?: string;
   notes?: string;
   contact_channel?: string;
 }): Promise<Deal> {

@@ -65,7 +65,7 @@ class NegotiationEngine:
     Uso:
         engine = NegotiationEngine()
         result = engine.analyze(negotiation_input)
-        print(result.recommendation, result.recommended_initial_offer)
+        logger.debug("negotiation result: %s", result.recommendation)
     """
 
     def __init__(self) -> None:
