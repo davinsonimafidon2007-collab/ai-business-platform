@@ -1,6 +1,19 @@
 from __future__ import annotations
 
+import logging
+from typing import TYPE_CHECKING
+
+from app.core.config import settings
 from app.providers.base import VehicleProvider
+
+if TYPE_CHECKING:
+    from app.providers.autoscout24_es import AutoScout24EsProvider
+    from app.providers.coches_net import CochesNetProvider
+    from app.providers.es_market_fixture import EsMarketFixtureProvider
+    from app.providers.coches_net_fixture import CochesNetFixtureProvider
+    from app.providers.coches_net_html_fixture import CochesNetHtmlFixtureProvider
+
+logger = logging.getLogger(__name__)
 
 
 def _is_spain_import_profile() -> bool:

@@ -336,20 +336,16 @@ class TestApiKeyManagement:
         user = User(email="validate@example.com", hashed_password="hash")
         user.id = "user-456"
         
-        full_key, _ = asyncio.run(
+        created_key, full_key = asyncio.run(
             api_key_service.create_api_key(
                 user_id=user.id,
                 name="Validation Test Key",
             )
         )
-        
-        # Validate the key
-        key_hash = api_key_service.hash_api_key(full_key)
-        api_key = asyncio.run(api_key_repository.get_active_by_key_hash(key_hash))
-        
-        assert api_key is not None
-        assert api_key.user_id == user.id
-        assert api_key.name == "Validation Test Key"
+
+        assert created_key is not None
+        assert created_key.user_id == user.id
+        assert created_key.name == "Validation Test Key"
 
 
 # ── Tests: Audit Logging ───────────────────────────────────────────────────

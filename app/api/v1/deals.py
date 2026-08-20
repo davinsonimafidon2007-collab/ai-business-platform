@@ -14,9 +14,9 @@ from app.api.v1.schemas.deal import (
 )
 from app.database import get_db_session
 from app.dependencies.auth import get_current_user
-from app.models.deal import DealStatus
 from app.models.user import User
 from app.repositories.deal_repository import DealRepository
+from app.repositories.vehicle_repository import VehicleRepository
 from app.services.deal_service import DealService
 
 router = APIRouter(prefix="/deals", tags=["Deals"])
@@ -32,14 +32,25 @@ async def get_deal_service(
 @router.post("", response_model=DealRead, status_code=status.HTTP_201_CREATED)
 async def create_deal(
     payload: DealCreate,
+    session: AsyncSession = Depends(get_db_session),
     service: DealService = Depends(get_deal_service),
     current_user: User = Depends(get_current_user),
 ) -> DealRead:
     """Crea un nuevo deal en estado NEW."""
+    vehicle_id = payload.vehicle_id
+    if vehicle_id is None and payload.source and payload.external_id:
+        vehicle_repository = VehicleRepository(session)
+        vehicle = await vehicle_repository.get_by_external_id(
+            payload.source,
+            payload.external_id,
+            str(current_user.id),
+        )
+        if vehicle is not None:
+            vehicle_id = vehicle.id
     deal = await service.create(
         user_id=current_user.id,
         opportunity_id=payload.opportunity_id,
-        vehicle_id=payload.vehicle_id,
+        vehicle_id=vehicle_id,
         notes=payload.notes,
         contact_channel=payload.contact_channel,
     )

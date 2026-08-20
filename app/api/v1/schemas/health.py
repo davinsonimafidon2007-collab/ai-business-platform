@@ -32,3 +32,12 @@ class HealthResponse(BaseModel):
         description="Modo del pipeline de comparables ES (TASK 1): "
         "'fixture' (datos simulados; banner de demo en la UI) | 'live'.",
     )
+
+
+
+class ReadyResponse(BaseModel):
+    """Respuesta del endpoint de readiness."""
+
+    status: str = Field(..., description="Estado general: ok o degraded")
+    db: bool = Field(..., description="PostgreSQL accesible")
+    redis: bool = Field(..., description="Redis accesible")

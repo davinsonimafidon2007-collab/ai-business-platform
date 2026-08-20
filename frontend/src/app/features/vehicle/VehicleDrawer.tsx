@@ -349,7 +349,7 @@ export function VehicleDrawer({ vehicle, onClose }: VehicleDrawerProps) {
           <button
             onClick={() => {
               if (vehicle.external_id) {
-                router.push(`/inspection/?vehicle_id=${vehicle.external_id}`);
+                router.push(`/inspection/?vehicle_id=${vehicle.external_id}&source=${encodeURIComponent(vehicle.source ?? "")}`);
               }
             }}
             disabled={!vehicle.external_id}
@@ -402,7 +402,8 @@ function VehicleDealActions({ vehicle }: { vehicle: SearchResultItem }) {
   const createDealMut = useMutation({
     mutationFn: () =>
       createDeal({
-        vehicle_id: vehicle.external_id ?? undefined,
+        source: vehicle.source ?? undefined,
+        external_id: vehicle.external_id ?? undefined,
       }),
     onSuccess: (deal) => {
       setDealId(deal.id);

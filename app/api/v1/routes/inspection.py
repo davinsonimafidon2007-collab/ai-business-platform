@@ -66,9 +66,9 @@ async def _get_owned_session(
 )
 async def create_session(
     data: InspectionSessionCreate,
+    current_user: User = Depends(get_current_user),
     service: InspectionService = Depends(get_inspection_service),
     vehicle_repo: VehicleRepository = Depends(get_vehicle_repository),
-    current_user: User = Depends(get_current_user),
 ) -> InspectionSessionResponse:
     """Creates a new inspection session for a vehicle."""
     vehicle = await vehicle_repo.get_by_id(data.vehicle_id)
@@ -88,8 +88,8 @@ async def create_session(
 )
 async def get_session(
     session_id: str,
-    service: InspectionService = Depends(get_inspection_service),
     current_user: User = Depends(get_current_user),
+    service: InspectionService = Depends(get_inspection_service),
 ) -> InspectionSessionDetailResponse:
     """Gets a session with all observations, photos, and catalog."""
     await _get_owned_session(session_id, current_user, service)
@@ -110,8 +110,8 @@ async def get_session(
 async def update_item(
     session_id: str,
     data: ObservationUpdate,
-    service: InspectionService = Depends(get_inspection_service),
     current_user: User = Depends(get_current_user),
+    service: InspectionService = Depends(get_inspection_service),
 ) -> ObservationResponse:
     """Creates or updates an observation for a catalog item."""
     await _get_owned_session(session_id, current_user, service)
@@ -141,8 +141,8 @@ async def update_item(
 async def upload_photo(
     session_id: str,
     data: PhotoUploadRequest,
-    service: InspectionService = Depends(get_inspection_service),
     current_user: User = Depends(get_current_user),
+    service: InspectionService = Depends(get_inspection_service),
 ) -> PhotoResponse:
     """Registers a photo associated with an observation."""
     await _get_owned_session(session_id, current_user, service)
@@ -165,8 +165,8 @@ async def upload_photo(
 async def analyze_photos(
     session_id: str,
     data: VisionAnalyzeRequest,
-    service: InspectionService = Depends(get_inspection_service),
     current_user: User = Depends(get_current_user),
+    service: InspectionService = Depends(get_inspection_service),
 ) -> VisionAnalysisResponse:
     """Analyzes photos but never applies suggested inspection changes."""
     await _get_owned_session(session_id, current_user, service)
@@ -186,8 +186,8 @@ async def analyze_photos(
 )
 async def finalize_session(
     session_id: str,
-    service: InspectionService = Depends(get_inspection_service),
     current_user: User = Depends(get_current_user),
+    service: InspectionService = Depends(get_inspection_service),
 ) -> InspectionSessionResponse:
     """Finalizes a session, generates summary, and marks as COMPLETED."""
     await _get_owned_session(session_id, current_user, service)
@@ -208,8 +208,8 @@ async def finalize_session(
 )
 async def get_summary(
     session_id: str,
-    service: InspectionService = Depends(get_inspection_service),
     current_user: User = Depends(get_current_user),
+    service: InspectionService = Depends(get_inspection_service),
 ) -> InspectionSummaryResponse:
     """Gets the inspection summary (partial or complete)."""
     await _get_owned_session(session_id, current_user, service)

@@ -19,6 +19,7 @@ from app.services.user_service import UserService
 PUBLIC_PATHS: set[str] = {
     "/health",
     "/health/live",
+    "/health/ready",
     "/docs",
     "/redoc",
     "/openapi.json",
@@ -28,6 +29,12 @@ PUBLIC_PATHS: set[str] = {
     "/api/v1/auth/google",
     "/api/v1/auth/forgot-password",
     "/api/v1/auth/reset-password",
+    "/search",
+    "/api/v1/search",
+    "/vehicle",
+    "/api/v1/vehicle",
+    "/providers",
+    "/api/v1/providers",
 }
 
 

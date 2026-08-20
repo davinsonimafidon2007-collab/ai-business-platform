@@ -182,8 +182,9 @@ class TestProfitAnalyzerInstantiation:
 
     def test_create_analyzer(self) -> None:
         analyzer = ProfitAnalyzer()
-        assert analyzer is not None
-        assert hasattr(analyzer, "analyze")
+        result = analyzer.analyze(VehicleStub(price=100.0))
+        assert result is not None
+        assert isinstance(result, ProfitAnalysis)
 
     def test_analyze_returns_profit_analysis(self, analyzer: ProfitAnalyzer, cheap_vehicle: VehicleStub) -> None:
         result = analyzer.analyze(cheap_vehicle)
@@ -261,8 +262,8 @@ class TestConfigurationProfiles:
             "risk_low_cost_ratio_threshold",
         ]
         for profile in (DEFAULT_PROFILE, GERMANY_PROFILE, FRANCE_PROFILE):
-            for field in required:
-                assert hasattr(profile, field), f"Missing field {field}"
+            values = {field: getattr(profile, field) for field in required}
+            assert all(value is not None for value in values.values())
 
 
 # =============================================================================

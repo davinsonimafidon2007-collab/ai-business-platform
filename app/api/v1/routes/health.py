@@ -20,7 +20,7 @@ import logging
 
 from fastapi import APIRouter, Response, status
 
-from app.api.v1.schemas.health import HealthResponse
+from app.api.v1.schemas.health import HealthResponse, ReadyResponse
 from app.core.config import settings
 from app.core.redis import get_redis
 from app.database import db_manager
@@ -127,3 +127,46 @@ async def get_health(response: Response) -> HealthResponse:
         es_data_mode=getattr(settings, "es_data_mode", "fixture"),
     )
 
+
+@router.get(
+    "/health/ready",
+    response_model=ReadyResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Verificar readiness",
+    description="Comprueba dependencias críticas: PostgreSQL y Redis.",
+    responses={
+        200: {
+            "description": "Servicio listo",
+            "model": ReadyResponse,
+        },
+        500: {
+            "description": "Servicio no listo",
+            "model": ReadyResponse,
+        },
+    },
+)
+async def get_health_ready() -> ReadyResponse:
+    db_ok = False
+    redis_ok = False
+
+    try:
+        with socket.create_connection(("db", 5432), timeout=1):
+            pass
+        db_ok = True
+    except Exception:
+        db_ok = False
+
+    try:
+        with socket.create_connection(("redis", 6379), timeout=1):
+            pass
+        redis_ok = True
+    except Exception:
+        redis_ok = False
+
+    ready = db_ok and redis_ok
+    status_value = "ok" if ready else "degraded"
+    return ReadyResponse(
+        status=status_value,
+        db=db_ok,
+        redis=redis_ok,
+    )

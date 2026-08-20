@@ -187,6 +187,10 @@ class Settings(BaseSettings):
     rate_limit_readonly: int = 10
     password_reset_token_expire_hours: int = 1
 
+    # Redis configuration
+    redis_url: str = ""
+    redis_password: str = ""
+
     # API Key configuration
     api_key_prefix: str = "abp_live"
     api_key_length: int = 32

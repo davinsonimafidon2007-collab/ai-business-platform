@@ -256,7 +256,7 @@ class TestSearchEngineInitialization:
         search_engine: SearchEngineService,
     ) -> None:
         assert search_engine is not None
-        assert hasattr(search_engine, "search")
+        assert callable(search_engine.search)
 
     def test_providers_registered_on_init(
         self,
@@ -353,8 +353,9 @@ class TestSearchEngineInitialization:
         self,
         search_engine: SearchEngineService,
     ) -> None:
-        assert hasattr(search_engine, "_orchestrator")
-        assert isinstance(search_engine._orchestrator, SearchOrchestrator)
+        orchestrator = search_engine._orchestrator
+        assert orchestrator is not None
+        assert isinstance(orchestrator, SearchOrchestrator)
 
 
 class TestSearchEngineSearch:
@@ -414,11 +415,36 @@ class TestSearchEngineSearch:
         vehicle_service_mock: AsyncMock,
         sample_dto: VehicleSearchResult,
     ) -> None:
-        vehicle_service_mock.search_from_provider.return_value = [sample_dto]
+        mobile_dto = VehicleSearchResult(
+            source="mobile_de",
+            external_id="12345",
+            url="https://example.com/vehicle/12345",
+            brand="TestBrand",
+            model="TestModel",
+            year=2020,
+            price=15000.0,
+            currency="EUR",
+        )
+        autoscout_dto = VehicleSearchResult(
+            source="autoscout24",
+            external_id="autoscout-12345",
+            url="https://example.com/vehicle/autoscout-12345",
+            brand="TestBrand",
+            model="TestModel",
+            year=2020,
+            price=16000.0,
+            currency="EUR",
+        )
+        vehicle_service_mock.search_from_provider.side_effect = lambda provider, query, **kwargs: [
+            mobile_dto if getattr(provider, "source_name", None) == "mobile_de" else autoscout_dto
+        ]
         request = SearchRequest(
             query="BMW", max_results=20, providers=["mobile_de", "autoscout24"],
         )
-        providers = {"mobile_de": MagicMock(), "autoscout24": MagicMock()}
+        providers = {
+            "mobile_de": MagicMock(source_name="mobile_de"),
+            "autoscout24": MagicMock(source_name="autoscout24"),
+        }
         with patch.object(ProviderRegistry, "get", side_effect=lambda name: providers[name]):
             result = await search_engine.search(request)
         assert vehicle_service_mock.search_from_provider.call_count == 2
@@ -434,17 +460,21 @@ class TestSearchEngineSearch:
         scorer = MagicMock()
         scorer.score.return_value = VehicleScore(score=75, category="Muy bueno")
         estimator = MagicMock()
-        estimator.estimate.return_value = MarketEstimation(market_price=20000.0, confidence=70.0)
+        estimator.estimate_async = AsyncMock(return_value=MarketEstimation(market_price=20000.0, confidence=70.0))
         analyzer = MagicMock()
-        analyzer.analyze.return_value = MagicMock(
-            purchase_price=15000.0, net_profit=3000.0, roi_percentage=15.0,
-            risk_level=RiskLevel.LOW, recommendation="BUY",
+        analyzer.analyze = AsyncMock(
+            return_value=MagicMock(
+                purchase_price=15000.0, net_profit=3000.0, roi_percentage=15.0,
+                risk_level=RiskLevel.LOW, recommendation="BUY",
+            )
         )
         finder = MagicMock()
-        finder.analyze.return_value = OpportunityAnalysis(
-            overall_score=75.0, opportunity_level=OpportunityLevel.GOOD,
-            recommendation=OppRecommendation.WATCH, estimated_profit=3000.0,
-            roi=15.0, market_confidence=70.0, risk_level="LOW",
+        finder.analyze = AsyncMock(
+            return_value=OpportunityAnalysis(
+                overall_score=75.0, opportunity_level=OpportunityLevel.GOOD,
+                recommendation=OppRecommendation.WATCH, estimated_profit=3000.0,
+                roi=15.0, market_confidence=70.0, risk_level="LOW",
+            )
         )
         engine = SearchEngineService(
             vehicle_service=vehicle_service,
@@ -457,7 +487,7 @@ class TestSearchEngineSearch:
         with patch.object(ProviderRegistry, "get", return_value=MagicMock()):
             result = await engine.search(request)
         scorer.score.assert_called_once()
-        estimator.estimate.assert_called_once()
+        estimator.estimate_async.assert_called_once()
         analyzer.analyze.assert_called_once()
         finder.analyze.assert_called_once()
         assert len(result.results) == 1

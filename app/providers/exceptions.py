@@ -104,3 +104,14 @@ class ProviderResponseTooLargeError(ProviderError):
     ) -> None:
         self.max_bytes = max_bytes
         super().__init__(message, provider)
+
+
+class ProviderUnavailableError(ProviderError):
+    """Proveedor no disponible temporalmente."""
+
+    def __init__(
+        self,
+        message: str,
+        provider: str | None = None,
+    ) -> None:
+        super().__init__(message, provider)

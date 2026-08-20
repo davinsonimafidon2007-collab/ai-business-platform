@@ -143,3 +143,14 @@ def test_invalid_mode_raises_runtime_error(
 
     with pytest.raises(RuntimeError, match="ES_DATA_MODE"):
         ProviderRegistry.ensure_default_providers()
+
+
+
+def test_default_providers_registered() -> None:
+    """ensure_default_providers registra las fuentes principales por defecto."""
+    ProviderRegistry.ensure_default_providers()
+
+    providers = ProviderRegistry.list_providers()
+    assert "autoscout24" in providers
+    assert "es_market_fixture" in providers
+    assert "coches_net_fixture" in providers
