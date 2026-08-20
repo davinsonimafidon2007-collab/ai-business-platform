@@ -136,7 +136,7 @@ class OpportunityFinder:
     Uso:
         finder = OpportunityFinder()
         analysis = finder.analyze(vehicle_score, profit_analysis, market_estimation)
-        print(analysis.recommendation, analysis.opportunity_level)
+        logger.debug("opportunity result: %s", analysis.recommendation)
     """
 
     def __init__(self) -> None:

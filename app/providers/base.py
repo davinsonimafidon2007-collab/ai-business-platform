@@ -7,11 +7,13 @@ from collections import defaultdict
 from typing import Any, ClassVar
 from urllib.parse import urljoin
 
+import httpx
 from bs4 import BeautifulSoup
 
 from app.providers.dto import VehicleDetail, VehicleSearchResult
-from app.providers.exceptions import ProviderParsingError
+from app.providers.exceptions import ProviderConnectionError, ProviderParsingError, ProviderTimeoutError, ProviderUnavailableError
 from app.providers.http_client import ProviderHttpClient
+from app.providers.circuit_breaker import circuit_breaker
 
 logger = logging.getLogger(__name__)
 
@@ -155,11 +157,20 @@ class VehicleProvider(ABC):
         """Busca vehículos en el provider a partir de una URL de búsqueda.
 
         El ``query`` debe ser una URL de resultados de búsqueda del provider.
-
         Returns:
             Lista de resultados normalizados como ``VehicleSearchResult``.
         """
-        html = await self._download_url(query)
+        if circuit_breaker.is_open(self.source_name):
+            raise ProviderUnavailableError(
+                message=f"{self.source_name}: circuito abierto tras fallos repetidos.",
+                provider=self.source_name,
+            )
+        try:
+            html = await self._download_url(query)
+        except (ProviderConnectionError, ProviderTimeoutError, httpx.HTTPStatusError):
+            circuit_breaker.record_failure(self.source_name)
+            raise
+        circuit_breaker.record_success(self.source_name)
         return self._parse_search_results(html, query)
 
     async def get_vehicle(self, external_id: str) -> VehicleDetail:

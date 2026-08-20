@@ -9,8 +9,8 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.api.v1.dependencies import get_provider
-from app.api.v1.schemas.vehicle import ProviderListResponse, VehicleDetailResponse
 from app.dependencies.auth import get_current_user
+from app.api.v1.schemas.vehicle import ProviderListResponse, VehicleDetailResponse
 from app.models.user import User
 from app.providers.dto import VehicleDetail
 from app.providers.registry import ProviderRegistry

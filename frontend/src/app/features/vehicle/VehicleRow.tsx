@@ -1,6 +1,7 @@
 "use client";
 
 import { cn } from "@/app/utils/cn";
+import Image from "next/image";
 import { ScoreBadge, ProfitBadge, OpportunityBadge, RecommendationBadge, NegotiationBadge } from "@/app/components/ui/ScoreBadge";
 import type { SearchResultItem } from "@/app/types/vehicle";
 
@@ -9,6 +10,9 @@ interface VehicleRowProps {
   onClick: () => void;
   isSelected?: boolean;
 }
+
+const VEHICLE_IMAGE_WIDTH = 160;
+const VEHICLE_IMAGE_HEIGHT = 112;
 
 export function VehicleRow({ vehicle, onClick, isSelected }: VehicleRowProps) {
   const opp = vehicle.opportunity;
@@ -24,9 +28,11 @@ export function VehicleRow({ vehicle, onClick, isSelected }: VehicleRowProps) {
     >
       <td className="px-3 py-2">
         {vehicle.images && vehicle.images[0] ? (
-          <img
+          <Image
             src={vehicle.images[0]}
             alt={`${vehicle.brand} ${vehicle.model}`}
+            width={VEHICLE_IMAGE_WIDTH}
+            height={VEHICLE_IMAGE_HEIGHT}
             className="h-14 w-20 rounded object-cover"
             onError={(e) => {
               (e.target as HTMLImageElement).src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='56' viewBox='0 0 80 56'%3E%3Crect width='80' height='56' fill='%23e5e7eb'/%3E%3Ctext x='40' y='28' text-anchor='middle' dy='.3em' fill='%239ca3af' font-size='10'%3ESin imagen%3C/text%3E%3C/svg%3E";

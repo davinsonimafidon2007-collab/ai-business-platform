@@ -219,7 +219,7 @@ class ProfitAnalyzer:
     Uso:
         analyzer = ProfitAnalyzer()
         result = analyzer.analyze(vehicle)
-        print(result.recommendation, result.roi_percentage)
+        logger.debug("profit result: %s", result.recommendation)
 
     Para usar un perfil específico:
         result = analyzer.analyze(vehicle, profile_name="GERMANY")

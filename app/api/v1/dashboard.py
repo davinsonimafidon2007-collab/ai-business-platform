@@ -28,8 +28,8 @@ router = APIRouter(tags=["Dashboard"])
     description="Devuelve estadísticas agregadas del usuario autenticado.",
 )
 async def get_dashboard_stats(
-    session: AsyncSession = Depends(get_db_session),
     current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db_session),
 ) -> dict[str, Any]:
     """Obtiene estadísticas agregadas del usuario autenticado (no globales)."""
     user_id = current_user.id

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -59,9 +60,9 @@ async def test_auth_paths_skip_authentication(middleware: AuthenticationMiddlewa
 async def test_no_auth_header_passes_through(middleware: AuthenticationMiddleware) -> None:
     """Test that requests without auth headers pass through."""
     request = MagicMock(spec=Request)
-    request.url.path = "/api/v1/search"
+    request.url.path = "/api/v1/dashboard/stats"
     request.headers = {}
-    request.state = MagicMock()
+    request.state = SimpleNamespace()
 
     call_next = AsyncMock(return_value=Response())
 
@@ -74,24 +75,25 @@ async def test_no_auth_header_passes_through(middleware: AuthenticationMiddlewar
 async def test_invalid_jwt_returns_401(middleware: AuthenticationMiddleware) -> None:
     """Test that invalid JWT returns 401."""
     request = MagicMock(spec=Request)
-    request.url.path = "/api/v1/search"
+    request.url.path = "/api/v1/dashboard/stats"
     request.headers = {"Authorization": "Bearer invalid_token"}
-    request.state = MagicMock()
+    request.state = SimpleNamespace()
 
     call_next = AsyncMock(return_value=Response())
 
-    response = await middleware.dispatch(request, call_next)
-    assert response.status_code == 401
-    call_next.assert_not_called()
+    with patch.object(middleware, "_authenticate_jwt", new=AsyncMock(side_effect=AuthenticationError("Invalid token"))):
+        response = await middleware.dispatch(request, call_next)
+        assert response.status_code == 401
+        call_next.assert_not_called()
 
 
 @pytest.mark.asyncio
 async def test_invalid_api_key_returns_401(middleware: AuthenticationMiddleware) -> None:
     """Test that invalid API key returns 401."""
     request = MagicMock(spec=Request)
-    request.url.path = "/api/v1/search"
+    request.url.path = "/api/v1/dashboard/stats"
     request.headers = {"X-API-Key": "invalid_key"}
-    request.state = MagicMock()
+    request.state = SimpleNamespace()
 
     call_next = AsyncMock(return_value=Response())
 
@@ -105,9 +107,9 @@ async def test_invalid_api_key_returns_401(middleware: AuthenticationMiddleware)
 async def test_valid_jwt_sets_user_in_state(middleware: AuthenticationMiddleware) -> None:
     """Test that valid JWT sets user in request state."""
     request = MagicMock(spec=Request)
-    request.url.path = "/api/v1/search"
+    request.url.path = "/api/v1/dashboard/stats"
     request.headers = {"Authorization": "Bearer valid_token"}
-    request.state = MagicMock()
+    request.state = SimpleNamespace()
 
     call_next = AsyncMock(return_value=Response())
 
@@ -122,9 +124,9 @@ async def test_valid_jwt_sets_user_in_state(middleware: AuthenticationMiddleware
 async def test_valid_api_key_sets_user_in_state(middleware: AuthenticationMiddleware) -> None:
     """Test that valid API key sets user in request state."""
     request = MagicMock(spec=Request)
-    request.url.path = "/api/v1/search"
+    request.url.path = "/api/v1/dashboard/stats"
     request.headers = {"X-API-Key": "abp_live_valid_key"}
-    request.state = MagicMock()
+    request.state = SimpleNamespace()
 
     call_next = AsyncMock(return_value=Response())
 

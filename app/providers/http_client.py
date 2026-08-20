@@ -275,12 +275,18 @@ class ProviderHttpClient:
         except ProviderConnectionError:
             raise
         except httpx.TimeoutException as e:
+            from app.providers.circuit_breaker import circuit_breaker
+
+            circuit_breaker.record_failure(self.provider_name)
             raise ProviderTimeoutError(
                 f"Timeout al conectar con {self.provider_name}",
                 provider=self.provider_name,
                 timeout=self.timeout,
             ) from e
         except httpx.NetworkError as e:
+            from app.providers.circuit_breaker import circuit_breaker
+
+            circuit_breaker.record_failure(self.provider_name)
             raise ProviderConnectionError(
                 f"Error de conexión con {self.provider_name}",
                 provider=self.provider_name,

@@ -58,7 +58,7 @@ class SearchEngineService:
             opportunity_finder=finder,
         )
         result = await engine.search(request)
-        print(result.summary)
+        logger.debug("search engine result: %s", result.summary)
     """
 
     def __init__(

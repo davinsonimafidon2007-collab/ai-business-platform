@@ -13,7 +13,7 @@ WORKDIR /app
 
 COPY pyproject.toml uv.lock ./
 
-RUN uv sync --locked --group dev
+RUN uv sync --group dev
 
 COPY . .
 

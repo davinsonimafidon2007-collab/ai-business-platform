@@ -128,9 +128,10 @@ class TestVehicleScorerInstantiation:
 
     def test_create_scorer(self) -> None:
         scorer = VehicleScorer()
-        assert scorer is not None
-        assert hasattr(scorer, "score")
-        assert hasattr(scorer, "score_from_dto")
+        result = scorer.score(VehicleStub(price=10000.0, year=2020, mileage=50000))
+        assert result is not None
+        assert callable(scorer.score)
+        assert callable(scorer.score_from_dto)
 
     def test_score_returns_vehicle_score(self, scorer: VehicleScorer, perfect_vehicle: VehicleStub) -> None:
         result = scorer.score(perfect_vehicle)

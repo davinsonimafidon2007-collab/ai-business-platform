@@ -11,11 +11,28 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi.testclient import TestClient
 
+from app.dependencies.auth import get_current_user
 from app.main import app
+from app.models.user import User
 from app.providers.dto import VehicleDetail
 from app.providers.registry import ProviderRegistry
 
 client = TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def _override_current_user() -> None:
+    async def _get_current_user() -> User:
+        return User(
+            id="00000000-0000-0000-0000-000000000001",
+            email="test@example.com",
+            hashed_password="",
+            role="USER",
+        )
+
+    app.dependency_overrides[get_current_user] = _get_current_user
+    yield
+    app.dependency_overrides.pop(get_current_user, None)
 
 
 @pytest.fixture(autouse=True)
@@ -74,7 +91,6 @@ class TestVehicleDetailEndpoint:
     @patch("app.api.v1.routes.vehicles.ProviderRegistry.get")
     def test_vehicle_detail_returns_200(self, mock_registry_get) -> None:
         """GET /api/v1/vehicle/{provider}/{id} debe devolver 200 OK."""
-        # Mock del provider
         mock_provider = AsyncMock()
         mock_provider.source_name = "mobile_de"
         mock_provider.get_vehicle = AsyncMock(
@@ -237,9 +253,6 @@ class TestVehicleDetailEndpoint:
         mock_registry_get.return_value = mock_provider
 
         response = client.get("/api/v1/vehicle/mobile_de/12345")
-        import json
-
-        # No debe lanzar excepción
-        data = json.loads(response.text)
+        data = response.json()
         assert data["source"] == "mobile_de"
         assert data["external_id"] == "12345"
