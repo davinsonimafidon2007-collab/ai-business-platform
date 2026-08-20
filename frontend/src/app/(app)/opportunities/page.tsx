@@ -1,11 +1,10 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { useOpportunities } from "@/app/hooks/useOpportunities";
 import { OpportunityCard } from "@/app/components/opportunities/OpportunityCard";
-import { Skeleton } from "@/app/components/ui/Skeleton";
-import { ErrorDisplay } from "@/app/components/ui/ErrorDisplay";
-import { EmptyState } from "@/app/components/ui/EmptyState";
+import { SkeletonCard, ErrorState, EmptyState } from "@/components/ui/StateComponents";
 import { Pagination } from "@/app/components/ui/Pagination";
 import { Search, SlidersHorizontal, Plus } from "lucide-react";
 
@@ -22,6 +21,7 @@ const STATUS_MAP: Record<string, string> = {
 const ITEMS_PER_PAGE = 5;
 
 export default function OpportunitiesPage() {
+  const router = useRouter();
   const [activeFilter, setActiveFilter] = useState<FilterType>("Todas");
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -60,8 +60,11 @@ export default function OpportunitiesPage() {
             {isLoading ? "Cargando..." : `${filtered.length} en total`}
           </p>
         </div>
-        <button className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary-600 hover:bg-primary-500 text-white text-sm font-semibold transition-colors active:scale-95">
-          <Plus className="w-4 h-4" />
+        <button
+          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary-600 hover:bg-primary-500 text-white text-sm font-semibold transition-colors active:scale-95"
+          aria-label="Nueva oportunidad"
+        >
+          <Plus className="w-4 h-4" aria-hidden="true" />
           <span className="hidden sm:inline">Nueva oportunidad</span>
         </button>
       </div>
@@ -69,9 +72,11 @@ export default function OpportunitiesPage() {
       {/* Search + Filters */}
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-secondary-600" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-secondary-600" aria-hidden="true" />
           <input
             type="text"
+            id="opportunity-search"
+            aria-label="Buscar oportunidad"
             value={searchQuery}
             onChange={(e) => {
               setSearchQuery(e.target.value);
@@ -81,8 +86,11 @@ export default function OpportunitiesPage() {
             className="w-full h-10 pl-10 pr-4 rounded-xl bg-[#16161f] border border-[#1e1e2d] text-sm text-white placeholder:text-secondary-600 focus:outline-none focus:border-primary-600 focus:ring-1 focus:ring-primary-600/30 transition-all"
           />
         </div>
-        <button className="flex items-center justify-center gap-2 h-10 px-4 rounded-xl bg-[#16161f] border border-[#1e1e2d] text-secondary-300 hover:text-white text-sm font-medium transition-colors">
-          <SlidersHorizontal className="w-4 h-4" />
+        <button
+          className="flex items-center justify-center gap-2 h-10 px-4 rounded-xl bg-[#16161f] border border-[#1e1e2d] text-secondary-300 hover:text-white text-sm font-medium transition-colors"
+          aria-label="Filtrar oportunidades"
+        >
+          <SlidersHorizontal className="w-4 h-4" aria-hidden="true" />
           <span className="hidden sm:inline">Filtros</span>
         </button>
       </div>
@@ -111,32 +119,29 @@ export default function OpportunitiesPage() {
       {isLoading ? (
         <div className="space-y-3">
           {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="flex gap-4 p-4 rounded-2xl bg-[#111118] border border-[#1e1e2d]">
-              <Skeleton className="w-full sm:w-32 h-32 sm:h-24 rounded-xl shrink-0" />
-              <div className="flex-1 space-y-3 py-1">
-                <Skeleton className="h-4 w-40" />
-                <Skeleton className="h-3 w-60" />
-                <Skeleton className="h-8 w-24 mt-auto" />
-              </div>
-            </div>
+            <SkeletonCard key={i} lines={3} />
           ))}
         </div>
       ) : isError ? (
-        <ErrorDisplay
+        <ErrorState
           title="Error al cargar oportunidades"
           message="No se pudieron obtener las oportunidades. Verifica tu conexión."
           onRetry={refetch}
         />
       ) : paginated.length === 0 ? (
         <EmptyState
-          icon={Search}
           title="Sin resultados"
-          description={
+          message={
             searchQuery
               ? `No se encontraron oportunidades para "${searchQuery}"`
               : "No hay oportunidades en esta categoría."
           }
-          action={{ label: "Nueva oportunidad", href: "/opportunities/new" }}
+          action={{
+            label: "Nueva oportunidad",
+            onClick: () => {
+              router.push("/search");
+            },
+          }}
         />
       ) : (
         <>

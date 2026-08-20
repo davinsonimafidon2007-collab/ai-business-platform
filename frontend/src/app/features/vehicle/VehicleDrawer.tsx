@@ -43,6 +43,9 @@ export function VehicleDrawer({ vehicle, onClose }: VehicleDrawerProps) {
       <div className="fixed inset-0 z-40 bg-black/50" onClick={onClose} />
       <div
         ref={drawerRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="vehicle-drawer-title"
         className={
           isMobile
             ? "fixed inset-x-0 bottom-0 z-50 max-h-[85vh] overflow-y-auto rounded-t-2xl border-t border-secondary-200 bg-white shadow-xl dark:border-secondary-700 dark:bg-secondary-900"
@@ -55,7 +58,7 @@ export function VehicleDrawer({ vehicle, onClose }: VehicleDrawerProps) {
           </div>
         )}
         <div className="sticky top-0 flex items-center justify-between border-b border-secondary-200 bg-white px-6 py-4 dark:border-secondary-700 dark:bg-secondary-900">
-          <h2 className="text-lg font-bold text-secondary-900 dark:text-secondary-100">
+          <h2 id="vehicle-drawer-title" className="text-lg font-bold text-secondary-900 dark:text-secondary-100">
             Detalle del vehículo
           </h2>
           <Button variant="ghost" size="sm" onClick={onClose}>

@@ -33,18 +33,24 @@ export function ApprovalDetailDrawer({
 
   return (
     <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex justify-end">
-      <div className="w-full max-w-lg bg-[#111118] border-l border-[#1e1e2d] h-full overflow-y-auto p-6 space-y-6 flex flex-col justify-between">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="approval-drawer-title"
+        className="w-full max-w-lg bg-[#111118] border-l border-[#1e1e2d] h-full overflow-y-auto p-6 space-y-6 flex flex-col justify-between"
+      >
         <div className="space-y-6">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <h2 className="text-lg font-bold text-white">{data.title}</h2>
+              <h2 id="approval-drawer-title" className="text-lg font-bold text-white">{data.title}</h2>
               <p className="text-xs text-secondary-400 mt-0.5">{data.subtitle}</p>
             </div>
             <button
               onClick={onClose}
+              aria-label="Cerrar panel"
               className="p-1.5 rounded-lg text-secondary-400 hover:text-white hover:bg-[#16161f] transition-colors"
             >
-              <X className="w-5 h-5" />
+              <X className="w-5 h-5" aria-hidden="true" />
             </button>
           </div>
 

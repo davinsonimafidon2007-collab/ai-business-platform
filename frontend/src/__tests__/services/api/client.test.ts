@@ -41,6 +41,7 @@ vi.mock("@/app/config/app-mode", () => ({
 }));
 
 import { apiClient, api } from "@/app/services/api/client";
+import { fetchWithRetry } from "@/lib/api-client";
 import { isAuthDisabled } from "@/app/config/app-mode";
 import { secureStorage } from "@/app/services/storage";
 
@@ -121,5 +122,55 @@ describe("api client — exports", () => {
   it("expone api (instancia axios) y apiClient", () => {
     expect(api).toBeDefined();
     expect(apiClient.axiosInstance).toBeDefined();
+  });
+});
+
+describe("fetchWithRetry", () => {
+  it("retorna la respuesta si es 200 OK en el primer intento", async () => {
+    const mockFetch = vi.fn().mockResolvedValue(new Response("ok", { status: 200 }));
+    vi.stubGlobal("fetch", mockFetch);
+
+    const res = await fetchWithRetry("http://localhost/test", {}, 2, 10);
+    expect(res.status).toBe(200);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+
+    vi.unstubAllGlobals();
+  });
+
+  it("reintenta ante un error 500 y tiene éxito en el reintento", async () => {
+    const mockFetch = vi
+      .fn()
+      .mockResolvedValueOnce(new Response("error", { status: 500 }))
+      .mockResolvedValueOnce(new Response("ok", { status: 200 }));
+    vi.stubGlobal("fetch", mockFetch);
+
+    const res = await fetchWithRetry("http://localhost/test", {}, 2, 10);
+    expect(res.status).toBe(200);
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+
+    vi.unstubAllGlobals();
+  });
+
+  it("reintenta ante un TypeError de red y tiene éxito", async () => {
+    const mockFetch = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValueOnce(new Response("ok", { status: 200 }));
+    vi.stubGlobal("fetch", mockFetch);
+
+    const res = await fetchWithRetry("http://localhost/test", {}, 2, 10);
+    expect(res.status).toBe(200);
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+
+    vi.unstubAllGlobals();
+  });
+
+  it("lanza error si retries es 0 tras un TypeError", async () => {
+    const mockFetch = vi.fn().mockRejectedValue(new TypeError("Network error"));
+    vi.stubGlobal("fetch", mockFetch);
+
+    await expect(fetchWithRetry("http://localhost/test", {}, 0, 10)).rejects.toThrow("Network error");
+
+    vi.unstubAllGlobals();
   });
 });

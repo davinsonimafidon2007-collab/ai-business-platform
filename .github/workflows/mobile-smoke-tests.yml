@@ -71,8 +71,8 @@ jobs:
             adb shell am start -n com.aibusiness.platform/.MainActivity
             sleep 15
             adb shell ps | grep com.aibusiness.platform
-            adb shell screencap -p /sdcard/screenshot.png
-            adb pull /sdcard/screenshot.png smoke-test-screenshot.png
+            adb shell screencap -p /data/local/tmp/screenshot.png || true
+            adb pull /data/local/tmp/screenshot.png smoke-test-screenshot.png || true
             adb logcat -d | grep -i "fatal\|crash\|exception" || true
 
       - name: Upload screenshot

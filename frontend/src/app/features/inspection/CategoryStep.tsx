@@ -75,10 +75,11 @@ export function CategoryStep({
 
             {item.has_cost_estimate && (
               <div className="mt-3">
-                <label className="block text-sm font-medium text-gray-700">
+                <label htmlFor={`cost-${item.id}`} className="block text-sm font-medium text-gray-700">
                   Coste estimado de reparación (€)
                 </label>
                 <input
+                  id={`cost-${item.id}`}
                   type="number"
                   min="0"
                   step="0.01"
@@ -98,7 +99,7 @@ export function CategoryStep({
             {item.allows_photos && (
               <div className="mt-3 space-y-2">
                 <div className="flex items-center gap-2">
-                  <label className="block text-sm font-medium text-gray-700">
+                  <label htmlFor={`photo-${item.id}`} className="block text-sm font-medium text-gray-700">
                     Fotografía
                   </label>
                   <input
@@ -125,10 +126,11 @@ export function CategoryStep({
                     📷 Añadir fotografía
                   </button>
                 </div>
-                <label className="block text-sm font-medium text-gray-700">
+                <label htmlFor={`notes-${item.id}`} className="block text-sm font-medium text-gray-700">
                   Notas
                 </label>
                 <textarea
+                  id={`notes-${item.id}`}
                   value={item.notes ?? ""}
                   onChange={(e) => onItemNotesChange(item.id, e.target.value)}
                   rows={2}
