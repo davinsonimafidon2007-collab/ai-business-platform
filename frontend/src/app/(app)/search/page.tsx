@@ -8,6 +8,7 @@ import { VehicleTable } from "@/app/features/vehicle/VehicleTable";
 import { VehicleDrawer } from "@/app/features/vehicle/VehicleDrawer";
 import { useSearchVehicles, formatFiltersForApi } from "@/app/hooks/use-search";
 import { searchOrdersService } from "@/app/services/search-orders";
+import { SkeletonCard, ErrorState, EmptyState } from "@/components/ui/StateComponents";
 import type { CreateSearchOrderRequest, SearchOrder } from "@/app/types/search-orders";
 import type { SearchFilters as SearchFiltersType, SearchResultItem } from "@/app/types/vehicle";
 
@@ -53,6 +54,7 @@ export default function SearchPage() {
   const searchMutation = useSearchVehicles();
   const [selectedVehicle, setSelectedVehicle] = useState<SearchResultItem | null>(null);
   const [backgroundOrder, setBackgroundOrder] = useState<SearchOrder | null>(null);
+  const [lastFilters, setLastFilters] = useState<SearchFiltersType | null>(null);
 
   const backgroundMutation = useMutation({
     mutationFn: (payload: CreateSearchOrderRequest) => searchOrdersService.create(payload),
@@ -60,8 +62,15 @@ export default function SearchPage() {
   });
 
   const handleSearch = (filters: SearchFiltersType) => {
+    setLastFilters(filters);
     const apiParams = formatFiltersForApi(filters);
     searchMutation.mutate(apiParams);
+  };
+
+  const handleRetry = () => {
+    if (lastFilters) {
+      handleSearch(lastFilters);
+    }
   };
 
   const handleBackgroundSearch = (filters: SearchFiltersType) => {
@@ -146,11 +155,10 @@ export default function SearchPage() {
 
       {/* Loading State */}
       {searchMutation.isPending && (
-        <div className="flex flex-col items-center justify-center py-12">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary-600 border-t-transparent" />
-          <p className="mt-4 text-sm text-secondary-500 dark:text-secondary-400">
-            Buscando vehículos...
-          </p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <SkeletonCard key={i} lines={4} />
+          ))}
         </div>
       )}
 
@@ -158,38 +166,20 @@ export default function SearchPage() {
       {searchMutation.isError && (() => {
         const copy = searchErrorMessage(searchMutation.error);
         return (
-          <div className="rounded-lg border border-red-200 bg-red-50 p-6 text-center dark:border-red-800 dark:bg-red-900/20">
-            <h3 className="text-lg font-semibold text-red-700 dark:text-red-300">{copy.title}</h3>
-            <p className="mt-2 text-sm text-red-600 dark:text-red-400">{copy.detail}</p>
-            {copy.hint && (
-              <p className="mt-3 text-xs text-red-500/90 dark:text-red-400/80">{copy.hint}</p>
-            )}
-          </div>
+          <ErrorState
+            title={copy.title}
+            message={`${copy.detail}${copy.hint ? ` ${copy.hint}` : ""}`}
+            onRetry={lastFilters ? handleRetry : undefined}
+          />
         );
       })()}
 
       {/* Empty State */}
       {searchMutation.isSuccess && searchMutation.data.results.length === 0 && (
-        <div className="rounded-lg border border-secondary-200 p-12 text-center dark:border-secondary-700">
-          <p className="text-4xl" aria-hidden>🔍</p>
-          <h3 className="mt-4 text-lg font-semibold text-secondary-900 dark:text-secondary-100">
-            Sin resultados
-          </h3>
-          <p className="mt-2 text-sm text-secondary-500 dark:text-secondary-400">
-            No se encontraron vehículos con esos filtros.
-          </p>
-          <ul className="mx-auto mt-4 max-w-md list-inside list-disc text-left text-sm text-secondary-500 dark:text-secondary-400">
-            <li>Prueba otra marca, modelo o rango de precio.</li>
-            <li>Amplía el presupuesto o quita filtros estrictos.</li>
-            <li>
-              Si siempre sale vacío, revisa el estado de los providers en{" "}
-              <a href="/admin" className="font-medium text-primary-600 underline dark:text-primary-400">
-                Admin
-              </a>{" "}
-              (mobile.de puede estar bloqueado sin proxy; AutoScout24 debería responder).
-            </li>
-          </ul>
-        </div>
+        <EmptyState
+          title="No se encontraron vehículos"
+          message="Prueba a ajustar los filtros de búsqueda (marca, modelo o rango de precio) para ver más resultados."
+        />
       )}
 
       {/* Success State with Summary */}

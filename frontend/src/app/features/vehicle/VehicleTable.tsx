@@ -116,7 +116,9 @@ export function VehicleTable({ vehicles, onSelectVehicle, selectedVehicleId }: V
         </p>
         <div className="relative w-full sm:w-auto">
           <input
+            id="table-search"
             type="text"
+            aria-label="Buscar en resultados"
             value={searchTerm}
             onChange={(e) => {
               setSearchTerm(e.target.value);
@@ -125,7 +127,7 @@ export function VehicleTable({ vehicles, onSelectVehicle, selectedVehicleId }: V
             placeholder="Buscar en resultados..."
             className="block w-full rounded-lg border border-secondary-300 bg-white px-3 py-2 pl-8 text-sm dark:border-secondary-600 dark:bg-secondary-700 dark:text-secondary-100 sm:w-64"
           />
-          <span className="pointer-events-none absolute left-2.5 top-2.5 text-secondary-400">🔍</span>
+          <span className="pointer-events-none absolute left-2.5 top-2.5 text-secondary-400" aria-hidden="true">🔍</span>
         </div>
       </div>
 

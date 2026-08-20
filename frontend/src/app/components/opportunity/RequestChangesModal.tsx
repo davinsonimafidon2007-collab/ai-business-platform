@@ -27,11 +27,20 @@ export function RequestChangesModal({ open, onClose, opportunityId, phaseId }: R
   return (
     <>
       <div className="fixed inset-0 bg-black/60 z-50" onClick={onClose} />
-      <div className="fixed inset-x-4 top-1/2 -translate-y-1/2 max-w-md mx-auto z-50 bg-[#111118] border border-[#1e1e2d] rounded-2xl p-5 shadow-2xl">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="request-changes-title"
+        className="fixed inset-x-4 top-1/2 -translate-y-1/2 max-w-md mx-auto z-50 bg-[#111118] border border-[#1e1e2d] rounded-2xl p-5 shadow-2xl"
+      >
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-sm font-bold text-white">Solicitar cambios</h3>
-          <button onClick={onClose} className="p-1.5 rounded-lg text-secondary-400 hover:text-white hover:bg-[#1a1a24]">
-            <X className="w-4 h-4" />
+          <h3 id="request-changes-title" className="text-sm font-bold text-white">Solicitar cambios</h3>
+          <button
+            onClick={onClose}
+            aria-label="Cerrar modal"
+            className="p-1.5 rounded-lg text-secondary-400 hover:text-white hover:bg-[#1a1a24]"
+          >
+            <X className="w-4 h-4" aria-hidden="true" />
           </button>
         </div>
         <p className="text-xs text-secondary-500 mb-3">

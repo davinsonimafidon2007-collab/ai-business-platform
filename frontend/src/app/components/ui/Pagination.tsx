@@ -24,9 +24,10 @@ export function Pagination({ currentPage, totalPages, onPageChange }: Pagination
       <button
         onClick={() => onPageChange(currentPage - 1)}
         disabled={currentPage === 1}
+        aria-label="Página anterior"
         className="w-9 h-9 rounded-lg flex items-center justify-center text-secondary-400 hover:text-white hover:bg-[#1a1a24] disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
       >
-        <ChevronLeft className="w-4 h-4" />
+        <ChevronLeft className="w-4 h-4" aria-hidden="true" />
       </button>
 
       {pages.map((page) => (
@@ -47,9 +48,10 @@ export function Pagination({ currentPage, totalPages, onPageChange }: Pagination
       <button
         onClick={() => onPageChange(currentPage + 1)}
         disabled={currentPage === totalPages}
+        aria-label="Página siguiente"
         className="w-9 h-9 rounded-lg flex items-center justify-center text-secondary-400 hover:text-white hover:bg-[#1a1a24] disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
       >
-        <ChevronRight className="w-4 h-4" />
+        <ChevronRight className="w-4 h-4" aria-hidden="true" />
       </button>
     </div>
   );

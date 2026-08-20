@@ -159,10 +159,11 @@ const saveSim = useMutation({
         <div className="mt-4 rounded-lg border border-secondary-200 bg-secondary-50 p-4 dark:border-secondary-700 dark:bg-secondary-900/40">
           <div className="flex flex-wrap items-end gap-3">
             <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-secondary-600 dark:text-secondary-300">
+              <label htmlFor="sim-purchase-price" className="text-xs font-medium text-secondary-600 dark:text-secondary-300">
                 Precio de compra (EUR)
               </label>
               <input
+                id="sim-purchase-price"
                 type="number"
                 min={0}
                 step="0.01"
@@ -173,10 +174,11 @@ const saveSim = useMutation({
               />
             </div>
             <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-secondary-600 dark:text-secondary-300">
+              <label htmlFor="sim-sale-price" className="text-xs font-medium text-secondary-600 dark:text-secondary-300">
                 Precio de venta estimado (EUR)
               </label>
               <input
+                id="sim-sale-price"
                 type="number"
                 min={0}
                 step="0.01"
@@ -187,10 +189,11 @@ const saveSim = useMutation({
               />
             </div>
             <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-secondary-600 dark:text-secondary-300">
+              <label htmlFor="sim-profile" className="text-xs font-medium text-secondary-600 dark:text-secondary-300">
                 Perfil
               </label>
               <select
+                id="sim-profile"
                 value={profile}
                 onChange={(e) => setProfile(e.target.value)}
                 className="block rounded-md border border-secondary-300 bg-white px-3 py-1.5 text-sm text-secondary-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-secondary-600 dark:bg-secondary-900 dark:text-secondary-100"

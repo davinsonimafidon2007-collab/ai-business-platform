@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { Search } from "lucide-react";
 import { useSearchHistory, useDashboardStats } from "@/app/hooks/use-search";
@@ -19,7 +20,7 @@ import {
   type BadgeTone,
 } from "@/app/features/home/OpportunityTeaserCard";
 import { RecentItemCard } from "@/app/features/home/RecentItemCard";
-import { ErrorDisplay } from "@/app/components/ui/ErrorDisplay";
+import { SkeletonCard, ErrorState, EmptyState } from "@/components/ui/StateComponents";
 
 const eur = (n?: number | null) =>
   n == null
@@ -53,62 +54,11 @@ const recommendationTone = (recommendation?: string | null): BadgeTone => {
   }
 };
 
-function RowSkeleton() {
-  return (
-    <div className="flex items-center gap-3 rounded-2xl border border-secondary-200 bg-white p-4 dark:border-primary-900/40 dark:bg-secondary-900">
-      <div className="h-10 w-10 flex-none animate-pulse rounded-xl bg-secondary-200 dark:bg-secondary-700" />
-      <div className="flex-1 space-y-2">
-        <div className="h-3 w-2/3 animate-pulse rounded bg-secondary-200 dark:bg-secondary-700" />
-        <div className="h-2.5 w-1/3 animate-pulse rounded bg-secondary-200 dark:bg-secondary-700" />
-      </div>
-    </div>
-  );
-}
-
-function EmptyOpportunities() {
-  return (
-    <div className="rounded-2xl border border-secondary-200 bg-white p-8 text-center dark:border-primary-900/40 dark:bg-secondary-900">
-      <p className="text-3xl">🔍</p>
-      <h3 className="mt-3 text-sm font-semibold text-secondary-900 dark:text-secondary-100">
-        Aún no hay oportunidades
-      </h3>
-      <p className="mt-1 text-xs text-secondary-500 dark:text-secondary-400">
-        Busca un vehículo para descubrir márgenes y oportunidades.
-      </p>
-      <Link
-        href="/search"
-        className="mt-3 inline-flex rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-700"
-      >
-        Buscar un vehículo
-      </Link>
-    </div>
-  );
-}
-
-function EmptyActivity() {
-  return (
-    <div className="rounded-2xl border border-secondary-200 bg-white p-8 text-center dark:border-primary-900/40 dark:bg-secondary-900">
-      <p className="text-3xl">📋</p>
-      <h3 className="mt-3 text-sm font-semibold text-secondary-900 dark:text-secondary-100">
-        Sin actividad aún
-      </h3>
-      <p className="mt-1 text-xs text-secondary-500 dark:text-secondary-400">
-        Realiza tu primera búsqueda para empezar.
-      </p>
-      <Link
-        href="/search"
-        className="mt-3 inline-flex rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-700"
-      >
-        Ir a buscar
-      </Link>
-    </div>
-  );
-}
-
 export default function DashboardPage() {
+  const router = useRouter();
   const user = useAuthStore((s) => s.user);
-  const networkStatus = useNetworkStatus();
-  const isOffline = networkStatus === "offline";
+  const { isOnline } = useNetworkStatus();
+  const isOffline = !isOnline;
   const { data: history, isLoading: historyLoading, isError: historyError, refetch: refetchHistory } = useSearchHistory();
   const { data: stats, isLoading: statsLoading, isError: statsError, refetch: refetchStats } = useDashboardStats();
   const { data: opportunities, isLoading: oppLoading, isError: oppError, refetch: refetchOpps } = useQuery({
@@ -200,8 +150,9 @@ export default function DashboardPage() {
       )}
 
       {anyError && (
-        <ErrorDisplay
-          error={new Error("No se pudieron cargar los datos del dashboard")}
+        <ErrorState
+          title="Error al cargar dashboard"
+          message="No se pudieron cargar los datos del dashboard. Verifica la conexión con el servidor."
           onRetry={refetchAll}
         />
       )}
@@ -211,17 +162,26 @@ export default function DashboardPage() {
         <HomeSection title="Oportunidades destacadas" href="/opportunities">
           {oppLoading ? (
             <div className="space-y-3">
-              <RowSkeleton />
-              <RowSkeleton />
-              <RowSkeleton />
+              <SkeletonCard lines={2} />
+              <SkeletonCard lines={2} />
             </div>
           ) : oppError ? (
-            <ErrorDisplay
-              error={new Error("Error al cargar oportunidades")}
+            <ErrorState
+              title="Error al cargar oportunidades"
+              message="No se pudieron cargar las oportunidades destacadas."
               onRetry={refetchOpps}
             />
           ) : oppItems.length === 0 ? (
-            <EmptyOpportunities />
+            <EmptyState
+              title="Aún no hay oportunidades"
+              message="Busca un vehículo para descubrir márgenes y oportunidades."
+              action={{
+                label: "Buscar un vehículo",
+                onClick: () => {
+                  router.push("/search");
+                },
+              }}
+            />
           ) : (
             <div className="space-y-3">
               {oppItems.slice(0, 5).map((opp) => (
@@ -254,17 +214,26 @@ export default function DashboardPage() {
         <HomeSection title="Actividad reciente" href="/history">
           {historyLoading ? (
             <div className="space-y-3">
-              <RowSkeleton />
-              <RowSkeleton />
-              <RowSkeleton />
+              <SkeletonCard lines={2} />
+              <SkeletonCard lines={2} />
             </div>
           ) : historyError ? (
-            <ErrorDisplay
-              error={new Error("Error al cargar el historial")}
+            <ErrorState
+              title="Error al cargar historial"
+              message="No se pudo obtener el historial de búsqueda."
               onRetry={refetchHistory}
             />
           ) : !history || history.length === 0 ? (
-            <EmptyActivity />
+            <EmptyState
+              title="Sin actividad aún"
+              message="Realiza tu primera búsqueda para empezar."
+              action={{
+                label: "Ir a buscar",
+                onClick: () => {
+                  router.push("/search");
+                },
+              }}
+            />
           ) : (
             <div className="space-y-3">
               {history.slice(0, 5).map((s) => (
@@ -296,4 +265,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-
