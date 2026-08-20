@@ -118,6 +118,28 @@ async def test_health_db_down_redis_error() -> None:
 
 
 @pytest.mark.asyncio
+async def test_health_exposes_es_data_mode(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """TASK 1: /health expone es_data_mode para el banner de la UI."""
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "es_data_mode", "fixture")
+
+    with patch(
+        "app.api.v1.routes.health._check_database",
+        new=AsyncMock(return_value=True),
+    ), patch(
+        "app.api.v1.routes.health._check_redis",
+        new=AsyncMock(return_value="ok"),
+    ):
+        response = client.get("/health")
+
+    assert response.status_code == 200
+    assert response.json()["es_data_mode"] == "fixture"
+
+
+@pytest.mark.asyncio
 async def test_health_live_always_ok() -> None:
     """Liveness (TASK-004): /health/live responde 200 sin tocar DB/Redis."""
     # No se parchean _check_database/_check_redis a propósito: el liveness no

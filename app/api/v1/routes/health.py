@@ -123,5 +123,7 @@ async def get_health(response: Response) -> HealthResponse:
         version=settings.app_version,
         providers=providers,
         checks=checks,
+        # TASK 1 — modo del pipeline ES, visible para el banner de la UI.
+        es_data_mode=getattr(settings, "es_data_mode", "fixture"),
     )
 

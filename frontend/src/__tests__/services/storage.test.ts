@@ -2,10 +2,18 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { secureStorage, SECURE_PREFIX } from "@/app/services/storage";
 
 vi.mock("@capacitor/core", () => ({
-  Capacitor: { isNativePlatform: vi.fn() },
+  Capacitor: {
+    isNativePlatform: vi.fn(),
+    getPlatform: vi.fn().mockReturnValue("web"),
+  },
 }));
 vi.mock("@capacitor/preferences", () => ({
-  Preferences: { set: vi.fn(), get: vi.fn(), remove: vi.fn(), clear: vi.fn() },
+  Preferences: {
+    set: vi.fn().mockResolvedValue(undefined),
+    get: vi.fn().mockResolvedValue({ value: null }),
+    remove: vi.fn().mockResolvedValue(undefined),
+    clear: vi.fn().mockResolvedValue(undefined),
+  },
 }));
 
 import { Capacitor } from "@capacitor/core";

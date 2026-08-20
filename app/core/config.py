@@ -289,11 +289,32 @@ class Settings(BaseSettings):
     Valores: DEFAULT, SPAIN, PORTUGAL, GERMANY, FRANCE (o alias ES, PT, DE, FR)."""
 
     # =========================================================================
-    # Mercado destino ES (fixtures offline; sin HTTP)
+    # Mercado destino ES — contrato explícito fixture vs live (TASK 1)
     # =========================================================================
+    # TASK 1 — modo explícito del pipeline de datos ES
+    es_data_mode: str = "fixture"
+    """Modo del pipeline de comparables españoles: "fixture" | "live".
+
+    Es el contrato maestro: manda sobre los flags de fixtures ES de abajo
+    (``enable_es_market_fixture``, ``enable_coches_net_fixture``,
+    ``enable_coches_net_html_fixture``) y sobre el auto-registro por perfil
+    SPAIN/ES.
+
+    - "fixture" (default): registra los providers offline es_market_fixture /
+      coches_net_fixture / coches_net_html_fixture (datos SIMULADOS, sin HTTP).
+      Solo dev/test. Loggea un WARNING visible al arrancar; /health expone
+      ``es_data_mode`` para que la UI muestre banner de "datos de demostración".
+    - "live": los fixtures ES NO se registran bajo ninguna circunstancia.
+      TASK 2 registra aquí el provider coches_net real (scraping con
+      degradación explícita: nunca cae a fixtures en silencio).
+
+    Valor inválido → RuntimeError en el startup (fail-fast, mismo espíritu
+    que JWT_SECRET_KEY).
+    """
+
     # Si True, registra provider es_market_fixture en ProviderRegistry al arrancar / en DI.
     # Además, cuando el perfil de costes destino es SPAIN/ES, se auto-registra
-    # sin necesidad de activar este flag.
+    # sin necesidad de activar este flag. Ignorado si ES_DATA_MODE=live.
     enable_es_market_fixture: bool = False
     disable_es_market_auto: bool = False
     """Si True, desactiva el auto-registro de fixtures ES por perfil SPAIN."""
@@ -310,7 +331,7 @@ class Settings(BaseSettings):
     # =========================================================================
     # Si True, registra provider coches_net_fixture en ProviderRegistry.
     # Además, cuando el perfil de costes destino es SPAIN/ES, se auto-registra
-    # sin necesidad de activar este flag.
+    # sin necesidad de activar este flag. Ignorado si ES_DATA_MODE=live.
     enable_coches_net_fixture: bool = False
     """Si True, registra provider coches_net_fixture (comparables ES offline)."""
 

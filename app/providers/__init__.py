@@ -1,5 +1,6 @@
 from app.providers.autoscout24 import AutoScout24Provider
 from app.providers.base import VehicleProvider
+from app.providers.coches_net import CochesNetProvider
 from app.providers.coches_net_html import CochesNetHtmlFixtureProvider
 from app.providers.dto import VehicleDetail, VehicleSearchResult
 from app.providers.exceptions import (
@@ -41,5 +42,5 @@ __all__ = [
     "OpenAIVisionProvider",
     "VisionProviderError",
     "CochesNetHtmlFixtureProvider",
+    "CochesNetProvider",
 ]
-

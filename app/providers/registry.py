@@ -12,6 +12,18 @@ def _is_spain_import_profile() -> bool:
     return key in {"SPAIN", "ES", "ESP", "ESPAÑA", "ESPANA"}
 
 
+def _es_fixtures_blocked() -> bool:
+    """True si ``ES_DATA_MODE=live``: fixtures ES bloqueados (TASK 1).
+
+    En modo live el pipeline de comparables españoles NO puede caer en datos
+    simulados de forma silenciosa, venga el registro del flag explícito o del
+    auto-registro por perfil SPAIN/ES.
+    """
+    from app.core.config import settings
+
+    return str(getattr(settings, "es_data_mode", "fixture")) == "live"
+
+
 class ProviderRegistry:
     """Registro central de proveedores de vehículos.
 
@@ -79,10 +91,22 @@ class ProviderRegistry:
         Idempotente. ``enabled=None`` → lee settings.enable_es_market_fixture
         y/o activa auto-registro cuando el perfil de costes es SPAIN/ES
         (salvo ``settings.disable_es_market_auto``).
+
+        TASK 1: con ``ES_DATA_MODE=live`` el auto-registro/flag está bloqueado
+        (el pipeline ES no debe usar datos simulados en modo live). Solo un
+        ``enabled=True`` explícito (programático, p.ej. tests) lo fuerza.
         """
         if enabled is None:
             from app.core.config import settings
 
+            if _es_fixtures_blocked():
+                from app.core.logging import get_logger
+
+                get_logger(__name__).info(
+                    "ES_DATA_MODE=live: registro de es_market_fixture bloqueado "
+                    "(datos simulados desactivados)."
+                )
+                return
             enabled = (
                 bool(getattr(settings, "enable_es_market_fixture", False))
                 or (
@@ -105,10 +129,22 @@ class ProviderRegistry:
         Idempotente. ``enabled=None`` → lee settings.enable_coches_net_fixture
         y/o activa auto-registro cuando el perfil de costes es SPAIN/ES
         (salvo ``settings.disable_es_market_auto``).
+
+        TASK 1: con ``ES_DATA_MODE=live`` el auto-registro/flag está bloqueado
+        (el pipeline ES no debe usar datos simulados en modo live). Solo un
+        ``enabled=True`` explícito (programático, p.ej. tests) lo fuerza.
         """
         if enabled is None:
             from app.core.config import settings
 
+            if _es_fixtures_blocked():
+                from app.core.logging import get_logger
+
+                get_logger(__name__).info(
+                    "ES_DATA_MODE=live: registro de coches_net_fixture bloqueado "
+                    "(datos simulados desactivados)."
+                )
+                return
             enabled = (
                 bool(getattr(settings, "enable_coches_net_fixture", False))
                 or (
@@ -130,10 +166,22 @@ class ProviderRegistry:
 
         Idempotente. ``enabled=None`` → lee settings.enable_coches_net_html_fixture.
         No se auto-registra por perfil SPAIN/ES (solo flag explícito).
+
+        TASK 1: con ``ES_DATA_MODE=live`` el flag está bloqueado (el pipeline
+        ES no debe usar datos simulados en modo live). Solo un ``enabled=True``
+        explícito (programático, p.ej. tests) lo fuerza.
         """
         if enabled is None:
             from app.core.config import settings
 
+            if _es_fixtures_blocked():
+                from app.core.logging import get_logger
+
+                get_logger(__name__).info(
+                    "ES_DATA_MODE=live: registro de coches_net_html_fixture "
+                    "bloqueado (datos simulados desactivados)."
+                )
+                return
             enabled = bool(getattr(settings, "enable_coches_net_html_fixture", False))
         if not enabled:
             return
@@ -153,8 +201,11 @@ class ProviderRegistry:
           requiere proxy residencial anti-bot)
         - autoscout24: siempre (fuente primaria, AS24-first)
         - autoscout24_es: solo si settings.enable_autoscout24_es
-        - es_market_fixture: flag o auto-registro si perfil SPAIN/ES
-        - coches_net_fixture: flag o auto-registro si perfil SPAIN/ES
+        - coches_net: solo con ES_DATA_MODE=live (TASK 2, scraping real)
+        - es_market_fixture / coches_net_fixture / coches_net_html_fixture:
+          SOLO con ES_DATA_MODE=fixture (TASK 1: modo explícito). En ``live``
+          no se registran jamás; un ES_DATA_MODE inválido lanza RuntimeError
+          (fail-fast en el startup).
 
         Reutiliza settings-provider_http_* para el cliente anti-bot, igual
         que las dependencias de API (get_mobile_de_provider /
@@ -216,7 +267,40 @@ class ProviderRegistry:
                     )
                 )
 
-        # Auto-registra fixtures ES offline según flag o perfil SPAIN/ES.
-        cls.ensure_es_market_fixture()
-        cls.ensure_coches_net_fixture()
-        cls.ensure_coches_net_html_fixture()
+        # TASK 1 — el modo ES debe ser explícito, nunca silencioso.
+        from app.core.config import settings
+        from app.core.logging import get_logger
+
+        logger = get_logger(__name__)
+
+        es_mode = getattr(settings, "es_data_mode", "fixture")
+        if es_mode not in ("fixture", "live"):
+            raise RuntimeError(
+                f"ES_DATA_MODE inválido: '{es_mode}'. Debe ser 'fixture' o 'live'."
+            )
+
+        if es_mode == "fixture":
+            logger.warning(
+                "ES_DATA_MODE=fixture: el pipeline de comparables españoles usa "
+                "datos SIMULADOS (coches_net_fixture, es_market_fixture). "
+                "No usar en producción para decisiones de compra reales."
+            )
+            cls.ensure_es_market_fixture()
+            cls.ensure_coches_net_fixture()
+            cls.ensure_coches_net_html_fixture()
+        else:
+            logger.info("ES_DATA_MODE=live: fixtures ES NO se registran.")
+            # TASK 2 — coches_net real (scraping con degradación explícita:
+            # si el HTML falla o hay bloqueo anti-bot, propaga ProviderParsingError
+            # / ProviderConnectionError; nunca cae a fixtures en silencio).
+            if "coches_net" not in cls._providers:
+                from app.providers.coches_net import CochesNetProvider
+                from app.providers.http_client import ProviderHttpClient
+
+                client = ProviderHttpClient(
+                    provider_name="coches_net",
+                    base_url="https://www.coches.net",
+                    timeout=settings.provider_http_timeout,
+                    max_retries=settings.provider_http_max_retries,
+                )
+                cls.register(CochesNetProvider(http_client=client))
