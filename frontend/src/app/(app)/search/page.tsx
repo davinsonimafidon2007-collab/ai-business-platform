@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useMutation } from "@tanstack/react-query";
+import { useSearchParams } from "next/navigation";
 import { SearchFilters } from "@/app/features/search/SearchFilters";
 import { VehicleTable } from "@/app/features/vehicle/VehicleTable";
 import { VehicleDrawer } from "@/app/features/vehicle/VehicleDrawer";
@@ -55,6 +56,8 @@ export default function SearchPage() {
   const [selectedVehicle, setSelectedVehicle] = useState<SearchResultItem | null>(null);
   const [backgroundOrder, setBackgroundOrder] = useState<SearchOrder | null>(null);
   const [lastFilters, setLastFilters] = useState<SearchFiltersType | null>(null);
+  const searchParams = useSearchParams();
+  const lastLaunchedQueryRef = useRef<string>("");
 
   const backgroundMutation = useMutation({
     mutationFn: (payload: CreateSearchOrderRequest) => searchOrdersService.create(payload),
@@ -93,6 +96,18 @@ export default function SearchPage() {
     backgroundMutation.mutate(payload);
   };
 
+  useEffect(() => {
+    const query = searchParams.get("query");
+    if (query && query !== lastLaunchedQueryRef.current) {
+      lastLaunchedQueryRef.current = query;
+      handleSearch({ query });
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
+    lastLaunchedQueryRef.current = searchParams.get("query") || "";
+  }, [searchParams]);
+
   return (
     <div className="space-y-6">
       <div>
@@ -108,6 +123,7 @@ export default function SearchPage() {
         onSearch={handleSearch}
         onBackgroundSearch={handleBackgroundSearch}
         isLoading={searchMutation.isPending || backgroundMutation.isPending}
+        initialQuery={searchParams.get("query") || undefined}
       />
 
       {backgroundMutation.isSuccess && backgroundOrder && (

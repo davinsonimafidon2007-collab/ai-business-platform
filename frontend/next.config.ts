@@ -10,6 +10,11 @@ const withPWA = require("next-pwa")({
   disable: process.env.NODE_ENV === "development",
 });
 
+// BUILD_TARGET=capacitor -> export estático (usado por Android/Capacitor).
+// Sin BUILD_TARGET (o cualquier otro valor) -> build de servidor normal,
+// necesario para que `next start` funcione en Docker/producción web.
+const isCapacitorBuild = process.env.BUILD_TARGET === "capacitor";
+
 // MOB-P3-006 — Optimización de bundle:
 //  - Separar vendor externo y firebase en chunks propios (cache-rotación).
 //  - Alias lodash → lodash-es (tree-shaking más agresivo).
@@ -17,12 +22,16 @@ const withPWA = require("next-pwa")({
 // La config de webpack es un función que puede devolver undefined para
 // cohexistir con otras configs (bundle-analyzer).
 const nextConfig: NextConfig = {
-  output: "export",
+  ...(isCapacitorBuild
+    ? {
+        output: "export" as const,
+        trailingSlash: true,
+        skipTrailingSlashRedirect: true,
+      }
+    : {}),
   images: {
     unoptimized: true,
   },
-  trailingSlash: true,
-  skipTrailingSlashRedirect: true,
   outputFileTracingRoot: path.join(__dirname, "../"),
   async headers() {
     return [

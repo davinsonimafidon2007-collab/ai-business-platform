@@ -86,10 +86,12 @@ export function useApprovePhase() {
         updateToast(
           toastId,
           "success",
-          variables.action === "approve" ? "Fase aprobada" : "Fase rechazada",
+          variables.action === "approve" ? "Fase aprobada" : variables.action === "reject" ? "Fase rechazada" : "Cambios solicitados",
           variables.action === "approve"
             ? "La fase ha sido aprobada y el workflow continúa."
-            : "La fase ha sido rechazada. El agente será notificado."
+            : variables.action === "reject"
+              ? "La fase ha sido rechazada. El agente será notificado."
+              : "Se han enviado los cambios al agente.",
         );
       }
 
@@ -104,7 +106,7 @@ export function useApprovePhase() {
     onError: (error, variables, context) => {
       const { toastId } = context || {};
       if (toastId) dismissToast(toastId);
-      handleApiError(error, variables.action === "approve" ? "aprobar fase" : "rechazar fase");
+      handleApiError(error, variables.action === "approve" ? "aprobar fase" : variables.action === "reject" ? "rechazar fase" : "procesar fase");
     },
   });
 }
@@ -114,7 +116,7 @@ export function useRequestChanges() {
 
   return useMutation({
     mutationFn: ({ opportunityId, phaseId, feedback }: { opportunityId: string; phaseId: string; feedback: string }) =>
-      apiPost(`/opportunities/${opportunityId}/phases/${phaseId}/feedback`, { feedback }),
+      apiPatch(`/opportunities/${opportunityId}/phases/${phaseId}`, { action: "request_changes", feedback }),
 
     onMutate: async () => {
       const toastId = toastLoading("Enviando feedback...");

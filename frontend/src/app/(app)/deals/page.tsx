@@ -100,10 +100,8 @@ function DealRow({ deal }: { deal: Deal }) {
 
   const nextActions = TRANSITIONS[deal.status] ?? [];
 
-const handleAction = (target: DealStatus) => {
+  const handleAction = (target: DealStatus) => {
     if (target === "OFFER") {
-      // Pedir offer_price antes de transicionar a OFFER.
-      // Prefill desde la última simulación de margen (E.2) si existe.
       setOfferPriceInput(offerPricePrefill(deal));
       setPendingTarget(target);
       setErrorMsg(null);
@@ -138,7 +136,7 @@ const handleAction = (target: DealStatus) => {
         </div>
       </div>
 
-{deal.notes && (
+      {deal.notes && (
         <p className="mt-3 rounded-md bg-secondary-50 p-3 text-sm text-secondary-600 dark:bg-secondary-900/40 dark:text-secondary-300">
           {deal.notes}
         </p>

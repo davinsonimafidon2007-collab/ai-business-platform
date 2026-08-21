@@ -8,6 +8,9 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
+# BUILD_TARGET no se define aquí a propósito: sin ella, next.config.ts
+# construye en modo servidor (no "output: export"), que es lo que
+# necesita `next start` en el stage "runner" de abajo.
 RUN npm run build
 
 FROM node:22-alpine AS runner

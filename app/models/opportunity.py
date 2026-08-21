@@ -70,6 +70,12 @@ class Opportunity(Base):
         "Deal",
         back_populates="opportunity",
     )
+    phases: Mapped[list["OpportunityPhase"]] = relationship(
+        "OpportunityPhase",
+        back_populates="opportunity",
+        order_by="OpportunityPhase.order",
+        cascade="all, delete-orphan",
+    )
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)

@@ -60,7 +60,7 @@ async def create_deal(
 
 @router.get("", response_model=DealListResponse)
 async def list_deals(
-    deal_status: DealStatus | None = Query(
+    deal_status: str | None = Query(
         None, alias="status", description="Filtro por estado (NEW, CONTACTED, ...)"
     ),
     opportunity_id: str | None = Query(

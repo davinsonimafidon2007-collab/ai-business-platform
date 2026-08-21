@@ -14,7 +14,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.v1.schemas.opportunity import (
     OpportunityCreate,
     OpportunityListResponse,
+    OpportunityPhaseRead,
     OpportunityRead,
+    OpportunityReadDetail,
     OpportunityUpdate,
     OpportunityVehicleSummary,
 )
@@ -26,6 +28,7 @@ from app.models.vehicle import Vehicle
 from app.repositories.opportunity_repository import OpportunityRepository
 from app.schemas.pagination import CursorPage
 from app.services.recommendation_labels import recommendation_label_es, risk_label_es
+from app.services.opportunity_phase_service import OpportunityPhaseService
 
 router = APIRouter(prefix="/opportunities", tags=["Opportunities"])
 
@@ -319,3 +322,109 @@ async def delete_opportunity(
         session, current_user.id, opportunity_id
     )
     await OpportunityRepository(session).delete(opportunity)
+
+
+@router.get("/{opportunity_id}", response_model=OpportunityReadDetail)
+async def get_opportunity_detail(
+    opportunity_id: str,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db_session),
+) -> OpportunityReadDetail:
+    """Obtiene una oportunidad propia con detalle ampliado (incluye fases)."""
+    await _get_owned_opportunity(session, current_user.id, opportunity_id)
+    opportunity = await OpportunityRepository(session).get(opportunity_id)
+    if opportunity is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Opportunity not found",
+        )
+
+    phase_service = OpportunityPhaseService(session)
+    phases = await phase_service.ensure_seeded(opportunity)
+
+    vehicle_summary = None
+    if opportunity.vehicle is not None:
+        vehicle_summary = OpportunityVehicleSummary(
+            id=opportunity.vehicle.id,
+            brand=opportunity.vehicle.brand,
+            model=opportunity.vehicle.model,
+            year=opportunity.vehicle.year,
+            mileage=opportunity.vehicle.mileage,
+            price=opportunity.vehicle.price,
+            source=opportunity.vehicle.source,
+            external_id=opportunity.vehicle.external_id,
+            url=opportunity.vehicle.url,
+        )
+
+    return OpportunityReadDetail(
+        id=opportunity.id,
+        vehicle=vehicle_summary,
+        score=opportunity.opportunity_score,
+        estimated_profit=opportunity.profit,
+        roi_percentage=opportunity.roi,
+        recommendation=opportunity.recommendation,
+        risk_level=opportunity.risk,
+        recommendation_label_es=recommendation_label_es(opportunity.recommendation),
+        risk_label_es=risk_label_es(opportunity.risk),
+        created_at=opportunity.created_at,
+        updated_at=opportunity.analyzed_at,
+        phases=[OpportunityPhaseService.to_read(p) for p in phases],
+    )
+
+
+# ------------------------------------------------------------------
+# Workflow phases
+# ------------------------------------------------------------------
+
+@router.get("/{opportunity_id}/phases")
+async def list_opportunity_phases(
+    opportunity_id: str,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db_session),
+) -> list[dict]:
+    """Lista las fases del workflow de una oportunidad propia.
+
+    Si aún no existen, se siembran automáticamente las fases por defecto.
+    """
+    await _get_owned_opportunity(session, current_user.id, opportunity_id)
+    service = OpportunityPhaseService(session)
+    opportunity = await OpportunityRepository(session).get(opportunity_id)
+    if opportunity is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Opportunity not found",
+        )
+    phases = await service.ensure_seeded(opportunity)
+    return [OpportunityPhaseService.to_read(p) for p in phases]
+
+
+@router.patch("/{opportunity_id}/phases/{phase_id}")
+async def patch_opportunity_phase(
+    opportunity_id: str,
+    phase_id: str,
+    body: dict,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db_session),
+) -> dict:
+    """Ejecuta una acción sobre una fase del workflow.
+
+    Body esperado: ``{ "action": "approve" | "reject" | "request_changes" | "start", "feedback": "..." }``
+    """
+    await _get_owned_opportunity(session, current_user.id, opportunity_id)
+    action = str(body.get("action", "")).strip().lower()
+    feedback = body.get("feedback")
+    service = OpportunityPhaseService(session)
+    opportunity = await OpportunityRepository(session).get(opportunity_id)
+    if opportunity is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Opportunity not found",
+        )
+    await service.ensure_seeded(opportunity)
+    phase = await service.apply_action(
+        opportunity=opportunity,
+        phase_id=phase_id,
+        action=action,
+        feedback=feedback,
+    )
+    return OpportunityPhaseService.to_read(phase)

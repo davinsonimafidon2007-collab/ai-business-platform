@@ -100,12 +100,12 @@ export default function ApprovalsPage() {
           {filtered.map((item: any, idx: number) => (
             <ApprovalReviewCard
               key={item.id}
-              image={item.image || "https://images.unsplash.com/photo-1555215695-3004980adade?w=200&h=200&fit=crop"}
               title={item.title}
               category={item.category}
               description={item.description}
               detail={item.detail}
               time={item.created_at ? `Hace ${((idx * 7) % 50) + 5} min` : "Hace 15 min"}
+              image={item.image}
               onReview={() => setSelectedId(item.id)}
             />
           ))}

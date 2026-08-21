@@ -8,6 +8,7 @@ interface SearchFiltersProps {
   onSearch: (filters: SearchFiltersType) => void;
   onBackgroundSearch?: (filters: SearchFiltersType) => void;
   isLoading?: boolean;
+  initialQuery?: string;
 }
 
 const FUEL_TYPES = [
@@ -42,9 +43,9 @@ const SORT_OPTIONS = [
   { value: "profit", label: "Beneficio" },
 ];
 
-export function SearchFilters({ onSearch, onBackgroundSearch, isLoading }: SearchFiltersProps) {
+export function SearchFilters({ onSearch, onBackgroundSearch, isLoading, initialQuery }: SearchFiltersProps) {
   const [filters, setFilters] = useState<SearchFiltersType>({
-    query: "",
+    query: initialQuery || "",
     brand: "",
     model: "",
     min_price: undefined,
