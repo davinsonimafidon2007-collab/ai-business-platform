@@ -28,7 +28,7 @@ dependencies = [
     "lxml>=5.0.0,<6.0.0",
     "python-multipart>=0.0.20,<1.0.0",
     "firebase-admin>=6.0.0,<7.0.0",
-    "aiosmtplib>=3.0.0,<4.0.0",
+    "aiosmtplib>=5.1.1,<6.0.0",
     "redis>=5.0.0,<6.0.0",
 ]
 
@@ -100,3 +100,14 @@ ignore = ["E501", "B008", "UP042"]
 "tests/unit/test_deals_api.py" = ["F841"]
 "tests/unit/test_profit_analyzer.py" = ["F841"]
 "tests/unit/test_request_id_middleware.py" = ["F841"]
+
+# SEC-002: overrides de seguridad para dependencias transitivas con CVEs
+# conocidos (detectados por pip-audit). Forzamos versión mínima parcheada
+# aunque el paquete que las declara (firebase-admin, python-jose) no haya
+# subido su propio pin todavía.
+[tool.uv]
+override-dependencies = [
+    "cryptography>=50.0.0",
+    "lxml>=6.1.0",
+    "h2>=4.4.1",
+]
