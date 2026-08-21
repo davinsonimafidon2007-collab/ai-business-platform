@@ -3,6 +3,7 @@ import "./globals.css";
 import { Providers } from "@/app/providers";
 import { OfflineBanner } from "@/components/ui/StateComponents";
 import { MobileBootstrap } from "@/app/components/MobileBootstrap";
+import { AppUpdateBanner } from "@/app/components/ui/app-update-banner";
 
 export const metadata: Metadata = {
   title: "AI Business Platform",
@@ -28,6 +29,7 @@ export default function RootLayout({
         <Providers>
           <MobileBootstrap />
           <OfflineBanner />
+          <AppUpdateBanner />
           {children}
         </Providers>
       </body>

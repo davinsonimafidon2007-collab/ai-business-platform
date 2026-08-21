@@ -89,3 +89,28 @@ class OpportunityUpdate(BaseModel):
     roi_percentage: float | None = None
     recommendation: str | None = None
     risk_level: str | None = None
+
+
+class OpportunityPhaseRead(BaseModel):
+    """Fase del workflow de una oportunidad."""
+
+    id: str
+    opportunity_id: str
+    title: str
+    description: str | None = None
+    status: str
+    agent: str | None = None
+    order: int = 0
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+    feedback: str | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class OpportunityReadDetail(OpportunityRead):
+    """Oportunidad con detalle ampliado para la página de detalle."""
+
+    phases: list[OpportunityPhaseRead] = []

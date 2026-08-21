@@ -6,7 +6,7 @@ import { useOpportunities } from "@/app/hooks/useOpportunities";
 import { OpportunityCard } from "@/app/components/opportunities/OpportunityCard";
 import { SkeletonCard, ErrorState, EmptyState } from "@/components/ui/StateComponents";
 import { Pagination } from "@/app/components/ui/Pagination";
-import { Search, SlidersHorizontal, Plus } from "lucide-react";
+import { Search, SlidersHorizontal } from "lucide-react";
 
 const FILTERS = ["Todas", "Activas", "Pendientes", "Completadas", "Abortadas"] as const;
 type FilterType = (typeof FILTERS)[number];
@@ -38,9 +38,8 @@ export default function OpportunitiesPage() {
     const q = searchQuery.toLowerCase();
     return allItemsList.filter(
       (o: any) =>
-        o.title?.toLowerCase().includes(q) ||
-        o.brand?.toLowerCase().includes(q) ||
-        o.model?.toLowerCase().includes(q)
+        o.vehicle?.brand?.toLowerCase().includes(q) ||
+        o.vehicle?.model?.toLowerCase().includes(q)
     );
   }, [allItemsList, searchQuery]);
 
@@ -60,13 +59,6 @@ export default function OpportunitiesPage() {
             {isLoading ? "Cargando..." : `${filtered.length} en total`}
           </p>
         </div>
-        <button
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary-600 hover:bg-primary-500 text-white text-sm font-semibold transition-colors active:scale-95"
-          aria-label="Nueva oportunidad"
-        >
-          <Plus className="w-4 h-4" aria-hidden="true" />
-          <span className="hidden sm:inline">Nueva oportunidad</span>
-        </button>
       </div>
 
       {/* Search + Filters */}
@@ -137,7 +129,7 @@ export default function OpportunitiesPage() {
               : "No hay oportunidades en esta categoría."
           }
           action={{
-            label: "Nueva oportunidad",
+            label: "Crear desde búsqueda",
             onClick: () => {
               router.push("/search");
             },
@@ -150,15 +142,7 @@ export default function OpportunitiesPage() {
               <OpportunityCard
                 key={opp.id}
                 id={opp.id}
-                image={opp.image || "https://images.unsplash.com/photo-1555215695-3004980adade?w=400&h=300&fit=crop"}
-                title={opp.title || `${opp.brand} ${opp.model}`}
-                year={opp.year || 2021}
-                price={opp.price || 32500}
-                marketPrice={opp.market_price || 38200}
-                margin={opp.margin || 18}
-                status={opp.status || "active"}
-                phase={opp.phase || "Análisis de mercado"}
-                agent={opp.agent || "Analista de Mercado"}
+                opportunity={opp}
               />
             ))}
           </div>
