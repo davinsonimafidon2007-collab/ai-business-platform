@@ -58,6 +58,9 @@ npm-debug.log*
 frontend/public/sw.js
 frontend/public/workbox-*.js
 frontend/test-results/
+frontend/test-output.txt
+frontend/*_error.txt
+frontend/*-error.txt
 
 # Environment files
 .env
