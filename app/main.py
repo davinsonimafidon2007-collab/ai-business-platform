@@ -23,6 +23,7 @@ from app.middleware.logging_middleware import AccessLogMiddleware
 from app.middleware.rate_limit_middleware import RateLimitMiddleware
 from app.middleware.redirect_https import HTTPSRedirectMiddleware
 from app.middleware.request_id import RequestIdMiddleware
+from app.middleware.trusted_hosts_middleware import TrustedHostsMiddleware
 
 setup_logging()
 
@@ -135,6 +136,16 @@ app.add_middleware(AccessLogMiddleware)
 app.add_middleware(RequestIdMiddleware)
 if settings.environment != "development" or settings.https_redirect:
     app.add_middleware(HTTPSRedirectMiddleware)
+
+try:
+    from app.middleware.security_middleware import SecurityHeadersMiddleware
+    if settings.security_headers_enabled:
+        app.add_middleware(SecurityHeadersMiddleware)
+except Exception:
+    pass
+
+if settings.environment == "production" and settings.trusted_hosts:
+    app.add_middleware(TrustedHostsMiddleware)
 
 # Configuración CORS (debe ser el último middleware añadido, primero en ejecutarse)
 app.add_middleware(
