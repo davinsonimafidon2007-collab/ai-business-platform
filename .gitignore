@@ -103,3 +103,8 @@ TASK1_ES_DATA_MODE.diff
 frontend/_fix_storage.py
 frontend/client-results.txt
 frontend/storage-results.txt
+
+# MOBILE-HARDENING #2: keystore decodificado por CI y propiedades locales de firma
+frontend/android/app/release.keystore
+frontend/android/keystore.properties
+*.keystore

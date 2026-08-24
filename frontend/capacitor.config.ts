@@ -17,6 +17,8 @@ import {
 // con 'https' el WebView sirve en https://localhost y los fetch a http://...
 // caen en mixed-content, por mucho que el network_security_config permita
 // cleartext. En producción con backend HTTPS usar 'https'.
+// MOBILE-HARDENING #7: el pipeline de release exporta con
+// CAPACITOR_ANDROID_SCHEME=https; el default 'http' queda solo para debug.
 const androidScheme = process.env.CAPACITOR_ANDROID_SCHEME || 'http';
 
 const config: CapacitorConfig = {
@@ -25,8 +27,11 @@ const config: CapacitorConfig = {
   webDir: 'out',
   server: {
     androidScheme,
-    // MOB-P1-009: hosts de App Links aceptados (deep links http/https).
-    allowNavigation: ['aibusiness.app', 'app.aibusiness.com', 'aibusiness.platform'],
+    // MOB-P1-009 / MOBILE-HARDENING #9: hosts de App Links aceptados.
+    // Solo aibusiness.app tiene DNS real (verificado). Se eliminaron
+    // aibusiness.platform (TLD inexistente) y app.aibusiness.com (sin
+    // resolución DNS): no presentan dominios ficticios como productivos.
+    allowNavigation: ['aibusiness.app'],
   },
   plugins: {
     Camera: {
