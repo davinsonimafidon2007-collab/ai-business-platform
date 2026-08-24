@@ -28,66 +28,17 @@ class AutoScout24EsProvider(AutoScout24Provider):
         return "autoscout24_es"
 
     def build_search_url(self, query: str, **kwargs: Any) -> str:
-        """URL de listados AS24 España (cy=E, path sin modelo)."""
-        if query and query.strip().startswith("http"):
-            return query.strip()
-
-        from urllib.parse import quote, urlencode
-
-        brand = (kwargs.get("brand") or "").strip()
-        model = (kwargs.get("model") or "").strip()
-
-        if not brand and query:
-            parts = query.strip().split(None, 1)
-            brand = parts[0]
-            if not model and len(parts) > 1:
-                model = parts[1]
-
-        path = "/lst"
-        if brand:
-            path += f"/{quote(brand.lower().replace(' ', '-'))}"
-
-        params: dict[str, str] = {
-            "atype": "C",
-            "cy": "E",
-            "desc": "0",
-            "sort": "standard",
-            "source": "listpage_search-mask",
-            "ustate": "N,U",
-        }
-
-        if model:
-            params["q"] = model
-
-        mapping = {
-            "min_price": "pricefrom",
-            "budget_min": "pricefrom",
-            "max_price": "priceto",
-            "budget_max": "priceto",
-            "min_year": "fregfrom",
-            "max_year": "fregto",
-            "max_mileage": "kmto",
-            "min_mileage": "kmfrom",
-        }
-        for key, param in mapping.items():
-            value = kwargs.get(key)
-            if value is not None:
-                params[param] = str(int(value)) if isinstance(value, float) else str(value)
-
-        fuel_map = {
-            "gasolina": "B", "petrol": "B", "benzin": "B",
-            "diesel": "D",
-            "eléctrico": "E", "electrico": "E", "electric": "E",
-            "híbrido": "2", "hibrido": "2", "hybrid": "2",
-        }
-        fuel = (kwargs.get("fuel_type") or "").strip().lower()
-        if fuel in fuel_map:
-            params["fuel"] = fuel_map[fuel]
-
-        transmission = (kwargs.get("transmission") or "").strip().lower()
-        if transmission in {"manual", "schaltgetriebe"}:
-            params["gear"] = "M"
-        elif transmission in {"automática", "automatica", "automatic", "automatik"}:
-            params["gear"] = "A"
-
-        return f"{self._base_url or BASE_URL_ES}{path}?{urlencode(params)}"
+        """URL de listados AS24 España (cy=E) — delega lógica común al padre."""
+        # Reusa el builder del padre pero forzando cy=E y base ES
+        url = super().build_search_url(query, **kwargs)
+        # super() genera cy=D por defecto; corregir a E para España
+        if "cy=D" in url:
+            url = url.replace("cy=D", "cy=E")
+        elif "cy=" not in url:
+            sep = "&" if "?" in url else "?"
+            url = f"{url}{sep}cy=E"
+        # Asegurar base ES si el padre usó DE por error
+        if self._base_url and self._base_url in url:
+            return url
+        # Si query era URL absoluta ya se retornó; si no, reescribir host a ES
+        return url.replace("https://www.autoscout24.de", self._base_url or BASE_URL_ES)

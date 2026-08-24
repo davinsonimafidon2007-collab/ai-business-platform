@@ -107,7 +107,10 @@ async def _build_admin_system_status(request: Request) -> AdminSystemStatus:
         default_import_cost_profile=getattr(settings, "default_import_cost_profile", ""),
         enable_es_market_fixture=getattr(settings, "enable_es_market_fixture", False),
         enable_coches_net_fixture=getattr(settings, "enable_coches_net_fixture", False),
+        enable_coches_net_html_fixture=getattr(settings, "enable_coches_net_html_fixture", False),
+        enable_coches_net_live=getattr(settings, "enable_coches_net_live", False),
         enable_autoscout24_es=getattr(settings, "enable_autoscout24_es", False),
+        enable_mobile_de=getattr(settings, "enable_mobile_de", False),
     )
 
     return AdminSystemStatus(

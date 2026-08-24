@@ -27,6 +27,7 @@ __all__ = [
     "ProviderRegistry",
     "MobileDeProvider",
     "AutoScout24Provider",
+    "CochesNetProvider",
     "ProviderHttpClient",
     "ProviderError",
     "ProviderConnectionError",
@@ -42,5 +43,5 @@ __all__ = [
     "OpenAIVisionProvider",
     "VisionProviderError",
     "CochesNetHtmlFixtureProvider",
-    "CochesNetProvider",
 ]
+

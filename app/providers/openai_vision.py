@@ -9,9 +9,12 @@ in app/api/v1/dependencies.py.
 
 from __future__ import annotations
 
+import base64
 import json
 import logging
+import mimetypes
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -25,6 +28,10 @@ from app.models.vision import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Límites anti-OOM para imágenes locales (10 MB por imagen, 40 MB batch)
+_MAX_IMAGE_BYTES = 10 * 1024 * 1024
+_MAX_BATCH_BYTES = 40 * 1024 * 1024
 
 # ---------------------------------------------------------------------------
 # Prompt template for vehicle damage analysis
@@ -159,12 +166,24 @@ class OpenAIVisionProvider:
             },
         ]
 
+        # Validación de tamaño batch y conversión de paths locales a data-URL
+        total_bytes = 0
         for image in images:
+            image_url = self._resolve_image_url(image.file_path)
+            # Estimar tamaño si es data URL
+            if image_url.startswith("data:"):
+                # base64 data ≈ 4/3 del binario; estimación rápida
+                total_bytes += len(image_url) * 3 // 4
+            if total_bytes > _MAX_BATCH_BYTES:
+                raise VisionProviderError(
+                    f"Batch de imágenes supera {_MAX_BATCH_BYTES // (1024*1024)} MB; reduce número/tamaño",
+                    provider="openai",
+                )
             content_parts.append(
                 {
                     "type": "image_url",
                     "image_url": {
-                        "url": image.file_path,
+                        "url": image_url,
                         "detail": "high",
                     },
                 }
@@ -274,6 +293,30 @@ class OpenAIVisionProvider:
         except (httpx.HTTPError, OSError, ValueError) as exc:
             logger.warning("openai is_available check failed: %s", exc)
             return False
+
+    # ------------------------------------------------------------------
+    # Helpers (local file → data URL)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _resolve_image_url(file_path: str) -> str:
+        """Convierte path local a data URL base64; si ya es http(s)/data, lo respeta."""
+        if file_path.startswith(("http://", "https://", "data:")):
+            return file_path
+        p = Path(file_path)
+        if p.exists() and p.is_file():
+            size = p.stat().st_size
+            if size > _MAX_IMAGE_BYTES:
+                raise VisionProviderError(
+                    f"Imagen {p.name} supera {_MAX_IMAGE_BYTES // (1024*1024)} MB ({size} bytes)",
+                    provider="openai",
+                )
+            mime, _ = mimetypes.guess_type(str(p))
+            mime = mime or "image/jpeg"
+            b64 = base64.b64encode(p.read_bytes()).decode("utf-8")
+            return f"data:{mime};base64,{b64}"
+        # Path no existe → asumir URL remota tal cual (fallback, fallará en API si inválida)
+        return file_path
 
     # ------------------------------------------------------------------
     # Response parsing

@@ -99,9 +99,15 @@ class RefreshOpportunityJob(Job):
 
                             await opp_repo.save(opp)
 
-                            # Alertas email (Task C.2): notify al dueño del vehículo
+                            # Buscar owner una sola vez (corrección N+1, agregación canales)
                             try:
                                 owner = await user_repo.get_by_id(vehicle.user_id)
+                            except Exception:
+                                logger.warning("owner lookup failed vehicle %s", vehicle.id, exc_info=True)
+                                owner = None
+
+                            # Alertas email (Task C.2)
+                            try:
                                 if owner is not None:
                                     await alert_service.maybe_notify(
                                         user_email=owner.email,
@@ -116,9 +122,7 @@ class RefreshOpportunityJob(Job):
                                 )
 
                             # Push notification (TASK-010, FASE 5): FCM al dueño
-                            # del vehículo. Dry-run si Firebase no está configurado.
                             try:
-                                owner = await user_repo.get_by_id(vehicle.user_id)
                                 if owner is not None:
                                     from app.services.push_service import (
                                         notify_opportunity_created,

@@ -258,6 +258,17 @@ class ProviderHttpClient:
                             provider=self.provider_name,
                         )
 
+                    # Pre-check Content-Length si está presente (evitar streaming innecesario)
+                    if self.max_bytes > 0:
+                        clen = response.headers.get("content-length")
+                        if clen and clen.isdigit() and int(clen) > self.max_bytes:
+                            await response.aclose()
+                            raise ProviderResponseTooLargeError(
+                                f"Respuesta de {self.provider_name} Content-Length {clen} supera límite {self.max_bytes} (url={full_url})",
+                                provider=self.provider_name,
+                                max_bytes=self.max_bytes,
+                            )
+
                     response.raise_for_status()
 
                     # TASK-010: leer el cuerpo en streaming con un tope de bytes
@@ -275,18 +286,12 @@ class ProviderHttpClient:
         except ProviderConnectionError:
             raise
         except httpx.TimeoutException as e:
-            from app.providers.circuit_breaker import circuit_breaker
-
-            circuit_breaker.record_failure(self.provider_name)
             raise ProviderTimeoutError(
                 f"Timeout al conectar con {self.provider_name}",
                 provider=self.provider_name,
                 timeout=self.timeout,
             ) from e
         except httpx.NetworkError as e:
-            from app.providers.circuit_breaker import circuit_breaker
-
-            circuit_breaker.record_failure(self.provider_name)
             raise ProviderConnectionError(
                 f"Error de conexión con {self.provider_name}",
                 provider=self.provider_name,

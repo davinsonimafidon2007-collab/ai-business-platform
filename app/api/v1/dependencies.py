@@ -190,6 +190,19 @@ def get_autoscout24_es_provider() -> AutoScout24EsProvider:
     )
 
 
+def get_coches_net_provider():
+    """Provider Coches.net live (HTTP scraping real)."""
+    from app.providers.coches_net import CochesNetProvider
+
+    client = ProviderHttpClient(
+        provider_name="coches_net",
+        base_url="https://www.coches.net",
+        timeout=settings.provider_http_timeout,
+        max_retries=settings.provider_http_max_retries,
+    )
+    return CochesNetProvider(http_client=client, base_url="https://www.coches.net")
+
+
 # =============================================================================
 # Inspection dependencies
 # =============================================================================

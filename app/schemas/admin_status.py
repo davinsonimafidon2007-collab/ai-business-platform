@@ -58,7 +58,10 @@ class ProvidersStatus(BaseModel):
     default_import_cost_profile: str = ""
     enable_es_market_fixture: bool = False
     enable_coches_net_fixture: bool = False
+    enable_coches_net_html_fixture: bool = False
+    enable_coches_net_live: bool = False
     enable_autoscout24_es: bool = False
+    enable_mobile_de: bool = False
 
 
 class AdminSystemStatus(BaseModel):
