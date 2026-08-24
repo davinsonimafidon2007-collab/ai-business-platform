@@ -30,6 +30,9 @@ from app.api.v1.search_orders import router as search_orders_router
 from app.api.v1.searches import router as searches_router
 from app.api.v1.users import router as users_router
 from app.api.v1.vehicles import router as vehicles_crud_router
+from app.api.v1.workflows import router as workflows_router
+from app.api.v1.agents import router as agents_router
+from app.api.v1.approvals import router as approvals_router
 
 api_router = APIRouter()
 
@@ -55,5 +58,8 @@ api_router.include_router(opportunities_router)
 api_router.include_router(deals_router)
 api_router.include_router(budget_search_router)
 api_router.include_router(notifications_router)
+api_router.include_router(workflows_router)
+api_router.include_router(agents_router)
+api_router.include_router(approvals_router)
 
 __all__ = ["api_router"]

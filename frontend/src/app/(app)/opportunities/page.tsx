@@ -8,14 +8,14 @@ import { SkeletonCard, ErrorState, EmptyState } from "@/components/ui/StateCompo
 import { Pagination } from "@/app/components/ui/Pagination";
 import { Search, SlidersHorizontal } from "lucide-react";
 
-const FILTERS = ["Todas", "Activas", "Pendientes", "Completadas", "Abortadas"] as const;
+const FILTERS = ["Todas", "BUY_NOW", "WATCH", "NEGOTIATE", "REJECT"] as const;
 type FilterType = (typeof FILTERS)[number];
 
-const STATUS_MAP: Record<string, string> = {
-  Activas: "active",
-  Pendientes: "pending",
-  Completadas: "completed",
-  Abortadas: "aborted",
+const RECOMMENDATION_MAP: Record<string, string> = {
+  BUY_NOW: "BUY_NOW",
+  WATCH: "WATCH",
+  NEGOTIATE: "NEGOTIATE",
+  REJECT: "REJECT",
 };
 
 const ITEMS_PER_PAGE = 5;
@@ -28,8 +28,8 @@ export default function OpportunitiesPage() {
 
   const { data, isLoading, isError, refetch } = useOpportunities({
     limit: 50,
-    status: activeFilter !== "Todas" ? STATUS_MAP[activeFilter] : undefined,
-  });
+    recommendation: activeFilter !== "Todas" ? RECOMMENDATION_MAP[activeFilter] : undefined,
+  } as any);
 
   const allItemsList = useMemo(() => data?.items ?? [], [data]);
 

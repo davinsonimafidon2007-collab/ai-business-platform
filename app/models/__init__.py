@@ -19,6 +19,7 @@ from app.models.negotiation import (
     RepairEstimate,
 )
 from app.models.opportunity import Opportunity
+from app.models.opportunity_phase import OpportunityPhase
 from app.models.password_reset_token import PasswordResetToken
 from app.models.push_token import PushToken
 from app.models.refresh_token import RefreshToken
@@ -56,6 +57,7 @@ __all__ = [
     "NegotiationResult",
     "NegotiationScript",
     "Opportunity",
+    "OpportunityPhase",
     "PasswordResetToken",
     "PushToken",
     "RefreshToken",

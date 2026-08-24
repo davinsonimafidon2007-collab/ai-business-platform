@@ -15,6 +15,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.deal import Deal, DealStatus
 from app.models.opportunity import Opportunity
 from app.models.vehicle import Vehicle
 from app.models.vehicle_evaluation import VehicleEvaluation
@@ -78,7 +79,10 @@ class SearchPersistenceService:
                     saved += 1
 
                     await self._upsert_evaluation(vehicle.id, search_result)
-                    await self._upsert_opportunity(vehicle.id, search_result)
+                    opp = await self._upsert_opportunity(vehicle.id, search_result)
+                    # Pipeline OPPORTUNITY→DEAL: auto-crea Deal en NEW si BUY y no existe activo
+                    if opp is not None:
+                        await self._ensure_deal(user_id, vehicle.id, opp)
             except Exception:
                 failed += 1
                 logger.warning(
@@ -237,10 +241,10 @@ class SearchPersistenceService:
     # Oportunidades
     # ------------------------------------------------------------------
 
-    async def _upsert_opportunity(self, vehicle_id: str, search_result: Any) -> None:
+    async def _upsert_opportunity(self, vehicle_id: str, search_result: Any) -> Opportunity | None:
         opportunity = getattr(search_result, "opportunity", None)
         if opportunity is None:
-            return
+            return None
 
         result = await self.session.execute(
             select(Opportunity)
@@ -265,3 +269,36 @@ class SearchPersistenceService:
         opp.analyzed_at = datetime.now(UTC)
 
         self.session.add(opp)
+        await self.session.flush()
+        return opp
+
+    async def _ensure_deal(self, user_id: str, vehicle_id: str, opp: Opportunity) -> None:
+        """Crea Deal NEW si la oportunidad es BUY y no existe Deal activo."""
+        rec = (opp.recommendation or "").upper()
+        # Soporta BUY, BUY_NOW, BUY_NOW con texto o enum
+        is_buy = rec in {"BUY", "BUY_NOW"} or "BUY" in rec
+        if not is_buy:
+            return
+        # Evitar duplicados: solo si no hay Deal activo para esta oportunidad
+        from sqlalchemy import select as _select
+
+        active_statuses = [DealStatus.NEW.value, DealStatus.CONTACTED.value, DealStatus.OFFER.value]
+        result = await self.session.execute(
+            _select(Deal).where(
+                Deal.user_id == str(user_id),
+                Deal.opportunity_id == opp.id,
+                Deal.status.in_(active_statuses),
+            )
+        )
+        if result.scalar_one_or_none() is not None:
+            return
+        deal = Deal(
+            user_id=str(user_id),
+            vehicle_id=vehicle_id,
+            opportunity_id=opp.id,
+            status=DealStatus.NEW,
+            notes=f"Auto-creado desde búsqueda: {opp.recommendation} (score {opp.opportunity_score})",
+        )
+        self.session.add(deal)
+        await self.session.flush()
+        logger.info("Deal auto-creado %s para opportunity %s (vehicle %s)", deal.id, opp.id, vehicle_id)

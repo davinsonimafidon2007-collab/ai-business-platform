@@ -42,16 +42,37 @@ export interface ActivityItem {
 
 export interface OpportunityDetail {
   id: string;
-  title: string;
-  brand: string;
-  model: string;
-  year: number;
-  status: "active" | "pending" | "completed" | "aborted";
-  price: number;
-  market_price: number;
-  margin: number;
+  vehicle?: {
+    id: string;
+    brand?: string | null;
+    model?: string | null;
+    year?: number | null;
+    mileage?: number | null;
+    price?: number | null;
+    source?: string | null;
+    external_id?: string | null;
+    url?: string | null;
+  } | null;
+  score?: number | null;
+  estimated_profit?: number | null;
+  roi_percentage?: number | null;
+  recommendation?: string | null;
+  recommendation_label_es?: string | null;
+  risk_level?: string | null;
+  risk_label_es?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
   phases: Phase[];
-  current_phase: number;
+  current_phase?: number;
+  // Compat: campos legacy que el backend no devuelve, se derivan en el cliente
+  title?: string;
+  brand?: string;
+  model?: string;
+  year?: number;
+  status?: "active" | "pending" | "completed" | "aborted";
+  price?: number;
+  market_price?: number;
+  margin?: number;
   agent_result?: AgentResult;
   files: GeneratedFile[];
   activity_log: ActivityItem[];
