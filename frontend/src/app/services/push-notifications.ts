@@ -16,6 +16,25 @@ let initialized = false;
 let currentFcmToken: string | null = null;
 
 /**
+ * MOBILE-HARDENING #5: handles de listeners activos para poder removerlos
+ * antes de un re-registro (evita duplicados si initPushNotifications()
+ * se ejecuta más de una vez, p. ej. re-login tras logout).
+ */
+type ListenerHandle = { remove: () => Promise<void> };
+let pushListenerHandles: ListenerHandle[] = [];
+
+/**
+ * MOBILE-HARDENING #5: los IDs de LocalNotifications deben ser enteros
+ * válidos (int32 en Android). Number.parseInt puede dar NaN y Date.now()
+ * crudo excede el rango int32 (≈2.1e9), así que se normaliza por módulo.
+ */
+function toValidNotificationId(rawId?: string): number {
+  const parsed = rawId ? Number.parseInt(rawId, 10) : Number.NaN;
+  const base = Number.isInteger(parsed) && !Number.isNaN(parsed) ? parsed : Date.now();
+  return Math.abs(base % 2147483647);
+}
+
+/**
  * Initialize push notifications. Call once at app startup.
  * Silently no-ops on web or if plugin is not installed.
  */
@@ -35,6 +54,7 @@ export async function initPushNotifications(): Promise<void> {
 
     await registerPushListeners();
     await PushNotifications.register();
+    // MOBILE-HARDENING #5: nunca loguear el valor del token FCM.
     console.log("[Push] Registration initiated");
     initialized = true;
   } catch (err) {
@@ -62,38 +82,59 @@ async function createNotificationChannel(): Promise<void> {
 async function registerPushListeners(): Promise<void> {
   const { PushNotifications } = await import("@capacitor/push-notifications");
 
-  await PushNotifications.addListener("registration", async (token: { value: string }) => {
-    currentFcmToken = token.value;
-    console.log("[Push] FCM Token:", token.value);
-    try {
-      await api.post("/notifications/register", {
-        token: token.value,
-        platform: Capacitor.getPlatform(),
-      });
-    } catch (err) {
-      console.error("[Push] Token registration failed:", err);
+  // MOBILE-HARDENING #5: deduplicación. Si ya había listeners de una
+  // invocación previa, se remueven antes de registrar los nuevos.
+  await Promise.all(
+    pushListenerHandles.splice(0).map((h) => h.remove().catch(() => undefined))
+  );
+
+  const registrationHandle = await PushNotifications.addListener(
+    "registration",
+    async (token: { value: string }) => {
+      currentFcmToken = token.value;
+      // MOBILE-HARDENING #5: el valor del token NUNCA va a logs (ni en
+      // producción ni en desarrollo): es una credencial que permite enviar
+      // push al dispositivo.
+      console.log("[Push] FCM token recibido y enviado al backend");
+      try {
+        await api.post("/notifications/register", {
+          token: token.value,
+          platform: Capacitor.getPlatform(),
+        });
+      } catch (err) {
+        console.error("[Push] Token registration failed:", err);
+      }
     }
-  });
+  );
+  pushListenerHandles.push(registrationHandle);
 
-  await PushNotifications.addListener("registrationError", (err: { error?: string }) => {
-    console.error("[Push] Registration error:", err.error);
-  });
+  const errorHandle = await PushNotifications.addListener(
+    "registrationError",
+    (err: { error?: string }) => {
+      console.error("[Push] Registration error:", err.error);
+    }
+  );
+  pushListenerHandles.push(errorHandle);
 
-  await PushNotifications.addListener(
+  const receivedHandle = await PushNotifications.addListener(
     "pushNotificationReceived",
     async (notification: { title?: string; body?: string; id?: string; data?: Record<string, unknown> }) => {
-      console.log("[Push] Foreground notification:", notification);
+      // MOBILE-HARDENING #5: no volcar el payload completo (puede contener
+      // datos sensibles); basta con el título para diagnóstico.
+      console.log("[Push] Foreground notification:", notification.title ?? "(sin título)");
       await showForegroundNotification(notification);
     }
   );
+  pushListenerHandles.push(receivedHandle);
 
-  await PushNotifications.addListener(
+  const actionHandle = await PushNotifications.addListener(
     "pushNotificationActionPerformed",
     (action: { notification: { data?: Record<string, unknown> } }) => {
-      console.log("[Push] Notification tapped:", action);
+      console.log("[Push] Notification tapped");
       handleNotificationTap(action.notification.data);
     }
   );
+  pushListenerHandles.push(actionHandle);
 }
 
 async function showForegroundNotification(notification: {
@@ -109,7 +150,7 @@ async function showForegroundNotification(notification: {
         {
           title: notification.title || "AI Business Platform",
           body: notification.body || "Nueva notificacion",
-          id: notification.id ? Number.parseInt(notification.id, 10) : Date.now(),
+          id: toValidNotificationId(notification.id),
           channelId: NOTIFICATION_CHANNEL_ID,
           extra: notification.data || {},
           smallIcon: "ic_stat_icon_config_sample",
@@ -170,4 +211,19 @@ export async function unregisterPushNotifications(): Promise<void> {
   } catch (err) {
     console.error("[Push] Failed to unregister token:", err);
   }
+}
+
+/**
+ * MOBILE-HARDENING #5: teardown completo al cerrar sesión. Remueve listeners,
+ * limpia el estado y resetea `initialized` para que un próximo login pueda
+ * volver a inicializar sin duplicar nada.
+ */
+export async function teardownPushNotifications(): Promise<void> {
+  await unregisterPushNotifications();
+  if (pushListenerHandles.length > 0) {
+    const handles = pushListenerHandles.splice(0);
+    await Promise.all(handles.map((h) => h.remove().catch(() => undefined)));
+  }
+  currentFcmToken = null;
+  initialized = false;
 }

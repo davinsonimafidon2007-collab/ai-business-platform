@@ -4,7 +4,7 @@ import { useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuthStore } from "@/app/store/auth-store";
 import { signOutOfGoogle } from "@/app/services/google-auth";
-import { unregisterPushNotifications } from "@/app/services/push-notifications";
+import { teardownPushNotifications } from "@/app/services/push-notifications";
 
 /**
  * Path canónico de logout.
@@ -24,7 +24,9 @@ export function useLogout() {
       // Ignore Firebase sign-out errors
     }
     try {
-      await unregisterPushNotifications();
+      // MOBILE-HARDENING #5: teardown completo (unregister backend + remover
+      // listeners + reset de estado para poder re-inicializar tras re-login).
+      await teardownPushNotifications();
     } catch {
       // Ignore push unregister errors
     }

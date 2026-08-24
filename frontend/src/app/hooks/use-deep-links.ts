@@ -62,8 +62,15 @@ export function resolveDeepLinkRoute(data: DeepLinkData): string | null {
     case "opportunity":
       return withId("/opportunities");
     case "search": {
-      const params = data.queryParams ? new URLSearchParams(data.queryParams).toString() : "";
-      return params ? `/search?${params}` : "/search";
+      // MOBILE-HARDENING #4: el builder coloca la búsqueda en el path
+      // (deepLinkBuilder.search → aibusiness://search/Toyota), mientras que
+      // otros productores usan query params (aibusiness://search?q=Toyota).
+      // Se aceptan ambas formas: el segmento del path se convierte en el
+      // parámetro "q" salvo que ya venga uno explícito.
+      const sp = new URLSearchParams(data.queryParams ?? {});
+      if (id && !sp.get("q")) sp.set("q", decodeURIComponent(id));
+      const qs = sp.toString();
+      return qs ? `/search?${qs}` : "/search";
     }
     case "settings":
       return "/settings";
@@ -90,17 +97,39 @@ export function useDeepLinks() {
 
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
-    let removeListener: (() => void) | null = null;
+    // MOBILE-HARDENING #4: cleanup robusto. Si el componente se desmonta
+    // antes de que el import dinámico resuelva, `cancelled` evita registrar
+    // un listener huérfano que nadie removería jamás.
+    let cancelled = false;
+    let listenerHandle: { remove: () => Promise<void> } | null = null;
 
     const initDeepLinks = async () => {
-      const { App } = await import("@capacitor/app");
-      const listener = await App.addListener("appUrlOpen", (data) => handleDeepLink(data.url));
-      removeListener = listener.remove;
+      try {
+        const { App } = await import("@capacitor/app");
+
+        // MOBILE-HARDENING #4: cold start. En arranque en frío la URL puede
+        // entregarse antes de que este listener exista; getLaunchUrl()
+        // devuelve esa URL inicial pendiente.
+        const launch = await App.getLaunchUrl();
+        if (!cancelled && launch?.url) handleDeepLink(launch.url);
+
+        if (cancelled) return;
+        listenerHandle = await App.addListener("appUrlOpen", (data) =>
+          handleDeepLink(data.url)
+        );
+        if (cancelled) {
+          void listenerHandle.remove();
+          listenerHandle = null;
+        }
+      } catch (err) {
+        console.error("[DeepLinks] init failed:", err);
+      }
     };
 
     void initDeepLinks();
     return () => {
-      if (removeListener) removeListener();
+      cancelled = true;
+      if (listenerHandle) void listenerHandle.remove();
     };
   }, [handleDeepLink]);
 

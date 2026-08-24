@@ -1,6 +1,25 @@
 import type { NextConfig } from "next";
 import path from "path";
 
+// MOBILE-HARDENING #8: VERSION en la raíz del repo es la única fuente de
+// verdad de versión (Android versionName/versionCode y backend /mobile/version
+// derivan de él). Si no viene NEXT_PUBLIC_APP_VERSION del entorno, se lee del
+// archivo; si tampoco existe, fallback seguro 1.0.0.
+const fs = require("fs") as typeof import("fs");
+function resolveAppVersion(): string {
+  const fromEnv = process.env.NEXT_PUBLIC_APP_VERSION;
+  if (fromEnv && /^\d+\.\d+\.\d+$/.test(fromEnv)) return fromEnv;
+  try {
+    const raw = fs
+      .readFileSync(path.join(__dirname, "..", "VERSION"), "utf-8")
+      .trim();
+    if (/^\d+\.\d+\.\d+$/.test(raw)) return raw;
+  } catch {
+    // archivo ausente → fallback
+  }
+  return "1.0.0";
+}
+
 // MOB-P3-006 / PWA (Bloque 1.3): service worker + manifest instalable.
 // next-pwa v5 es CommonJS, por eso se usa require() dentro de un .ts.
 const withPWA = require("next-pwa")({
@@ -22,6 +41,10 @@ const isCapacitorBuild = process.env.BUILD_TARGET === "capacitor";
 // La config de webpack es un función que puede devolver undefined para
 // cohexistir con otras configs (bundle-analyzer).
 const nextConfig: NextConfig = {
+  // MOBILE-HARDENING #8: inyecta la versión de build desde VERSION.
+  env: {
+    NEXT_PUBLIC_APP_VERSION: resolveAppVersion(),
+  },
   ...(isCapacitorBuild
     ? {
         output: "export" as const,

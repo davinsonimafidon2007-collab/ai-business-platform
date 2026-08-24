@@ -1,5 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- MOBILE-HARDENING #10: permisos que las librerías (FCM / plugins)
+         inyectan en el merge y que la app no necesita. tools:node="remove"
+         los excluye del manifest final. -->
+    <uses-permission
+        android:name="android.permission.RECEIVE_BOOT_COMPLETED"
+        tools:node="remove" />
+    <uses-permission
+        android:name="android.permission.USE_FINGERPRINT"
+        tools:node="remove" />
+    <uses-permission
+        android:name="android.permission.USE_CREDENTIALS"
+        tools:node="remove" />
 
     <application
         android:allowBackup="false"
@@ -23,25 +37,14 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
-            <!-- MOB-P2-001: Deep links / App Links -->
-            <intent-filter android:autoVerify="true">
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data
-                    android:scheme="https"
-                    android:host="aibusiness.platform"
-                    android:pathPrefix="/" />
-            </intent-filter>
-            <intent-filter android:autoVerify="true">
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data
-                    android:scheme="https"
-                    android:host="app.aibusiness.com"
-                    android:pathPrefix="/" />
-            </intent-filter>
+            <!-- MOB-P2-001 / MOBILE-HARDENING #9: Deep links / App Links.
+                 Único host productivo con DNS real: aibusiness.app.
+                 Se eliminaron los filtros de aibusiness.platform (TLD inexistente,
+                 no puede verificarse jamás) y app.aibusiness.com (sin resolución
+                 DNS válida): presentarlos como App Links sería ficticio.
+                 NOTA: la verificación real requiere publicar assetlinks.json con
+                 los SHA-256 del certificado release en https://aibusiness.app/.well-known/
+                 (los fingerprints actuales son placeholders). -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -52,18 +55,10 @@
                     android:pathPrefix="/" />
             </intent-filter>
 
-            <!-- Custom scheme fallback for in-app links -->
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data
-                    android:scheme="aibusiness"
-                    android:host="open" />
-            </intent-filter>
-
             <!-- Custom scheme (cualquier ruta): aibusiness://vehicle/123,
-                 aibusiness://search?make=Toyota, etc. (MOB-P1-009). -->
+                 aibusiness://search?make=Toyota, etc. (MOB-P1-009).
+                 MOBILE-HARDENING #9: se eliminó el filtro duplicado
+                 host="open" (subsumido por este filtro general). -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -84,23 +79,36 @@
         </provider>
     </application>
 
-    <!-- Permissions -->
-
+    <!-- Permissions — MOBILE-HARDENING #10: auditoría de permisos.
+         Eliminados por no usarse / obsoletos:
+           - RECEIVE_BOOT_COMPLETED: no existe ningún BroadcastReceiver en el
+             manifest que lo necesite (no hay re-agendado al arrancar).
+           - USE_FINGERPRINT: deprecado; USE_BIOMETRIC lo cubre (API 28+) y el
+             plugin @capgo/capacitor-native-biometric gestiona su propio
+             fallback en merges si hiciera falta.
+         Justificación de los mantenidos:
+           - INTERNET / ACCESS_NETWORK_STATE: API REST + @capacitor/network.
+           - CAMERA + uses-feature(required=false): @capacitor/camera (foto).
+           - READ_MEDIA_IMAGES (33+) y READ_EXTERNAL_STORAGE (maxSdk 32):
+             selección de imágenes de galería según versión de Android.
+           - WRITE_EXTERNAL_STORAGE (maxSdk 28): cache offline legacy pre-Q.
+           - POST_NOTIFICATIONS: push/local notifications (API 33+).
+           - VIBRATE: vibración del canal de notificaciones.
+    -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <!-- Almacenamiento legado: READ galería (solo API <= 32) y WRITE cache
+         offline externa (solo API <= 28; desde Android 10 el almacenamiento
+         con ámbito lo hace innecesario). -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
-    <!-- MOB-P2-003: cache offline en almacenamiento externo (solo API <= 28;
-         en Android 10+ el almacenamiento con ámbito ya no lo requiere). -->
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
     <!-- MOB-P1-001: Push notifications -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.VIBRATE" />
     <!-- MOB-P2-004: Biometría / huella dactilar -->
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
-    <uses-permission android:name="android.permission.USE_FINGERPRINT" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
 </manifest>
