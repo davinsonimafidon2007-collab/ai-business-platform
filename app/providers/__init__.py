@@ -3,6 +3,7 @@ from app.providers.base import VehicleProvider
 from app.providers.coches_net import CochesNetProvider
 from app.providers.coches_net_html import CochesNetHtmlFixtureProvider
 from app.providers.dto import VehicleDetail, VehicleSearchResult
+from app.providers.mobile_de_playwright import MobileDePlaywrightProvider
 from app.providers.exceptions import (
     ProviderAuthenticationError,
     ProviderConnectionError,
@@ -26,6 +27,7 @@ __all__ = [
     "VehicleDetail",
     "ProviderRegistry",
     "MobileDeProvider",
+    "MobileDePlaywrightProvider",
     "AutoScout24Provider",
     "CochesNetProvider",
     "ProviderHttpClient",

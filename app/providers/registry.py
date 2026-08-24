@@ -229,7 +229,18 @@ class ProviderRegistry:
 
             if getattr(settings, "enable_mobile_de", True):
                 from app.providers.http_client import ProviderHttpClient
-                from app.providers.mobile_de import MobileDeProvider
+
+                # Playwright opcional (sin cuenta): si está habilitado y disponible,
+                # usa browser headless, sino cae a httpx. No requiere proxy.
+                if getattr(settings, "enable_mobile_de_playwright", False):
+                    try:
+                        from app.providers.mobile_de_playwright import MobileDePlaywrightProvider  # noqa: F401
+
+                        use_pw = True
+                    except ImportError:
+                        use_pw = False
+                else:
+                    use_pw = False
 
                 client = ProviderHttpClient(
                     provider_name="mobile_de",
@@ -237,11 +248,22 @@ class ProviderRegistry:
                     timeout=settings.provider_http_timeout,
                     max_retries=settings.provider_http_max_retries,
                 )
-                cls.register(
-                    MobileDeProvider(
-                        http_client=client, base_url="https://suchen.mobile.de"
+                if use_pw:
+                    from app.providers.mobile_de_playwright import MobileDePlaywrightProvider
+
+                    cls.register(
+                        MobileDePlaywrightProvider(
+                            http_client=client, base_url="https://suchen.mobile.de"
+                        )
                     )
-                )
+                else:
+                    from app.providers.mobile_de import MobileDeProvider
+
+                    cls.register(
+                        MobileDeProvider(
+                            http_client=client, base_url="https://suchen.mobile.de"
+                        )
+                    )
 
         if "autoscout24" not in cls._providers:
             from app.core.config import settings

@@ -219,6 +219,16 @@ class Settings(BaseSettings):
     # solo cuando haya proxy disponible. AutoScout24 DE es primaria.
     enable_mobile_de: bool = False
 
+    # Playwright para mobile.de (browser headless). No requiere cuenta.
+    # Si True, mobile.de intenta primero con Playwright (JS completo, bypass
+    # parcial de anti-bot estático) y cae a httpx si falla o no está instalado.
+    # Sin cuenta externa; solo `playwright install chromium` en Docker/CI.
+    enable_mobile_de_playwright: bool = False
+    """Si True, mobile.de usa Playwright headless como transporte principal."""
+    playwright_timeout_ms: int = 30000
+    """Timeout de navegación Playwright (ms)."""
+    playwright_headless: bool = True
+
     # =========================================================================
     # Scheduler / Jobs configuration
     # =========================================================================

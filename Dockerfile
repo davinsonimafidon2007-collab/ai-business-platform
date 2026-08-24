@@ -15,6 +15,11 @@ COPY pyproject.toml uv.lock ./
 
 RUN uv sync --group dev
 
+# Playwright browsers (chromium) para mobile.de headless — sin cuenta, solo
+# se descarga si ENABLE_MOBILE_DE_PLAYWRIGHT=true en runtime. Instalación
+# cacheable; no bloquea el boot si falla (fallback httpx).
+RUN uv run --no-sync playwright install --with-deps chromium || echo "playwright browsers skip (offline)"
+
 COPY . .
 
 EXPOSE 8000

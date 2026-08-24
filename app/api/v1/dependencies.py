@@ -141,12 +141,10 @@ def get_market_estimator(
 
 
 def get_mobile_de_provider() -> MobileDeProvider:
-    """Provider mobile.de con cliente HTTP anti-bot unificado (settings-driven).
+    """Provider mobile.de con Playwright opcional (sin cuenta, settings-driven).
 
-    El ``ProviderHttpClient`` aplica proxy/cookies/delay desde ``settings``
-    (``PROVIDER_HTTP_PROXY`` / ``PROVIDER_HTTP_COOKIES`` /
-    ``PROVIDER_HTTP_MIN_DELAY_MS``) de forma centralizada — un solo camino
-    de red para todos los providers.
+    Si ``enable_mobile_de_playwright=true`` y ``playwright`` está instalado,
+    usa browser headless (JS, bypass parcial anti-bot). Fallback a httpx.
     """
     client = ProviderHttpClient(
         provider_name="mobile_de",
@@ -154,6 +152,13 @@ def get_mobile_de_provider() -> MobileDeProvider:
         timeout=settings.provider_http_timeout,
         max_retries=settings.provider_http_max_retries,
     )
+    if getattr(settings, "enable_mobile_de_playwright", False):
+        try:
+            from app.providers.mobile_de_playwright import MobileDePlaywrightProvider
+
+            return MobileDePlaywrightProvider(http_client=client, base_url="https://suchen.mobile.de")  # type: ignore[return-value]
+        except ImportError:
+            pass
     return MobileDeProvider(http_client=client, base_url="https://suchen.mobile.de")
 
 
