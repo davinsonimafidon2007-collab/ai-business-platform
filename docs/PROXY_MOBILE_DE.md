@@ -1,7 +1,8 @@
-# Runbook: mobile.de con proxy residencial / cookies
+# Runbook: mobile.de — activación segura y ligera (sin evasión anti-bot)
 
-> **Estado esperado:** con proxy real (manual), el canary de mobile.de puede pasar a **PASS**.
-> Sin proxy, mobile.de devuelve 403 anti-bot y el canary queda en **WARN** (no falla el job).
+> **Defaults seguros:** `ENABLE_MOBILE_DE=false` + `ENABLE_MOBILE_DE_PLAYWRIGHT=false`
+> (` .env.example:137-140`). El provider **no** se registra ni abre browser si no lo activas explícitamente.
+> Mobile.de sin activar no gasta recursos ni intenta bypass. Con proxy/playwright desactivado el canary queda **WARN** (no falla el job); con proxy real o Playwright + HTML válido pasa a **PASS**. No se implementan mecanismos para eludir restricciones del proveedor: solo transporte configurable permitido.
 
 ---
 
@@ -21,19 +22,45 @@ los parsers** para activar el proxy; solo configuración.
 
 ---
 
-## 2. Configuración (`.env`)
+## 2. Configuración (`.env`) — activación explícita
+
+> **Comportamiento por defecto (seguro/ligero):**
+> ```env
+> ENABLE_MOBILE_DE=false
+> ENABLE_MOBILE_DE_PLAYWRIGHT=false
+> ```
+> Con ambos en `false` el provider no se registra (`ProviderRegistry` no añade `mobile_de`), no se lanza browser ni se hace HTTP a mobile.de. Es el default de `.env.example`.
+
+**Para activar explícitamente (requiere decisión consciente):**
 
 | Variable | Descripción | Ejemplo |
 |----------|-------------|---------|
-| `PROVIDER_HTTP_PROXY` | Proxy residencial (HTTP/SOCKS5) | `http://user:pass@host:port` |
+| `ENABLE_MOBILE_DE` | Activa provider mobile.de (httpx) | `true` solo si tienes `PROVIDER_HTTP_PROXY` |
+| `ENABLE_MOBILE_DE_PLAYWRIGHT` | Usa Playwright headless para mobile.de (JS, sin cuenta). Requiere `playwright install chromium` | `true` (fallback a httpx si no instalado) |
+| `PROVIDER_HTTP_PROXY` | Proxy residencial (HTTP/SOCKS5) — opcional, método permitido | `http://user:pass@host:port` |
 | `PROVIDER_HTTP_COOKIES` | Cookie header de navegador real (opcional) | `sid=abc123; consent=1` |
 | `PROVIDER_HTTP_MIN_DELAY_MS` | Delay mínimo entre peticiones (ms) | `800`–`1500` en prod |
+| `PLAYWRIGHT_TIMEOUT_MS` / `PLAYWRIGHT_HEADLESS` | Timeout/navegación Playwright | `30000` / `true` |
 
 ```env
-# .env
+# .env — ejemplos de activación explícita (no por defecto)
+
+# Opción A: httpx con proxy (tradicional)
+ENABLE_MOBILE_DE=true
 PROVIDER_HTTP_PROXY=http://user:pass@residential-proxy.example:8080
-PROVIDER_HTTP_COOKIES=
 PROVIDER_HTTP_MIN_DELAY_MS=1000
+
+# Opción B: Playwright headless (sin cuenta, con JS) — recomendado si quieres probar sin proxy
+ENABLE_MOBILE_DE=true
+ENABLE_MOBILE_DE_PLAYWRIGHT=true
+PLAYWRIGHT_TIMEOUT_MS=30000
+PLAYWRIGHT_HEADLESS=true
+# Opcional: combinar con proxy
+# PROVIDER_HTTP_PROXY=http://user:pass@residential-proxy.example:8080
+
+# Opción C: mantener desactivado (default seguro)
+ENABLE_MOBILE_DE=false
+ENABLE_MOBILE_DE_PLAYWRIGHT=false
 ```
 
 > **Seguridad:** nunca commits de `.env` con credenciales reales. El código
