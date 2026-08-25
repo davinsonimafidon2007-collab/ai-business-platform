@@ -16,7 +16,7 @@ anyio==4.14.2
     #   starlette
 argon2-cffi==25.1.0
     # via pwdlib
-argon2-cffi-bindings==26.1.0
+argon2-cffi-bindings==26.1.1
     # via argon2-cffi
 asyncpg==0.31.0
     # via ai-business-platform
@@ -93,7 +93,6 @@ googleapis-common-protos==1.75.1
     # via
     #   google-api-core
     #   google-cloud-firestore
-    #   googleapis-common-protos
     #   grpcio-status
 greenlet==3.5.5 ; platform_machine == 'AMD64' or platform_machine == 'WIN32' or platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'ppc64le' or platform_machine == 'win32' or platform_machine == 'x86_64'
     # via sqlalchemy
@@ -103,7 +102,6 @@ grpcio==1.83.0 ; platform_python_implementation != 'PyPy'
     #   google-cloud-firestore
     #   grpcio-status
 grpcio-status==1.83.0 ; platform_python_implementation != 'PyPy'
-    # via google-api-core
 h11==0.16.0
     # via
     #   httpcore
