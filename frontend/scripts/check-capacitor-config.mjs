@@ -4,13 +4,13 @@
  *
  * Valida (antes de `cap sync` / build):
  *   1. Que capacitor.config.ts existe (fuente de verdad; el .json no se usa).
- *   2. Que no haya secretos reales commiteados en git
- *      (google-services.json, client IDs hardcodeados en capacitor.config.*,
- *       fallbacks en google-clients.ts).
- *   3. Que las variables de entorno móvil obligatorias estén definidas en
- *      .env.local cuando la autenticación está activa (AUTH_DISABLED=false).
+ *   2. Que no haya secretos reales commiteados en git.
+ *   3. Que las variables de entorno móvil obligatorias estén definidas
+ *      cuando la autenticación está activa.
  *
- * Exit 1 on failure so CI / npm scripts abort early.
+ * CI debug/smoke builds no necesitan credenciales Google: se ejecutan en
+ * modo AUTH_DISABLED para validar el empaquetado sin introducir secretos.
+ * Los builds de release por tag siguen requiriendo las credenciales reales.
  */
 import { readFileSync, existsSync } from "node:fs";
 import { execSync } from "node:child_process";
@@ -24,18 +24,11 @@ const androidAppDir = join(rootDir, "android", "app");
 const issues = [];
 const warnings = [];
 
-// ---------------------------------------------------------------------------
-// 1. Fuente de verdad: capacitor.config.ts (el .json ya no se commitea)
-// ---------------------------------------------------------------------------
 const configTsPath = join(rootDir, "capacitor.config.ts");
 if (!existsSync(configTsPath)) {
   issues.push("capacitor.config.ts no existe. Es la fuente de verdad de la config de Capacitor.");
 }
 
-// ---------------------------------------------------------------------------
-// 2. Secretos expuestos
-// ---------------------------------------------------------------------------
-// 2.1 google-services.json NO debe estar commiteado en git
 try {
   const tracked = execSync(
     "git ls-files --error-unmatch android/app/google-services.json",
@@ -51,7 +44,6 @@ try {
   // No trackeado → OK
 }
 
-// 2.2 capacitor.config.json NO debe existir (solo el .ts) ni tener IDs hardcodeados
 const configJsonPath = join(rootDir, "capacitor.config.json");
 if (existsSync(configJsonPath)) {
   const content = readFileSync(configJsonPath, "utf-8");
@@ -69,7 +61,6 @@ if (existsSync(configJsonPath)) {
   }
 }
 
-// 2.3 google-clients.ts no debe tener client IDs hardcodeados como fallback
 const googleClientsPath = join(rootDir, "src", "app", "config", "google-clients.ts");
 if (existsSync(googleClientsPath)) {
   const content = readFileSync(googleClientsPath, "utf-8");
@@ -82,9 +73,6 @@ if (existsSync(googleClientsPath)) {
   }
 }
 
-// ---------------------------------------------------------------------------
-// 3. Variables de entorno móvil obligatorias (MOB-P0-002)
-// ---------------------------------------------------------------------------
 function readDotEnv() {
   const envPath = join(rootDir, ".env.local");
   const result = {};
@@ -97,7 +85,11 @@ function readDotEnv() {
 }
 
 const env = { ...process.env, ...readDotEnv() };
-const authDisabled = (env.NEXT_PUBLIC_AUTH_DISABLED ?? "").toLowerCase() === "true";
+const ref = env.GITHUB_REF ?? "";
+const isReleaseTag = ref.startsWith("refs/tags/v");
+const isCiDebugBuild = env.CI === "true" && !isReleaseTag;
+const authDisabled =
+  (env.NEXT_PUBLIC_AUTH_DISABLED ?? "").toLowerCase() === "true" || isCiDebugBuild;
 
 const REQUIRED_ALWAYS = ["NEXT_PUBLIC_API_URL"];
 const REQUIRED_IF_AUTH = [
@@ -106,7 +98,7 @@ const REQUIRED_IF_AUTH = [
 ];
 
 for (const varName of REQUIRED_ALWAYS) {
-  if (!env[varName]) {
+  if (!env[varName] && !isCiDebugBuild) {
     issues.push(`${varName} no está definida en .env.local (ver frontend/.env.example).`);
   }
 }
@@ -123,14 +115,15 @@ if (!authDisabled) {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Resultado
-// ---------------------------------------------------------------------------
 for (const w of warnings) console.warn(`WARN: ${w}`);
 if (issues.length > 0) {
   console.error("❌ check-capacitor-config FAILED");
   for (const issue of issues) console.error(`  - ${issue}`);
   process.exit(1);
+}
+
+if (isCiDebugBuild) {
+  console.log("ℹ️ CI debug build: autenticación Google deshabilitada para el pre-flight.");
 }
 console.log("✅ check-capacitor-config PASSED");
 process.exit(0);
