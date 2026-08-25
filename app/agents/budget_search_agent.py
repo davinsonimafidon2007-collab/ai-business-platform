@@ -1,36 +1,50 @@
 """Budget Search Agent — Busca vehículos según capital total disponible."""
+
 from __future__ import annotations
 
-from typing import Any
-
-from app.agents.search_agent import SearchAgent
+from app.agents.base import BaseAgent
+from app.agents.schemas import BudgetSearchAgentInput, BudgetSearchAgentOutput
 from app.config.import_costs import get_profile
-from app.models.search import SearchRequest
-from app.services.opportunity_finder import OpportunityFinder
-from app.services.profit_analyzer import ProfitAnalyzer
+from app.models.search import SearchRequest, SearchResult
 from app.services.search_engine import SearchEngineService
 
 
-class BudgetSearchAgent:
+class BudgetSearchAgent(BaseAgent[BudgetSearchAgentInput, BudgetSearchAgentOutput]):
     """Busca vehículos que encajen en un capital total del usuario.
 
     El usuario introduce su capital total (incluye compra + matriculación +
     viaje + costes de importación). La app calcula cuánto queda para el
-    vehículo en sí y busca oportunidades con beneficio postventa.
+    vehículo en sí y busca oportunidades reales con el SearchEngineService,
+    filtrando por beneficio neto postventa mínimo (``profit_margin_min``).
     """
+
+    name = "budget_search_agent"
+    role = "search"
+    description = (
+        "Convierte capital total disponible en un precio máximo de compra "
+        "(restando costes de importación) y ejecuta una búsqueda real acotada, "
+        "filtrando por beneficio neto mínimo."
+    )
+    input_type = BudgetSearchAgentInput
+    output_type = BudgetSearchAgentOutput
+    default_timeout_seconds = 120.0
 
     def __init__(
         self,
-        search_agent: SearchAgent | None = None,
-        profit_analyzer: ProfitAnalyzer | None = None,
-        opportunity_finder: OpportunityFinder | None = None,
         search_engine: SearchEngineService | None = None,
         profile_name: str = "SPAIN",
+        timeout_seconds: float | None = None,
     ) -> None:
-        self.search_agent = search_agent or SearchAgent("budget_search")
-        self.profit_analyzer = profit_analyzer or ProfitAnalyzer()
-        self.opportunity_finder = opportunity_finder or OpportunityFinder()
-        self.search_engine = search_engine
+        """Args:
+        search_engine: Motor de búsqueda (obligatorio en ``run`` si es None aquí).
+        profile_name: Perfil de costes de importación (SPAIN, GERMANY...).
+
+        Nota (AUDIT.AGENTS.1): se eliminaron los parámetros muertos
+        ``search_agent``, ``profit_analyzer`` y ``opportunity_finder``, que se
+        instanciaban y nunca se usaban.
+        """
+        super().__init__(timeout_seconds=timeout_seconds)
+        self._search_engine = search_engine
         self.profile_name = profile_name
 
     def calculate_max_purchase_price(self, total_budget: float) -> float:
@@ -56,66 +70,73 @@ class BudgetSearchAgent:
         )
         return round(available / variable_buffer, 2)
 
-    async def search_by_budget(
-        self,
-        total_budget: float,
-        query: str = "*",
-        max_results: int = 30,
-        profit_margin_min: float = 500.0,
-        engine: SearchEngineService | None = None,
-    ) -> dict[str, Any]:
-        """Busca vehículos cuyo precio encaje en el capital disponible.
-
-        Ejecuta una búsqueda real con el SearchEngineService usando el precio
-        máximo de compra derivado del capital total como ``budget_max``.
-
-        Args:
-            total_budget: Capital total del usuario (EUR).
-            query: Término de búsqueda.
-            max_results: Número máximo de resultados a devolver.
-            profit_margin_min: Beneficio mínimo postventa para considerar oportunidad (EUR).
-            engine: SearchEngineService para ejecutar la búsqueda. Si no se
-                pasa, se usa el inyectado en el constructor.
-
-        Returns:
-            Dict con el cálculo de presupuesto, la búsqueda real y sus resultados.
-
-        Raises:
-            ValueError: Si no hay motor de búsqueda disponible.
-        """
-        engine = engine or self.search_engine
-        if engine is None:
-            raise ValueError(
-                "No hay SearchEngineService disponible: la búsqueda por presupuesto "
-                "requiere un motor de búsqueda real (pasa 'engine' o inyéctalo)."
-            )
-
-        max_price = self.calculate_max_purchase_price(total_budget)
+    async def _execute(self, input_data: BudgetSearchAgentInput) -> BudgetSearchAgentOutput:
+        engine = self._require_engine()
+        max_price = self.calculate_max_purchase_price(input_data.total_budget)
 
         if max_price <= 0:
-            return {
-                "status": "budget_too_low",
-                "total_budget": total_budget,
-                "max_purchase_price": max_price,
-                "query": query,
-                "results": [],
-                "provider_issues": [],
-            }
+            return BudgetSearchAgentOutput(
+                status="budget_too_low",
+                total_budget=input_data.total_budget,
+                max_purchase_price=max_price,
+                query=input_data.query,
+            )
 
         request = SearchRequest(
-            query=query,
-            max_results=max_results,
+            query=input_data.query,
+            max_results=input_data.max_results,
             budget_max=max_price,
-            country="ES",
+            country=input_data.country,
         )
         engine_result = await engine.search(request)
+        results, filtered_out = self._filter_by_min_profit(
+            engine_result.results, input_data.profit_margin_min
+        )
 
-        return {
-            "status": "ok",
-            "total_budget": total_budget,
-            "max_purchase_price": max_price,
-            "query": query,
-            "results": engine_result.results,
-            "summary": engine_result.summary,
-            "provider_issues": engine_result.provider_issues,
-        }
+        return BudgetSearchAgentOutput(
+            status="ok",
+            total_budget=input_data.total_budget,
+            max_purchase_price=max_price,
+            query=input_data.query,
+            results=results,
+            summary=engine_result.summary,
+            provider_issues=engine_result.provider_issues,
+            filtered_out_count=filtered_out,
+        )
+
+    def _filter_by_min_profit(
+        self,
+        results: list[SearchResult],
+        profit_margin_min: float,
+    ) -> tuple[list[SearchResult], int]:
+        """Aplica el filtro de beneficio neto mínimo (parametro antes muerto).
+
+        Devuelve (resultados que pasan, cantidad descartada). Un resultado sin
+        análisis de rentabilidad no se descarta (no se puede evaluar).
+        """
+        if profit_margin_min <= 0:
+            return results, 0
+        kept: list[SearchResult] = []
+        discarded = 0
+        for result in results:
+            net_profit = getattr(result.profit_analysis, "net_profit", None)
+            if net_profit is None or float(net_profit) >= profit_margin_min:
+                kept.append(result)
+            else:
+                discarded += 1
+        if discarded:
+            self._logger.info(
+                "BudgetSearchAgent descartó %d resultado(s) con beneficio < %.2f EUR",
+                discarded,
+                profit_margin_min,
+            )
+        return kept, discarded
+
+    def _require_engine(self) -> SearchEngineService:
+        if self._search_engine is None:
+            raise ValueError(
+                "No hay SearchEngineService disponible: la búsqueda por presupuesto "
+                "requiere un motor de búsqueda real (inyéctalo o usa "
+                "get_budget_search_agent() del DI)."
+            )
+        return self._search_engine

@@ -162,6 +162,14 @@ jobs:
           NEXT_PUBLIC_APP_VERSION: ${{ env.APP_VERSION }}
           CAPACITOR_ANDROID_SCHEME: https
 
+      - name: Guard — NEXT_PUBLIC_API_URL definido en release
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          test -n "$NEXT_PUBLIC_API_URL" || {
+            echo "::error::Falta secret/variable API_URL: el AAB de release apuntaría a una URL vacía"; exit 1; }
+        env:
+          NEXT_PUBLIC_API_URL: ${{ secrets.API_URL }}
+
       - name: Sync Capacitor
         run: npx cap sync android
 

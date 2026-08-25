@@ -9,11 +9,14 @@ export const isAuthDisabled = (): boolean =>
   process.env.NEXT_PUBLIC_AUTH_DISABLED === "true";
 
 // Usuario local sintÃ©tico (coincide con app/core/local_user.py del backend).
+// role usa el VALUE del enum backend (Role.ADMIN.value === "admin", minÃºsculas),
+// el mismo formato que serializa UserRead en /auth/me. La UI compara contra
+// "admin" â€” nunca contra el nombre del enum ("ADMIN").
 export const LOCAL_USER: User = {
   id: "00000000-0000-4000-8000-000000000001",
   email: "local@example.com",
   full_name: "Local Admin",
   is_verified: true,
-  role: "ADMIN",
+  role: "admin",
   created_at: new Date(0).toISOString(),
 };

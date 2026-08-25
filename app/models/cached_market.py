@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
-from sqlalchemy import DateTime, Float, Integer, String, Text, Uuid
+from sqlalchemy import DateTime, Float, Index, Integer, String, Text, UniqueConstraint, Uuid, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base
@@ -21,6 +21,11 @@ class CachedMarketData(Base):
     """
 
     __tablename__ = "cached_market_data"
+    __table_args__ = (
+        UniqueConstraint("external_id", "provider", "market_hash", name="uq_cached_market_external_provider_hash"),
+        Index("ix_cached_market_market_hash", "market_hash"),
+        Index("ix_cached_market_expires_at", "expires_at"),
+    )
 
     id: Mapped[str] = mapped_column(
         Uuid(as_uuid=False), primary_key=True, default=lambda: str(uuid4())
@@ -66,6 +71,7 @@ class CachedMarketData(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(UTC),
+        server_default=func.now(),
         nullable=False,
     )
     """Momento en que se creó la entrada en caché."""

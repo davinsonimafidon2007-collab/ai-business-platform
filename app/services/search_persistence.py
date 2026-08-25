@@ -15,7 +15,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.deal import Deal, DealStatus
+from app.models.deal import ACTIVE_STATUSES, Deal, DealStatus
 from app.models.opportunity import Opportunity
 from app.models.vehicle import Vehicle
 from app.models.vehicle_evaluation import VehicleEvaluation
@@ -282,7 +282,7 @@ class SearchPersistenceService:
         # Evitar duplicados: solo si no hay Deal activo para esta oportunidad
         from sqlalchemy import select as _select
 
-        active_statuses = [DealStatus.NEW.value, DealStatus.CONTACTED.value, DealStatus.OFFER.value]
+        active_statuses = [s.value for s in ACTIVE_STATUSES]
         result = await self.session.execute(
             _select(Deal).where(
                 Deal.user_id == str(user_id),

@@ -6,8 +6,10 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from app.agents.base import AgentError, AgentExecutionError, AgentTimeoutError
 from app.agents.budget_search_agent import BudgetSearchAgent
-from app.api.v1.dependencies import get_search_engine_service
+from app.agents.schemas import BudgetSearchAgentInput
+from app.api.v1.dependencies import get_budget_search_agent, get_search_engine_service
 from app.api.v1.routes.search import _build_search_result_item
 from app.api.v1.schemas.search import ProviderIssueSchema, SearchResultItem
 from app.config.import_costs import PROFILE_ALIASES, get_profile
@@ -36,6 +38,9 @@ class BudgetSearchResponse(BaseModel):
     query: str = "*"
     results: list[SearchResultItem] = Field(default_factory=list)
     provider_issues: list[ProviderIssueSchema] = Field(default_factory=list)
+    filtered_out_count: int = Field(
+        0, ge=0, description="Resultados descartados por profit_margin_min"
+    )
 
 
 @router.post("/search", response_model=BudgetSearchResponse)
@@ -47,7 +52,8 @@ async def search_by_budget(
     """Busca vehículos que encajen en el capital disponible.
 
     Calcula el precio máximo de compra a partir del capital total y ejecuta
-    una búsqueda real con ese tope como ``budget_max``.
+    una búsqueda real con ese tope como ``budget_max``, filtrando los
+    resultados por beneficio neto mínimo.
     """
     profile_name = (request.profile or "SPAIN").upper()
     profile_name = PROFILE_ALIASES.get(profile_name, profile_name)
@@ -67,14 +73,23 @@ async def search_by_budget(
     variable_buffer = profile.tax_rate + profile.commission_rate + profile.repair_estimate_rate
 
     agent = BudgetSearchAgent(profile_name=profile_name, search_engine=search_engine)
-    result = await agent.search_by_budget(
-        total_budget=request.total_budget,
-        query=request.query,
-        max_results=request.max_results,
-        profit_margin_min=request.profit_margin_min,
-    )
+    try:
+        result = await agent.run(
+            BudgetSearchAgentInput(
+                total_budget=request.total_budget,
+                query=request.query,
+                max_results=request.max_results,
+                profit_margin_min=request.profit_margin_min,
+            )
+        )
+    except AgentTimeoutError as exc:
+        raise HTTPException(status_code=504, detail=str(exc)) from exc
+    except AgentExecutionError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except AgentError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
-    if result["status"] == "budget_too_low":
+    if result.status == "budget_too_low":
         raise HTTPException(
             status_code=400,
             detail=(
@@ -84,17 +99,18 @@ async def search_by_budget(
             ),
         )
 
-    items = [_build_search_result_item(r) for r in result["results"]]
+    items = [_build_search_result_item(r) for r in result.results]
     return BudgetSearchResponse(
-        total_budget=result["total_budget"],
-        max_purchase_price=result["max_purchase_price"],
+        total_budget=result.total_budget,
+        max_purchase_price=result.max_purchase_price,
         fixed_costs=round(fixed_costs, 2),
         variable_buffer_pct=round(variable_buffer * 100, 1),
-        status=result["status"],
-        query=result["query"],
+        status=result.status,
+        query=result.query,
         results=items,
         provider_issues=[
             ProviderIssueSchema(**payload)
-            for payload in build_provider_issue_payloads(result["provider_issues"])
+            for payload in build_provider_issue_payloads(result.provider_issues)
         ],
+        filtered_out_count=result.filtered_out_count,
     )

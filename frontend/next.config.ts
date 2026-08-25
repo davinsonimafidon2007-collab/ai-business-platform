@@ -30,9 +30,13 @@ const withPWA = require("next-pwa")({
 });
 
 // BUILD_TARGET=capacitor -> export estático (usado por Android/Capacitor).
+// BUILD_TARGET=docker   -> build de servidor con output standalone (imagen
+//                          mínima sin node_modules completo en runtime).
 // Sin BUILD_TARGET (o cualquier otro valor) -> build de servidor normal,
 // necesario para que `next start` funcione en Docker/producción web.
-const isCapacitorBuild = process.env.BUILD_TARGET === "capacitor";
+const buildTarget = process.env.BUILD_TARGET;
+const isCapacitorBuild = buildTarget === "capacitor";
+const isDockerBuild = buildTarget === "docker";
 
 // MOB-P3-006 — Optimización de bundle:
 //  - Separar vendor externo y firebase en chunks propios (cache-rotación).
@@ -52,6 +56,7 @@ const nextConfig: NextConfig = {
         skipTrailingSlashRedirect: true,
       }
     : {}),
+  ...(isDockerBuild ? { output: "standalone" as const } : {}),
   images: {
     unoptimized: true,
   },

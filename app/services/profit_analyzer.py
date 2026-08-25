@@ -26,10 +26,13 @@ from typing import Any, ClassVar, Final, Protocol
 # =============================================================================
 
 
-class Recommendation(str, Enum):
-    """Recomendación de compra basada en el análisis económico.
+class ProfitRecommendation(str, Enum):
+    """Recomendación económica basada en el análisis de rentabilidad.
 
-    Únicamente puede devolver uno de estos tres valores.
+    Valores simples para decisión económica pura:
+    - BUY: rentable, riesgo bajo → comprar
+    - CONSIDER: rentable pero con reservas → considerar
+    - REJECT: no rentable o riesgo alto → rechazar
     """
 
     BUY = "BUY"
@@ -43,6 +46,10 @@ class RiskLevel(str, Enum):
     LOW = "LOW"
     MEDIUM = "MEDIUM"
     HIGH = "HIGH"
+
+
+# Alias backwards-compat para tests que importan Recommendation
+Recommendation = ProfitRecommendation
 
 
 # =============================================================================
@@ -174,7 +181,7 @@ class ProfitAnalysis:
     roi_percentage: float
     profit_margin_percentage: float
     risk_level: RiskLevel
-    recommendation: Recommendation
+    recommendation: ProfitRecommendation
     cost_breakdown: CostBreakdown = field(repr=False)
     warnings: list[str] = field(default_factory=list, repr=False)
 
@@ -488,22 +495,22 @@ class ProfitAnalyzer:
         roi: float,
         net_profit: float,
         profile: Any,
-    ) -> Recommendation:
+    ) -> ProfitRecommendation:
         """Determina la recomendación final basada en el riesgo y la rentabilidad."""
         # Beneficio negativo → rechazar
         if net_profit <= 0:
-            return Recommendation.REJECT
+            return ProfitRecommendation.REJECT
 
         # Riesgo bajo y ROI positivo → comprar
         if risk_level == RiskLevel.LOW and roi > 0:
-            return Recommendation.BUY
+            return ProfitRecommendation.BUY
 
         # Riesgo alto → rechazar
         if risk_level == RiskLevel.HIGH:
-            return Recommendation.REJECT
+            return ProfitRecommendation.REJECT
 
         # Caso intermedio → considerar
-        return Recommendation.CONSIDER
+        return ProfitRecommendation.CONSIDER
 
     # ------------------------------------------------------------------
     # Avisos (warnings) — enriquecen el breakdown sin ser errores

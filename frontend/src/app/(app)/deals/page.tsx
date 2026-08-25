@@ -25,41 +25,48 @@ const pct = (n?: number | null) =>
 
 const STATUS_LABELS: Record<DealStatus, string> = {
   NEW: "Nuevo",
-  CONTACTED: "Contactado",
-  OFFER: "Oferta",
+  ANALYZING: "Analizando",
+  NEGOTIATING: "Negociando",
   WON: "Ganado",
   LOST: "Perdido",
-  DROPPED: "Descartado",
+  CANCELLED: "Cancelado",
 };
 
 const STATUS_COLORS: Record<DealStatus, string> = {
   NEW: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
-  CONTACTED:
+  ANALYZING:
     "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400",
-  OFFER: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400",
+  NEGOTIATING:
+    "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400",
   WON: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
   LOST: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
-  DROPPED:
+  CANCELLED:
     "bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400",
 };
 
-// Transiciones válidas (mismo mapa que el backend).
+// Transiciones válidas (mismo mapa que el backend v2: DealService._TRANSITIONS).
+// Estados que aceptan offer_price en la transición (fase de negociación/cierre).
+const OFFER_PRICE_TARGETS: ReadonlySet<DealStatus> = new Set([
+  "NEGOTIATING",
+  "WON",
+]);
+
 const TRANSITIONS: Record<DealStatus, DealStatus[]> = {
-  NEW: ["CONTACTED", "DROPPED"],
-  CONTACTED: ["OFFER", "LOST", "DROPPED"],
-  OFFER: ["WON", "LOST", "DROPPED"],
+  NEW: ["ANALYZING", "CANCELLED"],
+  ANALYZING: ["NEGOTIATING", "LOST", "CANCELLED"],
+  NEGOTIATING: ["WON", "LOST", "CANCELLED"],
   WON: [],
   LOST: [],
-  DROPPED: [],
+  CANCELLED: [],
 };
 
 const ALL_STATUSES: DealStatus[] = [
   "NEW",
-  "CONTACTED",
-  "OFFER",
+  "ANALYZING",
+  "NEGOTIATING",
   "WON",
   "LOST",
-  "DROPPED",
+  "CANCELLED",
 ];
 
 function StatusBadge({ status }: { status: DealStatus }) {
@@ -83,7 +90,7 @@ function DealRow({ deal }: { deal: Deal }) {
       updateDealStatus(deal.id, {
         status: target,
         offer_price:
-          target === "OFFER" && offerPriceInput
+          OFFER_PRICE_TARGETS.has(target) && offerPriceInput
             ? Number(offerPriceInput)
             : undefined,
       }),
@@ -101,7 +108,7 @@ function DealRow({ deal }: { deal: Deal }) {
   const nextActions = TRANSITIONS[deal.status] ?? [];
 
   const handleAction = (target: DealStatus) => {
-    if (target === "OFFER") {
+    if (OFFER_PRICE_TARGETS.has(target)) {
       setOfferPriceInput(offerPricePrefill(deal));
       setPendingTarget(target);
       setErrorMsg(null);
@@ -208,7 +215,7 @@ function DealRow({ deal }: { deal: Deal }) {
                 variant={
                   target === "WON"
                     ? "primary"
-                    : target === "LOST" || target === "DROPPED"
+                    : target === "LOST" || target === "CANCELLED"
                       ? "danger"
                       : "outline"
                 }
@@ -229,14 +236,14 @@ function DealRow({ deal }: { deal: Deal }) {
         )}
       </div>
 
-      {pendingTarget === "OFFER" && (
+      {pendingTarget != null && OFFER_PRICE_TARGETS.has(pendingTarget) && (
         <div className="mt-3 flex flex-wrap items-end gap-3 rounded-md bg-secondary-50 p-3 dark:bg-secondary-900/40">
           <div className="flex flex-col gap-1">
             <label
               htmlFor={`offer-price-${deal.id}`}
               className="text-xs font-medium text-secondary-600 dark:text-secondary-300"
             >
-              Precio de oferta (EUR)
+              Precio de oferta (EUR) — opcional
             </label>
             <input
               id={`offer-price-${deal.id}`}
@@ -259,10 +266,12 @@ className="block w-40 rounded-md border border-secondary-300 bg-white px-3 py-1.
           <Button
             variant="primary"
             size="sm"
-            disabled={transition.isPending || offerPriceInput === ""}
-            onClick={() => transition.mutate("OFFER")}
+            disabled={transition.isPending}
+            onClick={() => transition.mutate(pendingTarget)}
           >
-            {transition.isPending ? "Guardando..." : "Confirmar oferta"}
+            {transition.isPending
+              ? "Guardando..."
+              : `Confirmar → ${STATUS_LABELS[pendingTarget]}`}
           </Button>
           <Button
             variant="outline"

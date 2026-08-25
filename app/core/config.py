@@ -187,16 +187,9 @@ class Settings(BaseSettings):
     rate_limit_readonly: int = 10
     password_reset_token_expire_hours: int = 1
 
-    # Redis configuration
-    redis_url: str = ""
-    redis_password: str = ""
-
     # API Key configuration
     api_key_prefix: str = "abp_live"
     api_key_length: int = 32
-
-    # Audit configuration
-    audit_retention_days: int = 365
 
     # Provider HTTP client configuration
     provider_http_timeout: float = 30.0
@@ -212,6 +205,21 @@ class Settings(BaseSettings):
     provider_http_cookies: str = ""
     # Delay mínimo entre peticiones (ms). 0 = off. Prod: 800–1500
     provider_http_min_delay_ms: int = 0
+
+    # SEARCH.ORCH.1 — concurrencia y límites del SearchOrchestrator.
+    search_provider_timeout: float = 60.0
+    """Timeout (segundos) por provider en el orquestador. Cubre la descarga
+    completa del provider incluidos reintentos HTTP con backoff; evita que un
+    provider colgado bloquee la búsqueda entera. <= 0 = sin timeout."""
+    search_max_concurrent_analyses: int = 4
+    """Máximo de análisis de vehículos concurrentes (scoring/mercado/profit).
+    El estimador de mercado puede golpear providers externos, así que se acota
+    con semáforo para no multiplicar el tráfico saliente."""
+    search_cache_enabled: bool = False
+    """Caché Redis de respuestas POST /search (fail-soft). Desactivada por
+    defecto para no servir resultados congelados en uso personal."""
+    search_cache_ttl: int = 300
+    """TTL en segundos de la caché de respuestas de búsqueda."""
 
     # mobile.de (CRIT.001). Fuente secundaria opcional. Sin proxy residencial
     # (PROVIDER_HTTP_PROXY) la mayoría de IPs reciben 403 anti-bot. Por
@@ -389,9 +397,27 @@ class Settings(BaseSettings):
     max_log_body_size: int = 4096
     enable_access_log: bool = True
 
+    # Security hardening
+    security_headers_enabled: bool = True
+    """Si True, inyecta cabeceras de seguridad (X-Content-Type-Options, etc.)."""
+
+    trusted_hosts: str = ""
+    """Lista separada por comas de hosts confiables en producción. Vacío = deshabilitado."""
+
     @property
-    def database_url_for_environment(self) -> str:
-        return self.database_url
+    def trusted_hosts_list(self) -> list[str]:
+        """Convierte la cadena de trusted hosts en una lista."""
+        return [h.strip() for h in self.trusted_hosts.split(",") if h.strip()]
+
+    # Database pool tuning (parametrizable por env, antes hardcodeado en manager)
+    database_pool_size: int = 5
+    database_max_overflow: int = 10
+    database_pool_timeout: float = 30.0
+    database_pool_pre_ping: bool = True
+
+    # Redis tuning
+    redis_socket_timeout: float = 2.0
+    """Timeout de socket Redis (s)."""
 
     @property
     def cors_origins_list(self) -> list[str]:

@@ -15,13 +15,13 @@ class TrustedHostsMiddleware(BaseHTTPMiddleware):
 
     def __init__(self, app: ASGIApp) -> None:
         super().__init__(app)
-        self.enabled = settings.environment == "production" and bool(settings.trusted_hosts)
+        self.enabled = settings.environment == "production" and bool(settings.trusted_hosts.strip())
 
     async def dispatch(self, request, call_next):
         if not self.enabled:
             return await call_next(request)
         host = request.headers.get("host", "").split(":")[0]
-        trusted = [h.split(":")[0] for h in settings.trusted_hosts]
+        trusted = [h.split(":")[0] for h in settings.trusted_hosts_list]
         if host and host not in trusted:
             logger.warning("TrustedHosts: blocked host=%s", host)
             from starlette.responses import JSONResponse

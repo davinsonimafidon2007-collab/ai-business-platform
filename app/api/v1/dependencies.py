@@ -344,6 +344,66 @@ def get_search_engine_service(
 
 
 # =============================================================================
+# Agents (AUDIT.AGENTS.1) — capa fina de orquestación sobre los services
+# =============================================================================
+
+
+def get_search_agent(
+    search_engine: SearchEngineService = Depends(get_search_engine_service),
+) -> "SearchAgent":
+    """Obtiene el agent SEARCH cableado al motor de búsqueda real."""
+    from app.agents.search_agent import SearchAgent
+
+    return SearchAgent(search_engine=search_engine)
+
+
+def get_scoring_agent() -> "ScoringAgent":
+    """Obtiene el agent SCORE (VehicleScorer real)."""
+    from app.agents.scoring_agent import ScoringAgent
+
+    return ScoringAgent()
+
+
+def get_opportunity_agent() -> "OpportunityAgent":
+    """Obtiene el agent OPPORTUNITY (OpportunityFinder real)."""
+    from app.agents.opportunity_agent import OpportunityAgent
+
+    return OpportunityAgent()
+
+
+def get_negotiation_agent() -> "NegotiationAgent":
+    """Obtiene el agent NEGOTIATE (NegotiationEngine real)."""
+    from app.agents.negotiation_agent import NegotiationAgent
+
+    return NegotiationAgent()
+
+
+def get_alert_agent() -> "AlertAgent":
+    """Obtiene el agent ALERT (reglas umbral)."""
+    from app.agents.alert_agent import AlertAgent
+
+    return AlertAgent()
+
+
+def get_budget_search_agent(
+    search_engine: SearchEngineService = Depends(get_search_engine_service),
+) -> "BudgetSearchAgent":
+    """Obtiene el agent de búsqueda por presupuesto cableado al motor real."""
+    from app.agents.budget_search_agent import BudgetSearchAgent
+
+    return BudgetSearchAgent(search_engine=search_engine)
+
+
+def get_pipeline_orchestrator(
+    search_engine: SearchEngineService = Depends(get_search_engine_service),
+) -> "PipelineOrchestrator":
+    """Obtiene el orquestador del pipeline SEARCH → ALERT con agents reales."""
+    from app.orchestrator.pipeline import PipelineOrchestrator
+
+    return PipelineOrchestrator(search_engine=search_engine)
+
+
+# =============================================================================
 # Provider lookup for vehicle detail endpoint
 # =============================================================================
 

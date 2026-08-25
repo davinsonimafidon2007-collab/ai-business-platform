@@ -1,13 +1,21 @@
 """Search endpoints.
 
 POST /search — Executes a full vehicle search with analysis pipeline.
+
+SEARCH.ORCH.1 — añade: caché Redis fail-soft de respuestas, persistencia
+fail-soft del historial de búsquedas y metadatos de respuesta (paginación,
+providers OK, tiempo de ejecución).
 """
 
 from __future__ import annotations
 
+import json
+import logging
+import time
 from typing import Any
 
 from fastapi import APIRouter, Depends, status
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.dependencies import get_search_engine_service
 from app.api.v1.schemas.common import (
@@ -26,20 +34,31 @@ from app.api.v1.schemas.search import (
     ProviderIssueSchema,
     SearchAPIRequest,
     SearchAPIResponse,
+    SearchPaginationSchema,
     SearchResultItem,
     SearchSummarySchema,
 )
+from app.database import get_db_session
 from app.dependencies.auth import require_search
+from app.models.search_history import SearchHistory
 from app.models.user import User
+from app.repositories.search_history_repository import SearchHistoryRepository
 from app.services.cost_breakdown_labels import build_cost_lines
 from app.services.metrics_service import record_opportunity_generated, record_search_request
 from app.services.profit_coherence import build_coherence_warnings
 from app.services.provider_issue_labels import build_provider_issue_payloads
 from app.services.recommendation_labels import recommendation_label_es, risk_label_es
 from app.services.search_engine import SearchEngineService
-from app.models.user import User
+from app.services.search_response_cache import (
+    build_search_cache_key,
+    get_cached_search_response,
+    set_cached_search_response,
+)
 
 router = APIRouter(tags=["Search"])
+
+logger_ops = logging.getLogger("app.api.search_ops")
+logger_hist = logging.getLogger("app.api.search_history")
 
 
 def _provider_sources_from_me(me: Any) -> list[str]:
@@ -73,6 +92,11 @@ def _build_search_result_item(result: Any) -> SearchResultItem:
             images = vehicle.images
         elif isinstance(vehicle.images, str):
             images = [img.strip() for img in vehicle.images.split(",") if img.strip()]
+
+    # Trazabilidad cross-source (SEARCH.ORCH.1): solo si el dedup etiquetó.
+    available_in_sources: list[str] | None = getattr(vehicle, "available_in_sources", None)
+    if available_in_sources is not None and not isinstance(available_in_sources, list):
+        available_in_sources = None
 
     # --- VehicleScore ---
     vs = result.vehicle_score
@@ -269,6 +293,7 @@ def _build_search_result_item(result: Any) -> SearchResultItem:
         source=getattr(vehicle, "source", None),
         external_id=getattr(vehicle, "external_id", None),
         url=getattr(vehicle, "url", None),
+        available_in_sources=available_in_sources,
         brand=getattr(vehicle, "brand", None),
         model=getattr(vehicle, "model", None),
         year=getattr(vehicle, "year", None),
@@ -317,12 +342,19 @@ async def search_vehicles(
     request: SearchAPIRequest,
     search_engine: SearchEngineService = Depends(get_search_engine_service),
     current_user: User = Depends(require_search),
+    db: AsyncSession = Depends(get_db_session),
 ) -> SearchAPIResponse:
     """Ejecuta una búsqueda completa de vehículos.
 
     Convierte la petición API a SearchRequest interno y serializa
     los resultados del dominio a schemas estables de la API.
+
+    SEARCH.ORCH.1: si la caché está habilitada y hay una respuesta idéntica
+    reciente, se sirve directamente. El historial (SearchHistory) se persiste
+    de forma fail-soft: un fallo de BD nunca rompe la búsqueda.
     """
+    started = time.perf_counter()
+
     # Convertir API request → domain SearchRequest
     domain_request = request.to_search_request()
 
@@ -330,7 +362,14 @@ async def search_vehicles(
     for provider in domain_request.providers:
         record_search_request(provider)
 
-    # Ejecutar búsqueda (pipeline completo)
+    # --- Caché (fail-soft, desactivada por defecto) ---
+    cache_key = build_search_cache_key(request)
+    cached_payload = await get_cached_search_response(cache_key)
+    if cached_payload is not None:
+        logger_ops.debug("search cache HIT para %s", cache_key)
+        return SearchAPIResponse(**cached_payload, cache_hit=True)
+
+    # Ejecutar búsqueda (pipeline completo, providers en paralelo)
     engine_result = await search_engine.search(domain_request)
 
     # Convertir resultados internos → API responses
@@ -342,11 +381,11 @@ async def search_vehicles(
         if item.opportunity is not None:
             record_opportunity_generated()
 
+    elapsed_ms = round((time.perf_counter() - started) * 1000, 2)
+
     # TASK-008: Alerta operativa si todas las fuentes solicitadas fallaron
     provider_issues_list = getattr(engine_result, "provider_issues", []) or []
     if provider_issues_list:
-        import logging
-        logger_ops = logging.getLogger("app.api.search_ops")
         requested_providers = set(domain_request.providers)
         failed_providers = {issue.provider for issue in provider_issues_list if getattr(issue, "stage", "") == "search"}
         if requested_providers and requested_providers.issubset(failed_providers):
@@ -355,7 +394,18 @@ async def search_vehicles(
                 requested_providers,
             )
 
-    return SearchAPIResponse(
+    # Paginación + trazabilidad de providers (SEARCH.ORCH.1)
+    total_matches = int(getattr(engine_result, "total_matches", 0) or 0)
+    page_size = domain_request.max_results if domain_request.max_results > 0 else total_matches
+    total_pages = -(-total_matches // page_size) if page_size > 0 else 0
+    failed_provider_names = {
+        issue.provider for issue in provider_issues_list
+    }
+    providers_succeeded = [
+        p for p in domain_request.providers if p not in failed_provider_names
+    ]
+
+    response = SearchAPIResponse(
         summary=SearchSummarySchema(
             total_results=summary.total_results,
             excellent=summary.excellent,
@@ -372,5 +422,35 @@ async def search_vehicles(
                 getattr(engine_result, "provider_issues", [])
             )
         ],
+        pagination=SearchPaginationSchema(
+            page=request.page,
+            page_size=page_size,
+            total_matches=total_matches,
+            total_pages=max(0, total_pages),
+        ),
+        providers_succeeded=providers_succeeded,
+        execution_time_ms=elapsed_ms,
+        cache_hit=False,
     )
+
+    # Cachear solo respuestas sin fallos parciales: congelar errores haría
+    # que un provider caído pareciera caído durante todo el TTL.
+    if not response.provider_issues:
+        await set_cached_search_response(cache_key, response.model_dump_json())
+
+    # Historial fail-soft (SEARCH.HIST.1): auditoría de búsquedas ejecutadas.
+    try:
+        await SearchHistoryRepository(db).save(
+            SearchHistory(
+                user_id=getattr(current_user, "id", None),
+                query=domain_request.query[:500],
+                providers_used=json.dumps(domain_request.providers),
+                results_count=len(items),
+                execution_time=round(elapsed_ms / 1000, 3),
+            )
+        )
+    except Exception:  # noqa: BLE001 — el historial jamás rompe la búsqueda
+        logger_hist.warning("No se pudo persistir SearchHistory", exc_info=True)
+
+    return response
 

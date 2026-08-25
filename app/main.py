@@ -137,14 +137,12 @@ app.add_middleware(RequestIdMiddleware)
 if settings.environment != "development" or settings.https_redirect:
     app.add_middleware(HTTPSRedirectMiddleware)
 
-try:
+if settings.security_headers_enabled:
     from app.middleware.security_middleware import SecurityHeadersMiddleware
-    if settings.security_headers_enabled:
-        app.add_middleware(SecurityHeadersMiddleware)
-except Exception:
-    pass
 
-if settings.environment == "production" and settings.trusted_hosts:
+    app.add_middleware(SecurityHeadersMiddleware)
+
+if settings.environment == "production" and settings.trusted_hosts.strip():
     app.add_middleware(TrustedHostsMiddleware)
 
 # Configuración CORS (debe ser el último middleware añadido, primero en ejecutarse)

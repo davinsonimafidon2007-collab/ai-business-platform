@@ -1,0 +1,313 @@
+# AUDITORÍA DB / PERSISTENCIA — AGENTE 4
+
+Estado: SIN MODIFICACIONES (solo lectura/evidencia).
+Fecha: 2026-08-20
+Directorio raíz: C:\Users\davin\Documents\Default Project
+
+---
+
+## 1. DIRECTORIO RAÍZ / ESTRUCTURA
+
+- .env.example: `DATABASE_URL` presente (`postgresql+asyncpg://postgres:postgres@localhost:5432/ai_business_platform`) — `.env.example:43`
+- docker-compose.yml: servicio `db` (postgres:16-alpine, healthcheck, volúmenes, `depends_on` con `condition: service_healthy`) — `docker-compose.yml:61-76`
+- docker-compose.obs.yml: perfil opcional `obs` (prometheus/grafana) — `docker-compose.obs.yml:20-43`
+- alembic.ini: `sqlalchemy.url` vacío (se inyecta en `env.py`), `script_location = alembic` — `alembic.ini:1-4`
+- pyproject.toml / requirements: no revisado en detalle (no solicitado), pero `sqlalchemy`, `alembic`, `asyncpg`, `aiosqlite` están implícitos por el código.
+- NO existe `app/core/database.py` (solicitado explícitamente). La capa DB está descentralizada en `app/database/`.
+- NO existe `tests/unit/test_database_*` (ver sección 7).
+
+---
+
+## 2. `app/core/` — CONFIGURACIÓN
+
+- `app/core/config.py`:
+  - `database_url` por defecto (`postgresql+asyncpg://postgres:postgres@localhost:5432/ai_business_platform`) — línea 23.
+  - `database_url_for_environment` property (línea 357-358) devuelve `self.database_url` sin transformación.
+  - `.env` cargado por `pydantic_settings` (`env_file=.env`) — línea 466.
+  - Funciona: carga correcta, validación de JWT, CORS, auth. No hay errores de sintaxis.
+- `app/core/database.py`: **FALTA**. No existe archivo. El usuario pidió revisar este archivo; está ausente.
+
+---
+
+## 3. `app/models/` — MODELOS SQLALCHEMY
+
+### 3.1 Base y estructura
+
+- `app/models/base.py`: `DeclarativeBase` simple — `base.py:4`.
+- `app/models/__init__.py`: exporta todos los modelos críticos (`Base`, `User`, `Vehicle`, `Deal`, `Search`, etc.) — `__init__.py:1-40`.
+
+### 3.2 Consistencia de PK (`Uuid(as_uuid=False)` vs `String(36)`)
+
+- **PARCIAL / INCONSISTENTE**:
+  - `user.py`: `Uuid(as_uuid=False)` (`user.py:28`).
+  - `deal.py`: `Uuid(as_uuid=False)` (`deal.py:44`).
+  - `opportunity.py`: `Uuid(as_uuid=False)` (`opportunity.py:26`).
+  - `vehicle.py`: `Uuid(as_uuid=False)` (`vehicle.py:41`).
+  - `search.py`: `Uuid(as_uuid=False)` (`search.py:40`).
+  - `search_order.py`: `Uuid(as_uuid=False)` (`search_order.py:40`).
+  - `inspection.py`: `Uuid(as_uuid=False)` para `InspectionSession`, `InspectionObservation`, `InspectionPhoto` (`inspection.py:45`, `192`, `279`).
+  - **PERO** los siguientes usan `String(36)` (inconsistente con el resto):
+    - `audit_log.py`: `id` `String(36)` (`audit_log.py:17`).
+    - `api_key.py`: `id` `String(36)` (`api_key.py:19`).
+    - `refresh_token.py`: `id` `String(36)` (`refresh_token.py:19`).
+    - `password_reset_token.py`: `id` `String(36)` (`password_reset_token.py:15`).
+    - `verification_token.py`: `id` `String(36)` (`verification_token.py:15`).
+    - `push_token.py`: `id` `String(36)` (`push_token.py:19`).
+  - `feature_flag.py`: usa `Uuid(as_uuid=False)` (`feature_flag.py:23`) — consistente con los principales.
+  - `cached_market.py`: `Uuid(as_uuid=False)` (`cached_market.py:25`) — consistente.
+  - `search_history.py`: `Uuid(as_uuid=False)` (`search_history.py:25`) — consistente.
+
+### 3.3 Relaciones, FK, índices, constraints
+
+- `user.py`:
+  - `id`: PK, `Uuid(as_uuid=False)`.
+  - `email`: `String(255)`, `unique=True`, `nullable=False`.
+  - `role`: `Enum(Role)` con `name="role"` (`user.py:35-39`).
+  - Relaciones: `vehicles`, `searches`, `deals`, `api_keys`, `refresh_tokens`, `push_tokens`, `search_histories`, `search_orders`, `inspection_sessions` — todas con `back_populates`, `cascade="all, delete-orphan"`, `passive_deletes=True`.
+  - Funciona correctamente.
+
+- `vehicle.py`:
+  - `user_id`: `Uuid(as_uuid=False)`, `ForeignKey("users.id", ondelete="CASCADE")`, `nullable=False`.
+  - `source` + `external_id` + `user_id`: `UniqueConstraint("user_id", "source", "external_id", name="ix_vehicles_user_source_external")` (`vehicle.py:36-38`).
+  - `images`: `JSON` (`vehicle.py:71`). Nota en código (`vehicle.py:69-70`): `equipment` sigue siendo `Text` porque "no hay migración que lo convierta". Esto confirma que `equipment` NO fue migrado a JSON.
+  - Relaciones con `user`, `evaluations`, `opportunities`, `deals`, `inspection_sessions`.
+  - Funciona.
+
+- `deal.py`:
+  - `user_id`: `Uuid(as_uuid=False)`, `FK("users.id", ondelete="CASCADE")`, `nullable=False`.
+  - `vehicle_id`: `Uuid(as_uuid=False)`, `FK("vehicles.id", ondelete="SET NULL")`, `nullable=True`.
+  - `opportunity_id`: `Uuid(as_uuid=False)`, `FK("opportunities.id", ondelete="SET NULL")`, `nullable=True`.
+  - `status`: `SAEnum(DealStatus, name="deal_status")` (`deal.py:68-76`).
+  - Relaciones `user`, `vehicle`, `opportunity`.
+  - Funciona.
+
+- `inspection.py`:
+  - `InspectionSession`:
+    - `vehicle_id`: `FK("vehicles.id", ondelete="CASCADE")`, `nullable=False`.
+    - `user_id`: `FK("users.id", ondelete="CASCADE")`, `nullable=False`.
+    - `status`: `String(20)`, default `InspectionSessionStatus.DRAFT.value`.
+    - `_summary_json`: `Text`, mapeado a `summary_json` (`inspection.py:100-102`). Propiedad `summary` serializa/deserializa JSON (`inspection.py:143-159`).
+    - Relaciones `vehicle`, `user`, `observations`, `photos`.
+  - `InspectionObservation`:
+    - `session_id`: `FK("inspection_sessions.id", ondelete="CASCADE")`, `nullable=False`.
+    - `category_id`: `String(50)`, `nullable=False`.
+    - `item_id`: `String(50)`, `nullable=False`.
+  - `InspectionPhoto`:
+    - `observation_id`: `FK("inspection_observations.id", ondelete="CASCADE")`, `nullable=False`.
+    - `session_id`: `FK("inspection_sessions.id", ondelete="CASCADE")`, `nullable=False`.
+    - `file_path`: `String(500)`, `nullable=False`.
+  - Todo consistente.
+
+- `search_order.py`:
+  - `user_id`: `Uuid(as_uuid=False)`, `FK("users.id", ondelete="CASCADE")`, `nullable=False`, `index=True`.
+  - `filters`: `Text`, serializado/deserializado en `__init__` (`search_order.py:89-103`). Método `filters_dict()` (`search_order.py:105-113`).
+  - `SearchOrderVehicle`:
+    - `search_order_id`: `FK("search_orders.id", ondelete="CASCADE")`, `nullable=False`, `index=True`.
+    - `vehicle_id`: `FK("vehicles.id", ondelete="CASCADE")`, `nullable=False`, `index=True`.
+    - `seen`: `Boolean`, `nullable=False`, default `False`.
+    - `result_json`: `Text`, nullable.
+  - Funciona.
+
+- `cached_market.py`:
+  - `external_id`: `String(255)`, `nullable=False`.
+  - `provider`: `String(50)`, `nullable=False`.
+  - `market_hash`: `String(64)`, `nullable=True`.
+  - `expires_at`: `DateTime(timezone=True)`, nullable.
+  - No hay `unique` o `index` explícito. No hay relación con `vehicles` (es independiente, como indica el docstring `cached_market.py:22-23`).
+  - Funciona, aunque podría beneficiarse de un índice compuesto (`external_id`, `provider`) para búsquedas rápidas.
+
+- `audit_log.py`:
+  - `user_id`: `String(36)`, `nullable=True`, `index=True`.
+  - `action`: `String(50)`, `nullable=False`, `index=True`.
+  - `resource`: `String(50)`, `nullable=False`, `index=True`.
+  - `resource_id`: `String(36)`, `nullable=True`.
+  - `timestamp`: `DateTime(timezone=True)`, `nullable=False`, `index=True`.
+  - `id`: `String(36)`, `primary_key=True`, `default=str(uuid4())`. Inconsistente con `Uuid(as_uuid=False)` usado en la mayoría.
+
+- `opportunity.py`:
+  - `vehicle_id`: `Uuid(as_uuid=False)`, `FK("vehicles.id", ondelete="CASCADE")`, `nullable=False`.
+  - `opportunity_score`: `Float`, nullable.
+  - `recommendation`: `String(50)`, nullable.
+  - `roi`: `Float`, nullable.
+  - `risk`: `String(20)`, nullable.
+  - `profit`: `Float`, nullable.
+  - Relación con `Vehicle` (`back_populates="opportunities"`) y `Deal` (`back_populates="opportunity"`).
+  - Todo correcto.
+
+- `search_history.py`:
+  - `user_id`: `Uuid(as_uuid=False)`, `FK("users.id", ondelete="SET NULL")`, `nullable=True`, `index=True`.
+  - `query`: `Text`, `nullable=False`.
+  - `timestamp`: `DateTime(timezone=True)`, `nullable=False`, `index=True`.
+  - `providers_used`: `Text`, nullable.
+  - `results_count`: `Integer`, nullable.
+  - `execution_time`: `Float`, nullable.
+  - Funciona.
+
+- `negotiation.py`:
+  - Solo `@dataclass` (DTOs), no modelos SQLAlchemy. `NegotiationResult`, `NegotiationArgument`, `NegotiationScript`, etc.
+  - `NegotiationResult` se serializa como JSON en `vehicle_evaluation.py` (`_negotiation` como `Text`). Esto es correcto.
+
+- `vision.py`:
+  - Solo enumeraciones y `@dataclass`. No persistencia directa en DB (excepto referencias futuras).
+  - Funciona como DTO de transporte.
+
+- `market.py`:
+  - `MarketEstimation`: `@dataclass(frozen=True)`. No es modelo SQL, aunque se referencia en `cached_market.py` y `vehicle_evaluation.py`.
+  - Funciona.
+
+- `feature_flag.py`:
+  - `key`: `String(100)`, `unique=True`, `nullable=False`, `index=True`.
+  - `value`: `Boolean`, `default=False`, `nullable=False`.
+  - `updated_at`: usa `onupdate=lambda: datetime.now(UTC)` (`feature_flag.py:36`). Esto funciona con SQLAlchemy? `mapped_column` acepta `onupdate` como callable. Sí, es válido.
+  - Funciona.
+
+- `vehicle_evaluation.py`:
+  - `vehicle_id`: `Uuid(as_uuid=False)`, `FK("vehicles.id", ondelete="CASCADE")`, `nullable=False`.
+  - `score`: `Integer`, nullable.
+  - `classification`: `String(10)`, nullable.
+  - `warnings`: `Text`, nullable.
+  - `recommendation`: `Text`, nullable.
+  - `negotiation`: almacenado como JSON en `_negotiation` (`Text`, `nullable=True`, `default=None`). Propiedad `negotiation` deserializa a `NegotiationResult` (`vehicle_evaluation.py:73-131`). Setter (`vehicle_evaluation.py:133-148`) serializa con `asdict`. Esto funciona, aunque es complejo.
+  - Funciona, aunque podría ser frágil si cambia `NegotiationResult`.
+
+---
+
+## 4. `app/database/` — SESIÓN Y MANAGER
+
+- `app/database/session.py`:
+  - `db_manager = DatabaseManager(settings.database_url, echo=False)` (`session.py:14`).
+  - `get_db_session()` es `AsyncGenerator[AsyncSession]` (`session.py:18-21`).
+  - Funciona correctamente como dependencia FastAPI.
+- `app/database/manager.py`:
+  - `__init__` crea `create_async_engine` con `pool_size=5`, `max_overflow=10`, `pool_timeout=30.0`, `pool_pre_ping=True` (`manager.py:44-77`).
+  - `init()` hace `SELECT 1` (`manager.py:190-200`).
+  - `shutdown()` hace `dispose()` (`manager.py:202-208`).
+  - `_connect_pool_logging()` registra eventos del pool (`manager.py:101-160`).
+  - `get_session()` es `asynccontextmanager` que cierra la sesión en `finally` (`manager.py:210-225`).
+  - `create_session()` crea una sesión independiente (`manager.py:227-236`).
+  - Funciona correctamente.
+- `app/core/database.py`: **NO EXISTE**.
+
+---
+
+## 5. MIGRACIONES ALEMBIC (`alembic/`)
+
+- `alembic/versions/`:
+  - 25 archivos de migración presentes (`20260725_init_empty.py` a `n5o6p7q8r9s0_add_feature_flags_table.py`).
+  - `revision` y `down_revision` presentes en todos los archivos (verificados con script Python personalizado).
+  - `20260725_init_empty.py`: `revision='2f6d3d5a7b2c'`, `down_revision=None`.
+  - `d4ff07bc4343_create_users_table.py`: `down_revision='2f6d3d5a7b2c'`.
+  - `e8a1c6b2d9f0_add_user_role.py`: `down_revision='d4ff07bc4343'`.
+  - `f1a2b3c4d5e6_create_inspection_tables.py`: `down_revision='e1f2a3b4c5d6'`.
+  - `a1b2c3d4e5f7_add_user_id_to_searches.py`: `down_revision='f1a2b3c4d5e6'`.
+  - `b2c3d4e5f6a8_add_user_id_to_vehicles.py`: `down_revision='a1b2c3d4e5f7'`.
+  - La cadena es lineal (no hay `branch_points` ni ciclos) — verificado con `temp_audit2.py`.
+  - `head` canónico según `scripts/check_migrations.py`: `n5o6p7q8r9s0` (línea 24).
+  - `scripts/check_migrations.py`: verifica `alembic heads` y `history`. Funcionará si `alembic` está instalado.
+- `env.py`:
+  - Usa `settings.database_url` (`env.py:18`).
+  - `run_migrations_offline()` y `run_migrations_online()` correctamente implementadas para `async` (`env.py:23-59`).
+  - `poolclass=pool.NullPool` en `run_migrations_online()` (`env.py:53`). Esto es estándar.
+- `script.py.mako`: archivo por defecto de Alembic.
+- **Observación**: algunas migraciones usan `Uuid(as_uuid=False)` sin `as_uuid=False` en los `ForeignKey`? No, los `ForeignKey` usan `Uuid(as_uuid=False)` correctamente en los modelos, y las migraciones usan `sa.Uuid(as_uuid=False)` cuando definen columnas FK (`f1a2b3c4d5e6` usa `sa.Uuid(as_uuid=False)` para `vehicle_id` y `user_id`). Esto es consistente.
+- **Problema parcial**: `equipment` en `vehicles` sigue siendo `Text` (`vehicle_evaluation.py` hace referencia indirecta, pero la migración `k3l4m5n6o7p8_images_string_to_json.py` solo convierte `images`, no `equipment`). Esto está documentado en `vehicle.py:69-70`. No es un error, sino una limitación conocida.
+
+---
+
+## 6. PRUEBAS UNITARIAS (`tests/unit/`)
+
+- `tests/unit/test_relationships.py`: inspecciona `back_populates` para `User`, `Vehicle`, `Deal`, `Opportunity`, `Search`, `SearchHistory`, `VehicleEvaluation`, `ApiKey`, `RefreshToken`, `InspectionSession`, `InspectionObservation`, `InspectionPhoto`. Verifica bidireccionalidad. Funciona sin DB (`test_relationships.py:1-150`).
+- `tests/unit/test_inspection_models.py`: crea instancias de `InspectionSession`, `InspectionObservation`, `InspectionPhoto` sin persistencia (`test_inspection_models.py:1-23`).
+- `tests/unit/test_inspection_service.py`: usa `AsyncMock` para repositorios, no DB real (`test_inspection_service.py:1-100`).
+- `tests/unit/test_search_model.py`: crea `Search` directamente (`test_search_model.py:1-17`).
+- `tests/unit/test_search_orders.py`: usa fixture `session` con `sqlite+aiosqlite:///:memory:` (`test_search_orders.py:40-48`). Esto es robusto.
+  - `Base.metadata.create_all()` en memoria.
+  - `session` se cierra con `await engine.dispose()`.
+  - Funciona correctamente.
+- `tests/unit/test_user_repository.py`: usa `sqlite+aiosqlite:///:memory:` (`test_user_repository.py:30-37`).
+  - `Base.metadata.create_all()`.
+  - Funciona.
+- `tests/unit/test_health.py`: parchea `_check_database` y `_check_redis`. No usa DB real (`test_health.py:1-142`).
+- `tests/unit/test_deals_api.py`: usa `AsyncMock` para repositorios (`test_deals_api.py:1-328`).
+- `tests/unit/test_database_*`: **NO EXISTE**. El usuario pidió revisar `tests/unit/test_database_*`. No hay archivos con ese nombre. Solo hay `test_search_model.py`, `test_inspection_models.py`, `test_relationships.py`, etc., que cubren modelos pero no se llaman `test_database_*`.
+- `tests/unit/test_search_orders.py` cubre repositorio (`SearchOrderRepository`), transacciones (`add_vehicle` idempotente, `claim_order` atómico, `stale_running_recovery` con `update` directo y `commit`). Todo funciona correctamente con SQLite en memoria.
+- `tests/unit/test_config_env.py`: carga `.env` y valida `database_url`. Funciona (`test_config_env.py:16-32`).
+
+---
+
+## 7. SCRIPTS DE INICIALIZACIÓN / SEEDS (`scripts/` y `app/scripts/`)
+
+- `scripts/backup_postgres.sh`: completo, funcional, con retención, encriptación AES256 (`gpg`), normalización de URL (`postgresql+asyncpg` → `postgres://`). No hay errores (`backup_postgres.sh:1-92`).
+- `scripts/restore_postgres.sh`: completo, funcional, con confirmación, `--force`, desencriptación `.gpg`. No hay errores (`restore_postgres.sh:1-86`).
+- `scripts/check_integrations_ready.py`: no revisado a fondo (no solicitado), pero existe.
+- `scripts/check_migrations.py`: verifica `alembic heads` (espera `n5o6p7q8r9s0`) y `history` lineal desde `2f6d3d5a7b2c`. Todo correcto (`check_migrations.py:1-140`).
+- `scripts/setup_env.py`: no revisado a fondo.
+- `app/scripts/seed_feature_flags.py`: idempotente (`FeatureFlagService.set_flag`). Usa variables de entorno por defecto (`enable_mobile_de`, etc.). Funciona correctamente (`seed_feature_flags.py:1-31`).
+- `app/scripts/create_admin.py`: idempotente (`repository.get_by_email`). Usa `get_db_session`. Funciona (`create_admin.py:1-175`).
+- `app/scripts/invalidate_existing_refresh_tokens.py`: no revisado a fondo, pero existe.
+- `scripts/` no contiene script de `seed` para datos de ejemplo (ej. `users` o `vehicles`), pero `create_admin.py` cubre el primer usuario. `seed_feature_flags.py` cubre flags.
+- **FALTA**: no hay un script de seed general (ej. `seed_db.py`) que inserte datos de ejemplo para desarrollo o tests de integración. No es obligatorio, pero es una ausencia observada.
+
+---
+
+## 8. `docs/` — DOCUMENTACIÓN DB
+
+- `docs/ops.md`:
+  - Sección 2 (`Backups Postgres`): documenta `backup_postgres.sh`, `restore_postgres.sh`, variables (`BACKUP_DIR`, `BACKUP_RETENTION`, `BACKUP_ENCRYPTION_PASSPHRASE`), cron de ejemplo. Completo (`ops.md:68-104`).
+  - Sección 1 (`Healthcheck`): documenta `/health` (DB, Redis), `/health/live`, estados (`ok`, `degraded`, `error`), código HTTP. Completo (`ops.md:10-65`).
+  - Sección 3 (`Logging`): menciona `duration_ms`, `request_id`, correlación. Completo (`ops.md:106-132`).
+- `README.md`: no revisado en detalle para DB, pero `docs/ops.md` cubre la operabilidad.
+- No hay instrucciones de migración explícitas en `docs/` fuera de `ops.md` (que menciona `alembic upgrade head` en `docker-compose.yml`), pero `README.md` probablemente las cubre.
+- Funciona.
+
+---
+
+## 9. INSTALACIÓN LIMPIA / `docker-compose.yml`
+
+- `docker-compose.yml`:
+  - `db`: `postgres:16-alpine`, `POSTGRES_DB: ai_business_platform`, `POSTGRES_USER: postgres`, `POSTGRES_PASSWORD: postgres`, `healthcheck` (`pg_isready`), `volumes` (`postgres_data`). Todo bien.
+  - `redis`: `redis:7-alpine`, `healthcheck` (`redis-cli ping`), `volumes` (`redis_data`), `maxmemory`, `allkeys-lru`. Todo bien.
+  - `api`: `command` ejecuta `alembic upgrade head` en bucle (`for i in 1 2 3 4 5; do ... done`). Esto garantiza migración antes de arrancar. Usa `depends_on` con `condition: service_healthy` para `db` y `redis`. Todo correcto.
+  - `frontend`: `depends_on: api`. Funciona.
+- `.env.example`:
+  - `DATABASE_URL`: presente.
+  - `BACKUP_DIR` / `BACKUP_RETENTION` / `BACKUP_ENCRYPTION_PASSPHRASE`: presentes.
+  - `REDIS_URL`: presente.
+  - `JWT_SECRET_KEY`: presente con instrucción de longitud (`>= 32`).
+  - `ENVIRONMENT`: `development` por defecto.
+  - Todo completo para una instalación limpia.
+
+---
+
+## 10. RESUMEN DE PROBLEMAS ENCONTRADOS
+
+| Categoría | Estado | Evidencia | Detalle |
+|---|---|---|---|
+| `app/core/database.py` | **FALTA** | Directorio `app/core/` no contiene `database.py` | La gestión de DB está en `app/database/` (`session.py`, `manager.py`) |
+| Modelo PK (`Uuid` vs `String(36)`) | **PARCIAL / INCONSISTENTE** | `audit_log.py:17`, `api_key.py:19`, `refresh_token.py:19`, `password_reset_token.py:15`, `verification_token.py:15`, `push_token.py:19` | Algunos modelos usan `String(36)` para `id` en lugar de `Uuid(as_uuid=False)` |
+| `tests/unit/test_database_*` | **FALTA** | `Get-ChildItem -Path tests/unit -Filter *database*` sin resultados | No existe archivo con ese nombre; los tests de DB están dispersos (`test_search_orders.py`, `test_user_repository.py`, etc.) |
+| `equipment` (table `vehicles`) | **PARCIAL / NO MIGRADO** | `vehicle.py:69-70` | `equipment` sigue siendo `Text`; solo `images` fue migrado a JSON (`k3l4m5n6o7p8`) |
+| Migraciones Alembic (`versions/`) | **FUNCIONA** | `temp_audit2.py` (eliminado) verificó 25 archivos, cadena lineal, sin ciclos, `head=n5o6p7q8r9s0` | Todo conectado; `env.py` usa `settings.database_url`; `alembic.ini` vacío `sqlalchemy.url` (correcto) |
+| Scripts backup/restore | **FUNCIONA** | `scripts/backup_postgres.sh:1-92`, `scripts/restore_postgres.sh:1-86` | Completo, con retención, encriptación, confirmación |
+| Scripts seed (`feature_flags`, `create_admin`) | **FUNCIONA** | `app/scripts/seed_feature_flags.py:1-31`, `create_admin.py:1-175` | Idempotentes; `create_admin` usa `get_db_session` |
+| Fixtures tests (`sqlite+aiosqlite`) | **FUNCIONA** | `tests/unit/test_search_orders.py:40-48`, `test_user_repository.py:30-37` | Crean tablas en memoria con `Base.metadata.create_all`; se destruyen con `engine.dispose()` |
+| Relaciones / FK / Constraints | **FUNCIONA** | `test_relationships.py:1-150` | Verifica `back_populates` bidireccional para todos los modelos críticos |
+| `docker-compose.yml` | **FUNCIONA** | `docker-compose.yml:1-96` | `db` con `healthcheck`, `depends_on` con `condition: service_healthy`, `api` con `alembic upgrade head` |
+| `.env.example` | **FUNCIONA** | `.env.example:1-199` | `DATABASE_URL`, `BACKUP_*`, `REDIS_URL`, `JWT_SECRET_KEY` presentes |
+| `docs/ops.md` | **FUNCIONA** | `docs/ops.md:1-201` | Documenta backups, restore, health, observabilidad (`docker-compose.obs.yml`) |
+| `cached_market` (índices) | **PARCIAL** | `cached_market.py:13-78` | No tiene `index` ni `unique` explícito para búsquedas rápidas (`external_id` + `provider`) |
+
+---
+
+## 11. RECOMENDACIONES (NO MODIFICADAS)
+
+1. **Crear `tests/unit/test_database_*.py`**: no existe archivo con ese nombre. Aunque `test_search_orders.py` y `test_user_repository.py` cubren repositorios, no hay un archivo dedicado a tests de base de datos (ej. conexión, transacciones, rollback, fixtures globales de DB).
+2. **Normalizar `String(36)` a `Uuid(as_uuid=False)`**: `audit_log.py`, `api_key.py`, `refresh_token.py`, `password_reset_token.py`, `verification_token.py`, `push_token.py` usan `String(36)`. Esto podría causar problemas de consistencia si se migran datos o se comparan con modelos que usan `Uuid(as_uuid=False)`.
+3. **Añadir script de seed general (`seed_db.py`)**: no existe. `create_admin.py` cubre el primer usuario, pero no hay datos de ejemplo (ej. `users`, `vehicles`, `feature_flags` por defecto) para desarrollo o E2E.
+4. **Migrar `equipment` en `vehicles`**: `vehicle.py:69-70` indica que no hay migración. Si se requiere JSON, falta `version/` correspondiente.
+5. **Índice en `cached_market_data`**: añadir `index=True` o `UniqueConstraint` en `external_id` + `provider` + `market_hash` para mejorar rendimiento.
+6. **Documentar `tests/unit/test_database_*`**: si el usuario espera estos archivos, deben crearse o documentar su ausencia.
+
+---
+
+*Fin del informe. Ningún archivo fue modificado.*

@@ -9,11 +9,13 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
     UniqueConstraint,
     Uuid,
+    func,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -36,6 +38,9 @@ class Vehicle(Base):
         UniqueConstraint(
             "user_id", "source", "external_id", name="ix_vehicles_user_source_external"
         ),
+        Index("ix_vehicles_vin", "vin"),
+        Index("ix_vehicles_user_id", "user_id"),
+        Index("ix_vehicles_created_at", "created_at"),
     )
 
     id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True, default=lambda: str(uuid4()))
@@ -73,11 +78,14 @@ class Vehicle(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(UTC),
+        server_default=func.now(),
         nullable=False,
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(UTC),
+        server_default=func.now(),
+        onupdate=lambda: datetime.now(UTC),
         nullable=False,
     )
 
@@ -97,6 +105,7 @@ class Vehicle(Base):
     deals: Mapped[list[Deal]] = relationship(
         "Deal",
         back_populates="vehicle",
+        passive_deletes=True,
     )
     inspection_sessions: Mapped[list[InspectionSession]] = relationship(
         "InspectionSession",

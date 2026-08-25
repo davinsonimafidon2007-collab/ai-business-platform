@@ -1,15 +1,24 @@
-"""Servicio de gestión de deals (pipeline de ventas) — Task D.1.
+"""Servicio de gestión de deals (pipeline de ventas).
 
-Valida las transiciones de estado del pipeline:
+Máquina de estados (v2), sin transiciones imposibles:
 
-    NEW       -> CONTACTED, DROPPED
-    CONTACTED -> OFFER, LOST, DROPPED
-    OFFER     -> WON, LOST, DROPPED
-    WON / LOST / DROPPED -> terminal (sin salida)
+    NEW         -> ANALYZING | CANCELLED
+    ANALYZING   -> NEGOTIATING | LOST | CANCELLED
+    NEGOTIATING -> WON | LOST | CANCELLED
+    WON / LOST / CANCELLED -> terminal (sin salida)
 
-La propiedad de cada deal se restringe a su ``user_id``: cualquier intento
-de acceder o transicionar un deal ajeno se trata como 404 (no se filtra la
-existencia de recursos ajenos).
+Propiedades garantizadas:
+
+- **Ownership**: cada deal solo es visible/gestionable por su ``user_id``
+  (acceso ajeno -> 404, no se filtra existencia).
+- **Idempotencia**: transicionar al estado en el que ya está es un no-op
+  exitoso (200), no un error; reintentos de red no corrompen el estado.
+- **Concurrencia**: la lectura para transicionar bloquea la fila
+  (SELECT ... FOR UPDATE) y el ``version`` column añade bloqueo optimista;
+  una escritura perdida se traduce a 409 Conflict.
+- **Auditoría**: cada creación/transición persiste una fila inmutable en
+  ``deal_status_history`` y una entrada en ``audit_logs``, en la MISMA
+  transacción que el cambio (todo-o-nada).
 """
 
 from __future__ import annotations
@@ -17,27 +26,34 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from fastapi import HTTPException, status
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm.exc import StaleDataError
 
-from app.models.deal import Deal, DealStatus
+from app.models.audit_log import AuditLog
+from app.models.deal import Deal, DealStatus, DealStatusHistory
 from app.repositories.deal_repository import DealRepository
 
 
 class DealService:
     """Servicio de dominio para el pipeline de deals."""
 
-    # Transiciones válidas por estado actual.
+    # Transiciones válidas por estado actual. Los estados terminales
+    # (WON, LOST, CANCELLED) NO tienen salida.
     _TRANSITIONS: dict[DealStatus, set[DealStatus]] = {
-        DealStatus.NEW: {DealStatus.CONTACTED, DealStatus.DROPPED},
-        DealStatus.CONTACTED: {
-            DealStatus.OFFER,
+        DealStatus.NEW: {DealStatus.ANALYZING, DealStatus.CANCELLED},
+        DealStatus.ANALYZING: {
+            DealStatus.NEGOTIATING,
             DealStatus.LOST,
-            DealStatus.DROPPED,
+            DealStatus.CANCELLED,
         },
-        DealStatus.OFFER: {DealStatus.WON, DealStatus.LOST, DealStatus.DROPPED},
-        # Terminales: WON, LOST, DROPPED no tienen salida
+        DealStatus.NEGOTIATING: {
+            DealStatus.WON,
+            DealStatus.LOST,
+            DealStatus.CANCELLED,
+        },
         DealStatus.WON: set(),
         DealStatus.LOST: set(),
-        DealStatus.DROPPED: set(),
+        DealStatus.CANCELLED: set(),
     }
 
     def __init__(self, repository: DealRepository) -> None:
@@ -46,6 +62,29 @@ class DealService:
     @staticmethod
     def _now() -> datetime:
         return datetime.now(UTC)
+
+    @staticmethod
+    def allowed_transitions(current: DealStatus) -> set[DealStatus]:
+        """Estados destino válidos desde ``current``."""
+        return set(DealService._TRANSITIONS.get(current, set()))
+
+    def _audit_entry(
+        self,
+        *,
+        action: str,
+        user_id: str,
+        deal_id: str,
+        details: str,
+    ) -> AuditLog:
+        """Construye la entrada de auditoría global (sin commitear)."""
+        return AuditLog(
+            user_id=user_id,
+            action=action,
+            resource="deal",
+            resource_id=deal_id,
+            details=details,
+            timestamp=self._now(),
+        )
 
     # ------------------------------------------------------------------
     # API pública
@@ -64,18 +103,13 @@ class DealService:
 
         Exige al menos un vínculo (opportunity_id o vehicle_id). Si se
         proporciona ``opportunity_id`` y ya existe un deal activo
-        (NEW|CONTACTED|OFFER) para el mismo usuario y oportunidad, se
-        rechaza con 409 para evitar duplicados activos.
-
-        Args:
-            user_id: Dueño del deal.
-            opportunity_id: Oportunidad de origen (opcional).
-            vehicle_id: Vehículo asociado (opcional).
-            notes: Notas iniciales (opcional).
-            contact_channel: Canal de contacto (opcional).
+        (NEW|ANALYZING|NEGOTIATING) para el mismo usuario y oportunidad,
+        se rechaza con 409. La condición también está protegida por un
+        índice único parcial en BD, así que una carrera entre dos creates
+        concurrentes solo permite insertar uno (el perdedor recibe 409).
 
         Returns:
-            El Deal creado con estado NEW.
+            El Deal creado con estado NEW e historial inicial persistido.
 
         Raises:
             HTTPException 422: Si no se proporciona ni opportunity ni vehicle.
@@ -87,8 +121,8 @@ class DealService:
                 detail="At least one of opportunity_id or vehicle_id is required",
             )
 
-        # Un solo deal activo por opportunity/user. Si ya existe un deal en
-        # estado NEW|CONTACTED|OFFER, se rechaza (409) para evitar duplicados.
+        # Un solo deal activo por opportunity/user. Comprobación optimista;
+        # la garantía real la pone uq_deals_active_per_opportunity.
         if opportunity_id:
             existing = await self.repository.get_active_by_opportunity(
                 user_id, opportunity_id
@@ -104,6 +138,7 @@ class DealService:
                     },
                 )
 
+        now = self._now()
         deal = Deal(
             user_id=user_id,
             opportunity_id=opportunity_id,
@@ -111,8 +146,35 @@ class DealService:
             status=DealStatus.NEW,
             notes=notes,
             contact_channel=contact_channel,
+            status_changed_at=now,
         )
-        return await self.repository.create(deal)
+        creation_history = DealStatusHistory(
+            deal_id=deal.id,
+            from_status=None,
+            to_status=DealStatus.NEW.value,
+            changed_by_user_id=user_id,
+            notes=notes,
+            created_at=now,
+        )
+        audit = self._audit_entry(
+            action="deal_created",
+            user_id=user_id,
+            deal_id=deal.id,
+            details=f"Deal created from "
+            f"{'opportunity ' + opportunity_id if opportunity_id else 'vehicle'}"
+            f"{' ' + str(vehicle_id) if vehicle_id else ''}",
+        )
+        try:
+            return await self.repository.save_transition(deal, creation_history, audit)
+        except IntegrityError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "message": (
+                        "You already have an active deal for this opportunity"
+                    ),
+                },
+            ) from exc
 
     async def list(
         self,
@@ -146,6 +208,18 @@ class DealService:
             )
         return deal
 
+    async def get_history(
+        self,
+        deal_id: str,
+        user_id: str,
+        *,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> tuple[list[DealStatusHistory], int]:
+        """Devuelve el historial de estados de un deal propio (auditoría)."""
+        await self.get(deal_id, user_id)
+        return await self.repository.list_history(deal_id, limit=limit, offset=offset)
+
     async def transition(
         self,
         *,
@@ -155,42 +229,86 @@ class DealService:
         notes: str | None = None,
         offer_price: float | None = None,
     ) -> Deal:
-        """Transiciona un deal a un nuevo estado, validando la transición.
+        """Transiciona un deal validando la máquina de estados.
 
-        Args:
-            deal_id: Id del deal a transicionar.
-            user_id: Dueño del deal (ownership check).
-            new_status: Estado destino.
-            notes: Notas opcionales a añadir/actualizar.
-            offer_price: Precio de oferta opcional (p.ej. en OFFER/WON).
+        - Idempotente: si ``new_status == deal.status`` devuelve el deal
+          sin escribir nada (reintentos seguros).
+        - Concurrencia: lee con FOR UPDATE + bloqueo optimista por versión;
+          conflicto -> 409.
+        - Atómico: deal + historial + audit log en una sola transacción.
 
         Returns:
             El Deal actualizado.
 
         Raises:
             HTTPException 404: Si el deal no existe o no pertenece al usuario.
-            HTTPException 422: Si la transición no es válida.
+            HTTPException 422: Si la transición no es válida o datos inválidos.
+            HTTPException 409: Si otra escritura ganó la carrera.
         """
-        deal = await self.get(deal_id, user_id)
+        if offer_price is not None and offer_price < 0:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="offer_price must be >= 0",
+            )
 
-        allowed = self._TRANSITIONS.get(deal.status, set())
+        deal = await self.repository.get_by_id(deal_id, for_update=True)
+        if deal is None or deal.user_id != user_id:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Deal not found",
+            )
+
+        current_status = deal.status
+
+        # Idempotencia: pedir el estado actual es un no-op exitoso.
+        if new_status == current_status:
+            return deal
+
+        allowed = self._TRANSITIONS.get(current_status, set())
         if new_status not in allowed:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail=(
-                    f"Invalid transition from {deal.status.value} "
+                    f"Invalid transition from {current_status.value} "
                     f"to {new_status.value}"
                 ),
             )
 
+        old_status_value = current_status.value
+        now = self._now()
         deal.status = new_status
         if notes is not None:
             deal.notes = notes
         if offer_price is not None:
             deal.offer_price = offer_price
-        deal.updated_at = self._now()
+        deal.status_changed_at = now
+        deal.closed_at = now if new_status.is_terminal else None
+        deal.updated_at = now
 
-        return await self.repository.update(deal)
+        history = DealStatusHistory(
+            deal_id=deal.id,
+            from_status=old_status_value,
+            to_status=new_status.value,
+            changed_by_user_id=user_id,
+            notes=notes,
+            offer_price=offer_price,
+            created_at=now,
+        )
+        audit = self._audit_entry(
+            action="deal_status_changed",
+            user_id=user_id,
+            deal_id=deal.id,
+            details=f"status: {old_status_value} -> {new_status.value}",
+        )
+        try:
+            return await self.repository.save_transition(deal, history, audit)
+        except StaleDataError as exc:
+            # Otra petición modificó el deal mientras esta transición
+            # estaba en vuelo: el cliente debe releer y reintentar.
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Deal was modified concurrently, please retry",
+            ) from exc
 
     async def save_simulation(
         self,
@@ -209,22 +327,6 @@ class DealService:
         Solo actualiza los campos de simulación ``last_sim_*`` y el timestamp
         ``last_sim_at`` / ``updated_at``. No modifica el estado del pipeline ni
         los campos de negociación (offer_price, notes, contact_channel).
-
-        Args:
-            deal_id: Id del deal en el que guardar la simulación.
-            user_id: Dueño del deal (ownership check).
-            purchase_price: Precio de compra de la simulación.
-            estimated_sale_price: Precio de venta estimado.
-            total_cost: Coste total de la simulación.
-            net_profit: Beneficio neto de la simulación.
-            roi_percentage: ROI (%) de la simulación.
-            profile_name: Perfil de costes usado.
-
-        Returns:
-            El Deal actualizado con los campos de simulación.
-
-        Raises:
-            HTTPException 404: Si el deal no existe o no pertenece al usuario.
         """
         deal = await self.get(deal_id, user_id)
 
@@ -241,14 +343,12 @@ class DealService:
         return await self.repository.update(deal)
 
     async def delete(self, deal_id: str, user_id: str) -> None:
-        """Elimina un deal propio (TASK-021).
-
-        Args:
-            deal_id: Id del deal a eliminar.
-            user_id: Dueño del deal (ownership check).
-
-        Raises:
-            HTTPException 404: Si el deal no existe o no pertenece al usuario.
-        """
+        """Elimina un deal propio (TASK-021). El historial se borra en cascada."""
         deal = await self.get(deal_id, user_id)
-        await self.repository.delete(deal)
+        audit = self._audit_entry(
+            action="deal_deleted",
+            user_id=user_id,
+            deal_id=deal.id,
+            details=f"Deal deleted while in status {deal.status.value}",
+        )
+        await self.repository.delete(deal, audit)

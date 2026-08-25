@@ -28,6 +28,7 @@ Flujo:
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from app.core.config import settings
@@ -51,6 +52,15 @@ from app.services.vehicle_scorer import VehicleScorer
 from app.services.vehicle_service import VehicleService
 
 logger = get_logger(__name__)
+
+
+class _AnalysisOutcome:
+    """Envoltorio del resultado de análisis: éxito o excepción registrada."""
+
+    __slots__ = ("result",)
+
+    def __init__(self, result: Any) -> None:
+        self.result = result
 
 
 class SearchOrchestrator:
@@ -100,6 +110,13 @@ class SearchOrchestrator:
         self._provider_registry = provider_registry
         # Fallos de la última llamada a `search()` (SEARCH.DIAG.1).
         self._last_provider_issues: list[ProviderIssue] = []
+        # SEARCH.ORCH.1: total de coincidencias antes de paginar.
+        self._last_total_matches = 0
+        # Semáforo para acotar análisis concurrentes (estimador de mercado
+        # puede golpear providers externos).
+        self._analysis_semaphore = asyncio.Semaphore(
+            max(1, int(getattr(settings, "search_max_concurrent_analyses", 4) or 4))
+        )
         self._import_cost_profile = (
             import_cost_profile
             or getattr(settings, "default_import_cost_profile", None)
@@ -119,23 +136,40 @@ class SearchOrchestrator:
     # ------------------------------------------------------------------
 
     async def search(self, request: SearchRequest) -> list[SearchResult]:
-        """Ejecuta una búsqueda completa sobre múltiples providers.
+        """Ejecuta una búsqueda completa sobre múltiples providers en paralelo.
+
+        Fases (SEARCH.ORCH.1):
+            1. Resuelve providers del registry (fallos → ProviderIssue).
+            2. Lanza los fetch de todos los providers CONCURRENTEMENTE con
+               timeout por provider (``settings.search_provider_timeout``).
+               Un provider que falla o expira NO aborta los demás.
+            3. Analiza los DTOs con concurrencia acotada (semáforo),
+               preservando el orden determinista (providers en el orden de la
+               petición, DTOs en el orden devuelto).
+            4. Dedup cross-source e intra-source.
+            5. Ordena por ``request.sort_by``/``sort_order`` y pagina con
+               ``offset``/``max_results``.
 
         Args:
             request: Parámetros de la búsqueda.
 
         Returns:
-            Lista de SearchResult ordenada por opportunity.overall_score DESC.
+            Lista de SearchResult ordenada y paginada.
         """
-        all_results: list[SearchResult] = []
         # SEARCH.DIAG.1: se acumulan los fallos en vez de tragarlos, para que
         # la capa superior pueda distinguir "no hay coches" de "el provider
         # se cayó". Un fallo sigue sin abortar la búsqueda.
         self._last_provider_issues = []
+        self._last_total_matches = 0
 
+        if not request.providers:
+            return []
+
+        # --- Fase 1: resolver providers ---
+        resolved: list[tuple[str, Any]] = []
         for provider_name in request.providers:
             try:
-                provider = self._provider_registry.get(provider_name)
+                resolved.append((provider_name, self._provider_registry.get(provider_name)))
             except KeyError as exc:
                 logger.warning("Provider no registrado: %s", provider_name)
                 self._last_provider_issues.append(
@@ -146,70 +180,49 @@ class SearchOrchestrator:
                         message=f"Provider '{provider_name}' no está registrado",
                     )
                 )
-                continue
 
-            # Construir kwargs adicionales
-            kwargs: dict[str, Any] = {}
-            if request.country:
-                kwargs["country"] = request.country
-            if request.budget_min is not None:
-                kwargs["budget_min"] = request.budget_min
-            if request.budget_max is not None:
-                kwargs["budget_max"] = request.budget_max
+        if not resolved:
+            return []
 
-            # Buscar vehículos
-            try:
-                vehicle_dtos = await self._vehicle_service.search_from_provider(
-                    provider, request.query, **kwargs
-                )
-            except Exception as exc:  # noqa: BLE001 — multi-provider: must continue
-                logger.exception("Error al buscar en provider %s", provider_name)
-                self._last_provider_issues.append(
-                    ProviderIssue(
-                        provider=provider_name,
-                        stage="search",
-                        error_type=type(exc).__name__,
-                        message=str(exc) or type(exc).__name__,
-                    )
-                )
-                continue
+        # --- Fase 2: fetch concurrente con timeout por provider ---
+        fetch_results = await asyncio.gather(
+            *(
+                self._fetch_provider(provider_name, provider, request)
+                for provider_name, provider in resolved
+            )
+        )
 
-            # Analizar cada vehículo
-            for dto in vehicle_dtos:
-                if not self._matches_filters(dto, request):
-                    continue
+        # Aplanar preservando el orden determinista: providers según la
+        # petición, DTOs según el orden devuelto por cada uno.
+        pending: list[tuple[str, Any]] = []
+        for (provider_name, dtos) in fetch_results:
+            if isinstance(dtos, BaseException):
+                continue  # ya registrado como ProviderIssue en _fetch_provider
+            for dto in dtos:
+                if self._matches_filters(dto, request):
+                    pending.append((provider_name, dto))
 
-                try:
-                    result = await self._analyze_vehicle(
-                        dto,
-                        comparable_providers=getattr(
-                            request, "comparable_providers", None
-                        ),
-                    )
-                    all_results.append(result)
-                except Exception as exc:  # noqa: BLE001 — analysis can raise diverse errors
-                    external_id = getattr(dto, "external_id", None)
-                    logger.exception(
-                        "Error al analizar vehículo %s", external_id or "unknown"
-                    )
-                    self._last_provider_issues.append(
-                        ProviderIssue(
-                            provider=provider_name,
-                            stage="analyze",
-                            error_type=type(exc).__name__,
-                            message=str(exc) or type(exc).__name__,
-                            external_id=str(external_id) if external_id else None,
-                        )
-                    )
-                    continue
+        if not pending:
+            self._last_total_matches = 0
+            return []
 
-        # Dedup cross-source para AutoScout24: el mismo coche puede aparecer
-        # en autoscout24 (DE) y autoscout24_es (ES) con el mismo external_id.
-        # Priorizamos ES para compradores españoles; guardamos ambos sources
-        # en un tag para trazabilidad.
+        # --- Fase 3: análisis concurrente acotado ---
+        analyzed = await asyncio.gather(
+            *(
+                self._analyze_safe(provider_name, dto, request)
+                for provider_name, dto in pending
+            )
+        )
+
+        all_results: list[SearchResult] = []
+        for item in analyzed:
+            if isinstance(item.result, BaseException):
+                continue  # ya registrado como ProviderIssue(stage="analyze")
+            all_results.append(item.result)
+
+        # --- Fase 4: dedup cross-source e intra-source ---
         deduped = self._dedup_autoscout24_cross_source(all_results)
 
-        # Dedup intra-source por (source, external_id) o URL.
         seen_keys: set[tuple[str, str]] = set()
         final_deduped: list[SearchResult] = []
         for r in deduped:
@@ -224,21 +237,126 @@ class SearchOrchestrator:
                 key = (source, url)
             else:
                 key = None
-            if key is None:
+            if key is None or key not in seen_keys:
+                if key is not None:
+                    seen_keys.add(key)
                 final_deduped.append(r)
-                continue
-            if key in seen_keys:
-                continue
-            seen_keys.add(key)
-            final_deduped.append(r)
-        deduped = final_deduped
 
-        # Ordenar primero (oportunidad DESC) y luego limitar: limitar antes de
-        # ordenar descartaba coches mejores que los que quedaban en el top.
-        ordered = self.sort(deduped)
+        # Total ANTES de paginar, para que el cliente pueda paginar sin perder
+        # la noción de cuántos resultados hay.
+        self._last_total_matches = len(final_deduped)
+
+        # --- Fase 5: ordenar primero y paginar después ---
+        ordered = self.sort(
+            final_deduped,
+            by=request.sort_by,
+            reverse=request.sort_order != "asc",
+        )
         if request.max_results > 0:
-            ordered = ordered[: request.max_results]
+            ordered = ordered[request.offset : request.offset + request.max_results]
+        elif request.offset > 0:
+            ordered = ordered[request.offset :]
         return ordered
+
+    async def _fetch_provider(
+        self,
+        provider_name: str,
+        provider: Any,
+        request: SearchRequest,
+    ) -> tuple[str, list[Any]]:
+        """Descarga los DTOs de un provider con timeout global.
+
+        Nunca propaga excepciones: devuelve el nombre y los DTOs, o el nombre
+        y la excepción (registrada antes como ProviderIssue) para que el
+        resto de providers siga vivo.
+
+        Raises:
+            Nada. Los errores viajan dentro del valor devuelto.
+        """
+        kwargs: dict[str, Any] = {}
+        if request.country:
+            kwargs["country"] = request.country
+        if request.budget_min is not None:
+            kwargs["budget_min"] = request.budget_min
+        if request.budget_max is not None:
+            kwargs["budget_max"] = request.budget_max
+
+        timeout = float(getattr(settings, "search_provider_timeout", 60.0) or 0)
+        coro = self._vehicle_service.search_from_provider(provider, request.query, **kwargs)
+        try:
+            if timeout > 0:
+                dtos = await asyncio.wait_for(coro, timeout=timeout)
+            else:
+                dtos = await coro
+        except asyncio.TimeoutError as exc:
+            logger.error(
+                "Timeout (%.1fs) del provider %s durante la búsqueda",
+                timeout,
+                provider_name,
+            )
+            self._last_provider_issues.append(
+                ProviderIssue(
+                    provider=provider_name,
+                    stage="search",
+                    error_type="TimeoutError",
+                    message=(
+                        f"El provider '{provider_name}' tardó más de {timeout:.0f}s "
+                        "en responder"
+                    ),
+                )
+            )
+            return provider_name, exc
+        except Exception as exc:  # noqa: BLE001 — multi-provider: must continue
+            logger.exception("Error al buscar en provider %s", provider_name)
+            self._last_provider_issues.append(
+                ProviderIssue(
+                    provider=provider_name,
+                    stage="search",
+                    error_type=type(exc).__name__,
+                    message=str(exc) or type(exc).__name__,
+                )
+            )
+            return provider_name, exc
+        return provider_name, list(dtos or [])
+
+    async def _analyze_safe(
+        self,
+        provider_name: str,
+        dto: Any,
+        request: SearchRequest,
+    ) -> _AnalysisOutcome:
+        """Analiza un DTO bajo semáforo sin propagar excepciones.
+
+        Devuelve un ``_AnalysisOutcome`` con el ``SearchResult`` o la
+        excepción registrada como ProviderIssue(stage="analyze"). El semáforo
+        acota cuántos análisis (y por tanto estimaciones de mercado contra
+        providers externos) corren a la vez.
+        """
+        async with self._analysis_semaphore:
+            try:
+                result = await self._analyze_vehicle(
+                    dto,
+                    comparable_providers=getattr(request, "comparable_providers", None),
+                )
+                return _AnalysisOutcome(result)
+            except Exception as exc:  # noqa: BLE001 — analysis can raise diverse errors
+                external_id = getattr(dto, "external_id", None)
+                logger.exception("Error al analizar vehículo %s", external_id or "unknown")
+                self._last_provider_issues.append(
+                    ProviderIssue(
+                        provider=provider_name,
+                        stage="analyze",
+                        error_type=type(exc).__name__,
+                        message=str(exc) or type(exc).__name__,
+                        external_id=str(external_id) if external_id else None,
+                    )
+                )
+                return _AnalysisOutcome(exc)
+
+    @property
+    def last_total_matches(self) -> int:
+        """Total de coincidencias (post-dedup, pre-paginación) de la última ``search()``."""
+        return self._last_total_matches
 
     @property
     def last_provider_issues(self) -> list[ProviderIssue]:
@@ -385,16 +503,30 @@ class SearchOrchestrator:
 
         # Si se especifica un campo distinto, reordenar
         if by != "score":
-            sort_map: dict[str, str] = {
-                "ROI": "roi_percentage",
-                "beneficio": "net_profit",
-                "precio": "purchase_price",
-                "kilómetros": "mileage",
-                "kilometros": "mileage",
-                "año": "year",
-                "ano": "year",
+            # SEARCH.ORCH.1: alias EN/canónicos → claves soportadas.
+            # Claves desconocidas caen al orden por defecto (score DESC) en
+            # vez de ordenar todas por 0.0 (orden arbitrario).
+            sort_map: dict[str, list[str]] = {
+                "roi": ["roi_percentage", "roi"],
+                "roi_percentage": ["roi_percentage", "roi"],
+                "beneficio": ["net_profit", "estimated_profit"],
+                "profit": ["net_profit", "estimated_profit"],
+                "net_profit": ["net_profit", "estimated_profit"],
+                "precio": ["purchase_price", "price"],
+                "price": ["purchase_price", "price"],
+                "kilómetros": ["mileage"],
+                "kilometros": ["mileage"],
+                "mileage": ["mileage"],
+                "año": ["year"],
+                "ano": ["year"],
+                "year": ["year"],
             }
-            attr_name = sort_map.get(by, by)
+            attr_names = (
+                sort_map.get(by.strip().lower(), None) if by else None
+            )
+            if attr_names is None:
+                logger.debug("sort_by='%s' no soportado; se usa score DESC", by)
+                return results_sorted
 
             def _alt_sort_key(r: SearchResult) -> float:
                 opp = r.opportunity
@@ -402,15 +534,22 @@ class SearchOrchestrator:
                 vs = r.vehicle_score
                 vehicle = r.vehicle
 
-                # Buscar el atributo en profit, vehicle, opp o vehicle_score
-                val = getattr(profit, attr_name, None)
-                if val is None:
-                    val = getattr(vehicle, attr_name, None)
-                if val is None:
-                    val = getattr(opp, attr_name, None)
-                if val is None:
-                    val = getattr(vs, attr_name, None)
-                return float(val or 0.0)
+                # Buscar el primer atributo numérico real entre profit,
+                # vehicle, opp y vehicle_score (MagicMocks autogenerados se
+                # ignoran para no romper la ordenación).
+                for attr_name in attr_names:
+                    for obj in (profit, vehicle, opp, vs):
+                        candidate = getattr(obj, attr_name, None)
+                        if isinstance(candidate, bool):
+                            continue
+                        if isinstance(candidate, (int, float)):
+                            return float(candidate)
+                        if isinstance(candidate, str):
+                            try:
+                                return float(candidate.replace(",", "."))
+                            except ValueError:
+                                continue
+                return 0.0
 
             results_sorted = sorted(results_sorted, key=_alt_sort_key, reverse=reverse)
 
@@ -468,8 +607,12 @@ class SearchOrchestrator:
             if preferred is None:
                 preferred = candidates[0]
 
-            # Tag con todos los sources donde apareció
-            sources_seen = {getattr(c.vehicle, "source", None) for c in candidates}
+            # Tag con todos los sources donde apareció (trazabilidad)
+            sources_seen = {
+                s
+                for c in candidates
+                if (s := getattr(c.vehicle, "source", None)) is not None
+            }
             preferred.vehicle.available_in_sources = sorted(sources_seen)
             deduped.append(preferred)
 

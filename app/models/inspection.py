@@ -16,7 +16,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text, Uuid
+from sqlalchemy import DateTime, Float, ForeignKey, Index, Integer, String, Text, Uuid, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.config.inspection import (
@@ -40,6 +40,11 @@ class InspectionSession(Base):
     """
 
     __tablename__ = "inspection_sessions"
+    __table_args__ = (
+        Index("ix_inspection_sessions_vehicle_id", "vehicle_id"),
+        Index("ix_inspection_sessions_user_id", "user_id"),
+        Index("ix_inspection_sessions_created_at", "created_at"),
+    )
 
     id: Mapped[str] = mapped_column(
         Uuid(as_uuid=False), primary_key=True, default=lambda: str(uuid4())
@@ -85,11 +90,14 @@ class InspectionSession(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(UTC),
+        server_default=func.now(),
         nullable=False,
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(UTC),
+        server_default=func.now(),
+        onupdate=lambda: datetime.now(UTC),
         nullable=False,
     )
     completed_at: Mapped[datetime | None] = mapped_column(
@@ -188,6 +196,10 @@ class InspectionObservation(Base):
     """
 
     __tablename__ = "inspection_observations"
+    __table_args__ = (
+        Index("ix_inspection_observations_session_id", "session_id"),
+        Index("ix_inspection_observations_category_item", "session_id", "category_id", "item_id", unique=True),
+    )
 
     id: Mapped[str] = mapped_column(
         Uuid(as_uuid=False), primary_key=True, default=lambda: str(uuid4())
@@ -220,11 +232,14 @@ class InspectionObservation(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(UTC),
+        server_default=func.now(),
         nullable=False,
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(UTC),
+        server_default=func.now(),
+        onupdate=lambda: datetime.now(UTC),
         nullable=False,
     )
 
@@ -275,6 +290,10 @@ class InspectionPhoto(Base):
     """
 
     __tablename__ = "inspection_photos"
+    __table_args__ = (
+        Index("ix_inspection_photos_observation_id", "observation_id"),
+        Index("ix_inspection_photos_session_id", "session_id"),
+    )
 
     id: Mapped[str] = mapped_column(
         Uuid(as_uuid=False), primary_key=True, default=lambda: str(uuid4())
@@ -318,6 +337,7 @@ class InspectionPhoto(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(UTC),
+        server_default=func.now(),
         nullable=False,
     )
 

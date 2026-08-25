@@ -12,6 +12,7 @@ from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoin
 from starlette.responses import Response
 
 from app.core.config import settings
+from app.core.local_user import LOCAL_USER_ID_STR
 from app.core.redis import get_redis, rate_limit_hit
 from app.models.role import Role
 
@@ -156,12 +157,26 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             ):
                 return self._too_many(self.window_seconds)
         else:
+            limit = DEFAULT_RATE_LIMIT
+            identity_key = client_ip
+            bucket = self._ip_limits
+            redis_key = f"rl:ip:{client_ip}"
+            if settings.auth_disabled:
+                # PERSONAL.NOAUTH: con AUTH_DISABLED=true no hay pre-auth JWT
+                # (request.state.user vacío), así que cada petición caería en el
+                # cubo IP genérico (rate_limit_global) aunque el rol efectivo es
+                # ADMIN. Se usa la identidad fija del usuario local para que el
+                # rate-limit por rol funcione igual que en multi-user.
+                limit = ROLE_RATE_LIMITS[Role.ADMIN]
+                identity_key = LOCAL_USER_ID_STR
+                bucket = self._user_limits
+                redis_key = f"rl:user:{LOCAL_USER_ID_STR}"
             if not await self._allow(
-                f"rl:ip:{client_ip}",
-                DEFAULT_RATE_LIMIT,
+                redis_key,
+                limit,
                 self.window_seconds,
-                local_bucket=self._ip_limits,
-                local_key=client_ip,
+                local_bucket=bucket,
+                local_key=identity_key,
             ):
                 return self._too_many(self.window_seconds)
 

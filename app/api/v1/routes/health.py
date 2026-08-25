@@ -17,6 +17,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import socket
+from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Response, status
 
@@ -33,6 +35,31 @@ router = APIRouter(tags=["Health"])
 # Short timeouts so /health stays lightweight under dependency hiccups.
 _DB_CHECK_TIMEOUT_S = 2.0
 _REDIS_CHECK_TIMEOUT_S = 2.0
+_TCP_PROBE_TIMEOUT_S = 1.0
+
+
+def _host_port_from_url(url: str, default_port: int) -> tuple[str, int]:
+    """Extrae (host, puerto) de una URL de conexión (DATABASE_URL/REDIS_URL).
+
+    Soporta esquemas con driver (postgresql+asyncpg://, redis://) y hosts
+    docker-compose (db, redis) o localhost. Nunca lanza: si no se puede
+    parsear devuelve localhost + puerto por defecto.
+    """
+    try:
+        parts = urlsplit(url)
+        host = parts.hostname or "localhost"
+        port = parts.port or default_port
+        return host, port
+    except Exception:
+        return "localhost", default_port
+
+
+def _db_host_port() -> tuple[str, int]:
+    return _host_port_from_url(settings.database_url, 5432)
+
+
+def _redis_host_port() -> tuple[str, int]:
+    return _host_port_from_url(settings.redis_url, 6379)
 
 
 async def _check_database() -> bool:
@@ -150,14 +177,16 @@ async def get_health_ready() -> ReadyResponse:
     redis_ok = False
 
     try:
-        with socket.create_connection(("db", 5432), timeout=1):
+        with socket.create_connection(_db_host_port(), timeout=_TCP_PROBE_TIMEOUT_S):
             pass
         db_ok = True
     except Exception:
         db_ok = False
 
     try:
-        with socket.create_connection(("redis", 6379), timeout=1):
+        with socket.create_connection(
+            _redis_host_port(), timeout=_TCP_PROBE_TIMEOUT_S
+        ):
             pass
         redis_ok = True
     except Exception:

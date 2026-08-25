@@ -1,6 +1,12 @@
 # CI.2   — unit + requirements sync + Postgres 16 + integration crítico (INT.1)
-# CI.FE.1  — job frontend (Vitest) en paralelo al backend
+# CI.FE.1  — job frontend (Vitest + lint) en paralelo al backend
 # CI.LINT.1 — ruff check como gate del job backend
+# CI.DOCKER.1 — build de imágenes + smoke del stack completo (compose):
+#               containers → migrations → backend → frontend → health checks
+#
+# Este workflow NO usa ningún secret del repositorio: todos los valores son
+# fixtures de CI (JWT de test, Postgres efímero del job). Los workflows que
+# sí usan secrets (deploy, mobile-release) fallan explícitamente si faltan.
 name: CI
 
 on:
@@ -54,7 +60,6 @@ jobs:
         uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-          # pin opcional; dejar latest del action es OK
 
       - name: Set up Python 3.13
         run: uv python install 3.13
@@ -67,14 +72,20 @@ jobs:
 
       # CI.LINT.1 — antes de pytest para fallar rápido (lint es segundos).
       - name: Ruff check
-        run: uv run --no-sync ruff check app tests
+        run: uv run --no-sync ruff check app tests scripts
 
       - name: Alembic upgrade head (Postgres service)
         # Migraciones contra el service Postgres 16 (DB vacía). Debe correr antes de INT.1.
         run: uv run --no-sync alembic upgrade head
 
       - name: Verify single Alembic head
+        # Sin head hardcodeado: valida 1 head único + cadena lineal (no se
+        # rompe al añadir migraciones nuevas).
         run: uv run --no-sync python scripts/check_migrations.py
+
+      # Idempotencia: re-aplicar en una BD ya migrada debe ser no-op.
+      - name: Alembic upgrade idempotent
+        run: uv run --no-sync alembic upgrade head
 
       # COV.GATE.1 — gate solo sobre módulos críticos (económico + auth), no
       # sobre el monorepo entero. Actual: ~97 %; el 70 % es piso de disciplina.
@@ -124,6 +135,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # CI.LINT.1 (frontend) — verificado en limpio: pasa con warnings, sin errors.
+      - name: Lint
+        run: npm run lint
+
       # COV.GATE.1 — thresholds en vitest.config.ts sobre store/** y services/**.
       - name: Unit tests + coverage (Vitest)
         run: npm run test:coverage
@@ -133,6 +148,72 @@ jobs:
           NEXT_PUBLIC_AUTH_DISABLED: "false"
           CI: "true"
 
-      # Lint pendiente de CI.LINT.1 (aún no verificado en limpio):
-      # - name: Lint
-      #   run: npm run lint
+      # Build de servidor (igual que la imagen Docker) para detectar errores
+      # de compilación/type-check que Vitest no cubre.
+      - name: Build Next.js (server)
+        run: npm run build
+        env:
+          NEXT_TELEMETRY_DISABLED: "1"
+
+  # CI.DOCKER.1 — construye las imágenes y levanta el stack real (compose):
+  #   docker build → containers → migrations → backend → frontend → health.
+  # Valida también scripts/validate_deployment.sh (el mismo que usa Deploy).
+  docker:
+    name: docker build + stack smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    env:
+      # Fixtures de CI — nunca secrets reales. JWT ≥32 chars (fail-fast app).
+      JWT_SECRET_KEY: ci_stack_smoke_secret_key_at_least_32_chars_long_not_for_prod
+      ENVIRONMENT: development
+      AUTH_DISABLED: "true"
+      ALLOW_AUTH_DISABLED_IN_PROD: "false"
+      ENABLE_SCHEDULER: "false"
+      NEXT_PUBLIC_API_URL: http://localhost:8001
+      NEXT_PUBLIC_AUTH_DISABLED: "true"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Compose config válida
+        run: docker compose config --quiet && echo "compose config OK"
+
+      - name: Build imágenes (api + frontend)
+        run: docker compose build --pull api frontend
+
+      - name: Levantar db + redis
+        run: docker compose up -d --wait db redis
+
+      - name: Levantar api (aplica migraciones al arrancar)
+        run: docker compose up -d --wait api
+
+      - name: Health checks backend (/health/live + /health compuesto)
+        run: |
+          curl -fsS http://127.0.0.1:8001/health/live | tee /dev/stderr | grep -q '"ok"'
+          curl -fsS http://127.0.0.1:8001/health | tee /dev/stderr | grep -q '"database": *"ok"\|"database":"ok"'
+          echo "Backend OK"
+
+      - name: Migraciones aplicadas (alembic current = head)
+        run: |
+          CURRENT=$(docker compose exec -T api alembic current 2>/dev/null | tr -d '[:space:]')
+          echo "Revisión actual: ${CURRENT}"
+          test -n "$CURRENT" || { echo "::error::alembic current vacío (sin migrar)"; exit 1; }
+          docker compose exec -T api alembic upgrade head  # idempotente
+
+      - name: Levantar frontend
+        run: docker compose up -d --wait frontend
+
+      - name: Validación completa del stack (validate_deployment.sh)
+        run: ./scripts/validate_deployment.sh http://127.0.0.1
+
+      - name: Diagnóstico en fallo (logs del stack)
+        if: failure()
+        run: |
+          docker compose ps -a
+          docker compose logs --tail=100 api frontend db redis
+
+      - name: Teardown
+        if: always()
+        run: docker compose down -v --remove-orphans

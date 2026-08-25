@@ -4,8 +4,8 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, Literal
 from uuid import uuid4
 
-from pydantic import BaseModel, Field
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text, Uuid
+from pydantic import BaseModel, Field, field_validator
+from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text, Uuid, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
@@ -38,8 +38,8 @@ class Search(Base):
     __tablename__ = "searches"
 
     id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True, default=lambda: str(uuid4()))
-    user_id: Mapped[str | None] = mapped_column(
-        Uuid(as_uuid=False), ForeignKey("users.id", ondelete="CASCADE"), nullable=True
+    user_id: Mapped[str] = mapped_column(
+        Uuid(as_uuid=False), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     country: Mapped[str] = mapped_column(String(10), nullable=False)
@@ -52,10 +52,11 @@ class Search(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(UTC),
+        server_default=func.now(),
         nullable=False,
     )
 
-    user: Mapped[User | None] = relationship("User", back_populates="searches")
+    user: Mapped[User] = relationship("User", back_populates="searches")
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
@@ -75,7 +76,10 @@ class SearchRequest(BaseModel):
 
     Attributes:
         query: Término de búsqueda (URL o texto).
-        max_results: Número máximo de resultados a devolver.
+        max_results: Número máximo de resultados a devolver (tamaño de página).
+        offset: Desplazamiento dentro de la lista ordenada (paginación).
+        sort_by: Campo de ordenación (score, ROI, beneficio, precio, kilómetros, año).
+        sort_order: Dirección de ordenación (asc/desc).
         providers: Lista de providers a utilizar (ej: ["autoscout24", "mobile_de"]).
         country: País de destino para la importación.
         budget_min: Presupuesto mínimo (EUR).
@@ -84,7 +88,16 @@ class SearchRequest(BaseModel):
 
     query: str = Field(..., min_length=1, description="Término de búsqueda")
     max_results: int = Field(default=20, ge=1, le=100, description="Máximo de resultados")
-    providers: list[str] = Field(default_factory=_default_search_providers)
+    offset: int = Field(default=0, ge=0, description="Desplazamiento para paginación")
+    sort_by: str = Field(default="score", description="Campo de ordenación")
+    sort_order: Literal["asc", "desc"] = Field(
+        default="desc", description="Dirección de ordenación"
+    )
+    providers: list[str] = Field(
+        default_factory=_default_search_providers,
+        max_length=20,
+        description="Providers a consultar (sin duplicados; se normalizan)",
+    )
     country: str = Field(default="ES", max_length=10)
     budget_min: float | None = Field(default=None, ge=0)
     budget_max: float | None = Field(default=None, ge=0)
@@ -104,6 +117,25 @@ class SearchRequest(BaseModel):
             "No confundir con 'providers' (listado de anuncios)."
         ),
     )
+
+    @field_validator("providers")
+    @classmethod
+    def _normalize_providers(cls, value: list[str]) -> list[str]:
+        """Normaliza la lista de providers: trim, sin vacíos y sin duplicados.
+
+        Un provider repetido duplicaría peticiones de red y luego sería
+        deduplicado igualmente por (source, external_id); mejor eliminarlo
+        antes de gastar el fetch.
+        """
+        normalized: list[str] = []
+        seen: set[str] = set()
+        for name in value:
+            clean = (name or "").strip()
+            if not clean or clean in seen:
+                continue
+            seen.add(clean)
+            normalized.append(clean)
+        return normalized
 
 
 class SearchResult(BaseModel):
@@ -166,5 +198,11 @@ class SearchEngineResult(BaseModel):
     results: list[SearchResult]
     provider_issues: list[ProviderIssue] = Field(default_factory=list)
     """Providers que fallaron. Vacío = todos respondieron (SEARCH.DIAG.1)."""
+    total_matches: int = 0
+    """Total de resultados que encajan ANTES de aplicar offset/max_results.
+
+    Permite paginar sin perder la noción de cuántos hay en total."""
+    providers_succeeded: list[str] = Field(default_factory=list)
+    """Providers solicitados que respondieron sin error (trazabilidad)."""
 
     model_config = {"arbitrary_types_allowed": True}

@@ -14,7 +14,7 @@ from app.dependencies.auth import get_current_user
 from app.main import app
 from app.models.user import User
 from app.models.vehicle import Vehicle
-from app.services.profit_analyzer import ProfitAnalysis, ProfitAnalyzer, Recommendation, RiskLevel
+from app.services.profit_analyzer import ProfitAnalysis, ProfitAnalyzer, ProfitRecommendation as Recommendation, RiskLevel
 
 client = TestClient(app)
 

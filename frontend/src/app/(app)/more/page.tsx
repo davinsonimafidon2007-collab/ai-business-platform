@@ -32,7 +32,7 @@ const ADMIN_LINKS: MoreLink[] = [
  */
 export default function MorePage() {
   const user = useAuthStore((s) => s.user);
-  const isAdmin = user?.role === "ADMIN" || isAuthDisabled();
+  const isAdmin = user?.role === "admin" || isAuthDisabled();
   const links: MoreLink[] = isAdmin
     ? [...MAIN_LINKS, ...ADMIN_LINKS]
     : MAIN_LINKS;

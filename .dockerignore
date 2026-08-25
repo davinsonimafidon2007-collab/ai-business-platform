@@ -1,26 +1,59 @@
+# VCS / CI
 .git
+.gitignore
+.github
+
+# Python
 .venv
 __pycache__
 *.py[cod]
 .pytest_cache
 .ruff_cache
-.env
-htmlcov
 .coverage
+htmlcov
+*.egg-info/
+.mypy_cache
+
+# Entornos / secretos — nunca dentro de la imagen
+.env
+.env.*
+
+# Tests / docs / tooling (no se ejecutan en el contenedor)
 tests/
-frontend/
 docs/
 scripts/
-android/
-node_modules/
-npm-debug.log*
+audit_reports/
 *.md
 !README.md
+*.txt
+*.log
+
+# Frontend (se construye con frontend/Dockerfile, contexto aparte)
+frontend/
+node_modules/
+npm-debug.log*
+package-lock.json
+package.json
+
+# Proyectos espejo / clones que NO forman parte de esta imagen
+ai-business-platform-clone/
+ai-agent-platform/
+
+# Android / móvil
+android/
+
+# Datos locales y artefactos de build
 .obs/
 *.db
 *.sqlite
 uploads/
 backups/
-*.egg-info/
 build/
 dist/
+
+# Observabilidad y logging: solo se usan vía bind-mount desde el host
+monitoring/
+logging/
+docker-compose*.yml
+Dockerfile
+.dockerignore

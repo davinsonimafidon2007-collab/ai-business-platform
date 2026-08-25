@@ -122,6 +122,7 @@ def test_settings_ignores_extra_env_vars():
         "os.environ",
         {
             "ENVIRONMENT": "development",
+            "JWT_SECRET_KEY": "test-secret-for-ignore-extra-vars-at-least-32-chars-long",
             "UNKNOWN_VAR": "should-be-ignored",
             "ANOTHER_VAR": "also-ignored",
         },
