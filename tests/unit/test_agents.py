@@ -23,7 +23,7 @@ from app.agents.schemas import (
     RescoreAgentInput,
     ScoringAgentInput,
 )
-from app.models.search import SearchEngineResult, SearchSummary
+from app.models.search import SearchEngineResult, SearchResult, SearchSummary
 
 
 # =============================================================================
@@ -232,7 +232,8 @@ async def test_alert_agent_triggers_on_rules():
     )
 
     assert output.triggered is True
-    assert len(output.alerts) == 3
+    # min_level GOOD (EXCELLENT ≥ GOOD) + min_profit + min_roi + recomendación BUY_NOW.
+    assert len(output.alerts) == 4
 
 
 @pytest.mark.asyncio
@@ -271,11 +272,9 @@ async def test_alert_agent_action_recommendation_always_reported():
 # =============================================================================
 
 
-class _ResultStub:
-    """SearchResult mínimo: solo lo que consume el filtro (profit_analysis)."""
-
-    def __init__(self, net_profit: float | None) -> None:
-        self.profit_analysis = None if net_profit is None else _Profit(net_profit)
+# =============================================================================
+# BudgetSearchAgent — filtro de beneficio real
+# =============================================================================
 
 
 class _Profit:
@@ -283,8 +282,19 @@ class _Profit:
         self.net_profit = net_profit
 
 
+def _search_result(net_profit: float | None) -> SearchResult:
+    """SearchResult real; solo profit_analysis importa para el filtro."""
+    return SearchResult(
+        vehicle={"external_id": "x"},
+        vehicle_score={"score": 50},
+        market_estimation={"confidence": 60},
+        profit_analysis=None if net_profit is None else _Profit(net_profit),
+        opportunity={"recommendation": "WATCH"},
+    )
+
+
 class _FakeEngine:
-    def __init__(self, results: list[_ResultStub]) -> None:
+    def __init__(self, results: list[SearchResult]) -> None:
         self._results = results
         self.requests: list = []
 
@@ -299,8 +309,10 @@ class _FakeEngine:
 
 @pytest.mark.asyncio
 async def test_budget_agent_filters_results_below_min_profit():
-    engine = _FakeEngine([_ResultStub(2000.0), _ResultStub(100.0), _ResultStub(None)])
-    agent = BudgetSearchAgent(search_engine=engine)  # type: ignore[arg-type]
+    engine = _FakeEngine(
+        [_search_result(2000.0), _search_result(100.0), _search_result(None)]
+    )
+    agent = BudgetSearchAgent(search_engine=engine)
 
     output = await agent.run({"total_budget": 20000, "profit_margin_min": 500})
 
@@ -311,8 +323,8 @@ async def test_budget_agent_filters_results_below_min_profit():
 
 @pytest.mark.asyncio
 async def test_budget_agent_without_filter_keeps_everything():
-    engine = _FakeEngine([_ResultStub(10.0), _ResultStub(5.0)])
-    agent = BudgetSearchAgent(search_engine=engine)  # type: ignore[arg-type]
+    engine = _FakeEngine([_search_result(10.0), _search_result(5.0)])
+    agent = BudgetSearchAgent(search_engine=engine)
 
     output = await agent.run({"total_budget": 20000, "profit_margin_min": 0})
 
@@ -323,7 +335,7 @@ async def test_budget_agent_without_filter_keeps_everything():
 @pytest.mark.asyncio
 async def test_budget_agent_budget_too_low_skips_engine():
     engine = _FakeEngine([])
-    agent = BudgetSearchAgent(search_engine=engine)  # type: ignore[arg-type]
+    agent = BudgetSearchAgent(search_engine=engine)
 
     output = await agent.run({"total_budget": 10})
 

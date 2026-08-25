@@ -176,7 +176,7 @@ class TestStringCleaning:
         assert extract_country_from_location("Madrid, ES") == "ES"
         assert extract_country_from_location("Munich, Germany") == "DE"
         assert extract_country_from_location("Paris, FR") == "FR"
-        assert extract_country_from_location("Barcelona") is None
+        assert extract_country_from_location("Barcelona") == "ES"
         assert extract_country_from_location(None) is None
 
     def test_parse_price_text(self) -> None:
@@ -728,8 +728,9 @@ class TestSelectPreferredVehicle:
             year=2020,
             mileage=50000,
             price=35000.0,
-            images=["img1.jpg"],
-            equipment=["GPS"],
+            images=[],
+            equipment=[],
+            description="",
         )
         dto2 = VehicleSearchResult(
             source="mobile_de",
@@ -741,12 +742,15 @@ class TestSelectPreferredVehicle:
             price=36000.0,
             images=["img1.jpg", "img2.jpg", "img3.jpg"],
             equipment=["GPS", "Leather", "Sunroof", "Navi"],
+            description="Full description with many details about the vehicle condition and history.",
         )
         norm1 = NormalizedVehicle.from_provider_dto(dto1)
         norm2 = NormalizedVehicle.from_provider_dto(dto2)
 
+        # dto2 has much higher quality score
+        assert norm2.quality_score > norm1.quality_score
         preferred = select_preferred_vehicle([norm1, norm2], ["autoscout24", "mobile_de"])
-        assert preferred.source == "mobile_de"  # Better quality (more images/equipment)
+        assert preferred.source == "mobile_de"  # Better quality
 
     def test_prefers_source_order_when_quality_equal(self) -> None:
         dto1 = VehicleSearchResult(

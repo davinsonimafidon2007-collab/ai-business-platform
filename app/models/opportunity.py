@@ -25,6 +25,8 @@ class Opportunity(Base):
     __table_args__ = (
         Index("ix_opportunities_vehicle_id", "vehicle_id"),
         Index("ix_opportunities_created_at", "created_at"),
+        # Prevent duplicate opportunities for the same vehicle (latest analysis wins)
+        Index("ix_opportunities_vehicle_analyzed", "vehicle_id", "analyzed_at"),
     )
 
     id: Mapped[str] = mapped_column(
@@ -90,4 +92,18 @@ class Opportunity(Base):
             self.id = str(uuid4())
         if getattr(self, "created_at", None) is None:
             self.created_at = datetime.now(UTC)
+
+    @property
+    def is_valid(self) -> bool:
+        """Verifica si la oportunidad tiene todos los datos críticos."""
+        return all(
+            [
+                self.opportunity_score is not None,
+                self.recommendation is not None,
+                self.roi is not None,
+                self.risk is not None,
+                self.profit is not None,
+                self.analyzed_at is not None,
+            ]
+        )
 

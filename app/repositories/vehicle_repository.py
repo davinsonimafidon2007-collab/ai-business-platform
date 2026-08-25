@@ -51,6 +51,7 @@ class VehicleRepository:
         query = select(Vehicle).where(Vehicle.vin == normalized)
         if user_id is not None:
             query = query.where(Vehicle.user_id == str(user_id))
+        query = query.options(selectinload(Vehicle.evaluations), selectinload(Vehicle.opportunities))
         result = await self.session.execute(query)
         return result.scalar_one_or_none()
 

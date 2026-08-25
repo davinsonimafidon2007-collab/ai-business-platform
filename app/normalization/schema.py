@@ -557,6 +557,15 @@ _TRANSMISSION_MAP: dict[str, str] = {
 def normalize_transmission(value: str) -> str:
     """Normalize transmission to canonical Spanish labels."""
     v = value.strip().lower()
+    # Check for specific patterns before removing special chars
+    if "dsg" in v:
+        return "Automática (DSG)"
+    if "tiptronic" in v:
+        return "Automática (Tiptronic)"
+    if "multitronic" in v:
+        return "Automática (Multitronic)"
+    if "cvt" in v:
+        return "Automática (CVT)"
     v = re.sub(r"[^a-záéíóúüñ]", "", v)
     return _TRANSMISSION_MAP.get(v, value.strip().capitalize())
 
@@ -608,15 +617,15 @@ def extract_country_from_location(location: str | None) -> str | None:
         return None
     location_lower = location.lower()
     country_patterns = {
-        "DE": ["deutschland", "germany", "de ", " de", ", de"],
-        "ES": ["españa", "espana", "spain", " es", ", es"],
-        "FR": ["france", "france", " fr", ", fr"],
-        "IT": ["italia", "italy", " it", ", it"],
-        "PT": ["portugal", " pt", ", pt"],
-        "BE": ["belgique", "belgie", "belgium", " be", ", be"],
-        "NL": ["nederland", "holland", " netherlands", " nl", ", nl"],
-        "AT": ["osterreich", "österreich", "austria", " at", ", at"],
-        "PL": ["polska", "poland", " pl", ", pl"],
+        "DE": ["deutschland", "germany", "de ", " de", ", de", "berlin", "munich", "hamburg", "köln", "frankfurt"],
+        "ES": ["españa", "espana", "spain", " es", ", es", "madrid", "barcelona", "valencia", "sevilla", "bilbao"],
+        "FR": ["france", "france", " fr", ", fr", "paris", "lyon", "marseille"],
+        "IT": ["italia", "italy", " it", ", it", "roma", "milano", "napoli"],
+        "PT": ["portugal", " pt", ", pt", "lisboa", "porto"],
+        "BE": ["belgique", "belgie", "belgium", " be", ", be", "brussels", "bruxelles"],
+        "NL": ["nederland", "holland", " netherlands", " nl", ", nl", "amsterdam", "rotterdam"],
+        "AT": ["osterreich", "österreich", "austria", " at", ", at", "wien", "vienna"],
+        "PL": ["polska", "poland", " pl", ", pl", "warszawa", "krakow"],
     }
     for code, patterns in country_patterns.items():
         for pattern in patterns:

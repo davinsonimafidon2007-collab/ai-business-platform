@@ -116,11 +116,20 @@ class _Opportunity:
 
 def _fake_search_result() -> SearchResult:
     return SearchResult(
-        vehicle=_Vehicle(),
+        # DTOs reales (dataclasses): el endpoint serializa objetos de dominio.
+        vehicle=VehicleSearchResult(source="mobile_de", external_id="ext-123"),
         vehicle_score={"score": 90},
         market_estimation={"confidence": 80},
         profit_analysis={"net_profit": 3000.0},
-        opportunity=_Opportunity(),
+        opportunity=OpportunityAnalysis(
+            overall_score=85.0,
+            opportunity_level=OpportunityLevel.EXCELLENT,
+            recommendation=Recommendation.BUY_NOW,
+            estimated_profit=3000.0,
+            roi=20.0,
+            market_confidence=80.0,
+            risk_level="LOW",
+        ),
     )
 
 

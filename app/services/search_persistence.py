@@ -246,6 +246,14 @@ class SearchPersistenceService:
         if opportunity is None:
             return None
 
+        # Validate critical data before creating/updating opportunity
+        if not self._validate_opportunity_data(vehicle_id, search_result, opportunity):
+            logger.warning(
+                "Skipping opportunity creation for vehicle %s: critical data missing",
+                vehicle_id,
+            )
+            return None
+
         result = await self.session.execute(
             select(Opportunity)
             .where(Opportunity.vehicle_id == vehicle_id)
@@ -271,6 +279,61 @@ class SearchPersistenceService:
         self.session.add(opp)
         await self.session.flush()
         return opp
+
+    def _validate_opportunity_data(
+        self, vehicle_id: str, search_result: Any, opportunity: Any
+    ) -> bool:
+        """Valida que los datos críticos estén presentes antes de persistir una oportunidad.
+
+        Criterios:
+        - El vehículo debe tener precio
+        - El opportunity score debe ser un número válido
+        - Debe haber recomendación
+        - Debe haber nivel de riesgo
+        - El beneficio y ROI deben estar calculados
+        """
+        # Validar que el vehículo tiene precio
+        vehicle = getattr(search_result, "vehicle", None)
+        if vehicle is None:
+            logger.debug("Vehicle missing for vehicle_id=%s", vehicle_id)
+            return False
+
+        vehicle_price = getattr(vehicle, "price", None)
+        if vehicle_price is None or vehicle_price <= 0:
+            logger.debug("Vehicle price missing or invalid for vehicle_id=%s", vehicle_id)
+            return False
+
+        # Validar opportunity score
+        overall_score = getattr(opportunity, "overall_score", None)
+        if overall_score is None or not (0 <= overall_score <= 100):
+            logger.debug("Invalid opportunity score for vehicle_id=%s: %s", vehicle_id, overall_score)
+            return False
+
+        # Validar recomendación
+        recommendation = getattr(opportunity, "recommendation", None)
+        if recommendation is None:
+            logger.debug("Recommendation missing for vehicle_id=%s", vehicle_id)
+            return False
+
+        # Validar nivel de riesgo
+        risk_level = getattr(opportunity, "risk_level", None)
+        if risk_level is None:
+            logger.debug("Risk level missing for vehicle_id=%s", vehicle_id)
+            return False
+
+        # Validar que el profit analysis tiene datos
+        profit_analysis = getattr(search_result, "profit_analysis", None)
+        if profit_analysis is None:
+            logger.debug("Profit analysis missing for vehicle_id=%s", vehicle_id)
+            return False
+
+        roi = getattr(profit_analysis, "roi_percentage", None)
+        net_profit = getattr(profit_analysis, "net_profit", None)
+        if roi is None or net_profit is None:
+            logger.debug("ROI or net_profit missing for vehicle_id=%s", vehicle_id)
+            return False
+
+        return True
 
     async def _ensure_deal(self, user_id: str, vehicle_id: str, opp: Opportunity) -> None:
         """Crea Deal NEW si la oportunidad es BUY y no existe Deal activo."""

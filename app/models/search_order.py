@@ -124,10 +124,11 @@ class SearchOrderVehicle(Base):
     """Vehículo encontrado por una orden de búsqueda + estado "visto"."""
 
     __tablename__ = "search_order_vehicles"
+    # Nota: search_order_id y vehicle_id ya generan sus índices vía
+    # index=True en las columnas; declararlos también aquí duplicaba el
+    # CREATE INDEX (mismo nombre) y rompía metadata.create_all.
     __table_args__ = (
         UniqueConstraint("search_order_id", "vehicle_id", name="uq_search_order_vehicle"),
-        Index("ix_search_order_vehicles_search_order_id", "search_order_id"),
-        Index("ix_search_order_vehicles_vehicle_id", "vehicle_id"),
     )
 
     id: Mapped[str] = mapped_column(

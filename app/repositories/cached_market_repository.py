@@ -191,17 +191,14 @@ class CachedMarketRepository:
         Returns:
             Number of deleted records.
         """
+        from sqlalchemy import delete
+
         now = datetime.now(UTC)
         result = await self.session.execute(
-            select(CachedMarketData).where(
-                CachedMarketData.expires_at < now
-            )
+            delete(CachedMarketData).where(CachedMarketData.expires_at < now)
         )
-        expired = list(result.scalars().all())
-        for entry in expired:
-            await self.session.delete(entry)
         await self.session.commit()
-        return len(expired)
+        return result.rowcount or 0
 
     async def delete(self, market_data: CachedMarketData) -> None:
         """Deletes a cached market data entry.

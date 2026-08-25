@@ -32,12 +32,11 @@ class RefreshTokenRepository:
             await self.session.commit()
 
     async def revoke_all_by_user_id(self, user_id: UUID | str) -> None:
-        result = await self.session.execute(
-            select(RefreshToken).where(RefreshToken.user_id == str(user_id), RefreshToken.is_revoked == False)
+        from sqlalchemy import update
+
+        await self.session.execute(
+            update(RefreshToken)
+            .where(RefreshToken.user_id == str(user_id), RefreshToken.is_revoked == False)
+            .values(is_revoked=True, revoked_at=datetime.now(UTC))
         )
-        tokens = result.scalars().all()
-        for token in tokens:
-            token.is_revoked = True
-            token.revoked_at = datetime.now(UTC)
-        if tokens:
-            await self.session.commit()
+        await self.session.commit()

@@ -4,6 +4,19 @@ Completamente independiente del scraping y del scoring.
 Recibe un Vehicle (o cualquier objeto que implemente VehicleData)
 y devuelve un análisis económico completo de una posible importación.
 
+Garantías (AUDIT.PROFIT.1):
+    - Determinista: mismas entradas → mismas salidas (sin aleatoriedad,
+      sin fechas, sin red por debajo).
+    - Redondeo: todo importe monetario se redondea a céntimos (half-up,
+      vía ``Decimal``) ANTES de sumar; los totales son suma de componentes
+      ya redondeados, así que el desglose cuadra al céntimo.
+    - Moneda: todos los importes están en EUR. Si el vehículo declara otra
+      moneda se exige ``fx_rate_to_eur`` explícito; nunca se convierte en
+      silencio ni se mezclan monedas.
+    - Impuestos: el IEDMT (CO₂) solo se aplica en perfiles con destino
+      España (``applies_iedmt=True``); el resto de destinos lo llevan
+      dentro de ``registration_cost``.
+
 Dependencias:
     - VehicleData (Protocol) para los datos del vehículo.
     - app/config/import_costs.py para toda la configuración económica.
@@ -17,9 +30,45 @@ No depende de:
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
+from decimal import ROUND_HALF_UP, Decimal
 from enum import Enum
 from typing import Any, ClassVar, Final, Protocol
+
+# =============================================================================
+# Constantes económicas del analyzer
+# =============================================================================
+
+EUR: Final[str] = "EUR"
+"""Moneda canónica de todos los cálculos."""
+
+_CURRENCY_ALIASES_EUR: Final[frozenset[str]] = frozenset({"EUR", "€", "EURO"})
+
+HIGH_IMPORT_COST_RATIO: Final[float] = 0.5
+"""Aviso si los costes de importación superan este ratio sobre la compra."""
+
+DEFAULT_SALE_PRICE_MULTIPLIER: Final[float] = 1.4
+"""Multiplicador legacy compra→venta cuando no hay precio de mercado."""
+
+
+def round2(value: float) -> float:
+    """Redondeo monetario determinista a céntimos (half-up).
+
+    Usa ``Decimal(str(value))`` para evitar sorpresas de binario flotante:
+    ``round2(2.675) == 2.68`` (``round()`` daría 2.67 por representación).
+    """
+    return float(Decimal(str(value)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+
+
+def _require_finite_number(name: str, value: Any) -> float:
+    """Valida que ``value`` es un número finito (no NaN/inf/bool)."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"{name} debe ser un número finito; recibido {value!r}.")
+    value_f = float(value)
+    if not math.isfinite(value_f):
+        raise ValueError(f"{name} debe ser un número finito; recibido {value!r}.")
+    return value_f
 
 # =============================================================================
 # Enumeraciones de salida
@@ -57,6 +106,23 @@ Recommendation = ProfitRecommendation
 # =============================================================================
 
 
+@dataclass(frozen=True)
+class SaleScenario:
+    """Escenario de venta determinista para el análisis de incertidumbre.
+
+    Attributes:
+        label: "pessimistic" | "base" | "optimistic".
+        sale_price: Precio de venta del escenario (EUR).
+        net_profit: Beneficio neto del escenario (EUR).
+        roi_percentage: ROI del escenario (%).
+    """
+
+    label: str
+    sale_price: float
+    net_profit: float
+    roi_percentage: float
+
+
 @dataclass
 class CostBreakdown:
     """Desglose detallado de todos los costes calculados.
@@ -87,7 +153,11 @@ class CostBreakdown:
     """Comisión del intermediario."""
 
     miscellaneous_cost: float
-    """Otros costes no categorizados."""
+    """Otros costes no categorizados. Incluye gestoría/paperwork y extras."""
+
+    paperwork_cost: float = 0.0
+    """Coste de gestoría/trámites incluido dentro de ``miscellaneous_cost``
+    (expuesto por transparencia; NO sumar aparte)."""
 
     total_fixed_costs: float = 0.0
     """Suma de todos los costes fijos (transporte, matriculación, ITV, etc.)."""
@@ -181,9 +251,31 @@ class ProfitAnalysis:
     roi_percentage: float
     profit_margin_percentage: float
     risk_level: RiskLevel
-    recommendation: ProfitRecommendation
+    recommendation: Recommendation
     cost_breakdown: CostBreakdown = field(repr=False)
     warnings: list[str] = field(default_factory=list, repr=False)
+
+    # --- AUDIT.PROFIT.1: precios de referencia e incertidumbre -------------
+    break_even_sale_price: float = 0.0
+    """Precio mínimo de venta para no perder dinero (= total_cost, EUR)."""
+
+    target_sale_price: float = 0.0
+    """Precio objetivo de venta que deja el margen porcentual objetivo
+    sobre venta (EUR). Con margen 0 coincide con break_even."""
+
+    sale_price_source: str = "multiplier"
+    """De dónde salió ``estimated_sale_price``: "provided" (dato de mercado /
+    llamada) o "multiplier" (estimación legacy compra × multiplicador)."""
+
+    currency: str = EUR
+    """Moneda del análisis (siempre EUR tras conversión/validación)."""
+
+    fx_rate_to_eur: float | None = None
+    """Tipo de cambio aplicado si la compra estaba en otra moneda."""
+
+    uncertainty: tuple[SaleScenario, ...] = ()
+    """Escenarios deterministas (pesimista, base, optimista) variando el
+    precio de venta ±``scenario_spread_percent``."""
 
 
 # =============================================================================
@@ -210,6 +302,11 @@ class VehicleData(Protocol):
     def mileage(self) -> int | None: ...
     @property
     def emissions(self) -> str | None: ...
+    @property
+    def currency(self) -> str | None:
+        """Moneda del precio (ISO o None=EUR). Opcional en la práctica: los
+        objetos sin el atributo se tratan como EUR vía ``getattr``."""
+        ...
 
 
 # =============================================================================

@@ -176,9 +176,11 @@ def test_health_ready_ok_when_dependencies_listen(
     from app.api.v1.routes import health as health_module
 
     # Socket real en un puerto efímero: simula un servicio escuchando.
+    # Backlog >= 2: el probe hace dos conexiones sin accept() intermedio y el
+    # kernel debe completar el handshake de ambas.
     listener = socket.socket()
     listener.bind(("127.0.0.1", 0))
-    listener.listen(1)
+    listener.listen(8)
     port = listener.getsockname()[1]
     try:
         monkeypatch.setattr(

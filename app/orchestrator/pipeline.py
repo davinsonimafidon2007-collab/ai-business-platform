@@ -28,6 +28,7 @@ from app.agents.schemas import (
     SearchAgentOutput,
 )
 from app.agents.scoring_agent import ScoringAgent
+from app.agents.search_agent import SearchAgent
 from app.services.search_engine import SearchEngineService
 
 

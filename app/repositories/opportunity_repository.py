@@ -76,15 +76,62 @@ class OpportunityRepository:
             vehicle_id: The UUID of the vehicle.
 
         Returns:
-            List of Opportunity records ordered by analyzed_at DESC.
+            List of Opportunity records ordered by analyzed_at DESC (NULLS LAST).
         """
         result = await self.session.execute(
             select(Opportunity)
             .where(Opportunity.vehicle_id == str(vehicle_id))
             .options(selectinload(Opportunity.vehicle))
-            .order_by(Opportunity.analyzed_at.desc())
+            .order_by(Opportunity.analyzed_at.desc().nulls_last(), Opportunity.created_at.desc())
         )
         return list(result.scalars().all())
+
+    async def get_latest_by_vehicle_id(self, vehicle_id: str | UUID) -> Opportunity | None:
+        """Retrieves the most recent opportunity for a vehicle.
+
+        Args:
+            vehicle_id: The UUID of the vehicle.
+
+        Returns:
+            The latest Opportunity record, or None if none exists.
+        """
+        result = await self.session.execute(
+            select(Opportunity)
+            .where(Opportunity.vehicle_id == str(vehicle_id))
+            .options(selectinload(Opportunity.vehicle))
+            .order_by(Opportunity.analyzed_at.desc().nulls_last(), Opportunity.created_at.desc())
+            .limit(1)
+        )
+        return result.scalar_one_or_none()
+
+    async def upsert_opportunity(self, opportunity: Opportunity) -> Opportunity:
+        """Inserts a new opportunity or updates the latest one for the same vehicle.
+
+        This prevents duplicate opportunities for the same vehicle by updating
+        the most recent record instead of creating a new one.
+
+        Args:
+            opportunity: The Opportunity instance to persist.
+
+        Returns:
+            The persisted Opportunity (new or updated).
+        """
+        existing = await self.get_latest_by_vehicle_id(opportunity.vehicle_id)
+        if existing is not None:
+            # Update existing record
+            existing.opportunity_score = opportunity.opportunity_score
+            existing.recommendation = opportunity.recommendation
+            existing.roi = opportunity.roi
+            existing.risk = opportunity.risk
+            existing.profit = opportunity.profit
+            existing.analyzed_at = opportunity.analyzed_at or datetime.now(UTC)
+            existing.engine_version = opportunity.engine_version
+            await self.session.commit()
+            await self.session.refresh(existing)
+            return existing
+        else:
+            # Create new record
+            return await self.save(opportunity)
 
     async def exists(self, vehicle_id: str | UUID) -> bool:
         """Checks if any opportunity record exists for a vehicle.
@@ -175,10 +222,10 @@ class OpportunityRepository:
         total_result = await self.session.execute(count_query)
         total = total_result.scalar() or 0
 
-        # Items query
+        # Items query - deterministic tie-breaker for paginación
         items_query = (
             base_query.options(selectinload(Opportunity.vehicle))
-            .order_by(Opportunity.opportunity_score.desc())
+            .order_by(Opportunity.opportunity_score.desc(), Opportunity.id.desc())
             .offset(offset)
             .limit(limit)
         )

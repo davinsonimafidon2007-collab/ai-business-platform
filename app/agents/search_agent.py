@@ -47,7 +47,7 @@ class SearchAgent(BaseAgent[SearchAgentInput, SearchAgentOutput]):
             max_results=input_data.max_results,
             country=input_data.country,
             budget_max=input_data.budget_max,
-            providers=input_data.providers,
+            **({"providers": input_data.providers} if input_data.providers else {}),
         )
         result = await engine.search(request)
         return SearchAgentOutput(

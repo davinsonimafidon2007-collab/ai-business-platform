@@ -31,7 +31,14 @@ class InspectionSessionRepository:
     async def get_by_id(self, inspection_id: str | UUID) -> InspectionSession | None:
         """Obtiene una sesión por su ID."""
         result = await self.session.execute(
-            select(InspectionSession).where(InspectionSession.id == str(inspection_id))
+            select(InspectionSession)
+            .where(InspectionSession.id == str(inspection_id))
+            .options(
+                selectinload(InspectionSession.observations).selectinload(InspectionObservation.photos),
+                selectinload(InspectionSession.user),
+                selectinload(InspectionSession.vehicle),
+                selectinload(InspectionSession.photos),
+            )
         )
         return result.scalar_one_or_none()
 
@@ -65,10 +72,11 @@ class InspectionSessionRepository:
                 ),
                 selectinload(InspectionSession.user),
                 selectinload(InspectionSession.vehicle),
+                selectinload(InspectionSession.photos),
             )
+            .order_by(InspectionSession.created_at.desc(), InspectionSession.id.desc())
             .offset(skip)
             .limit(limit)
-            .order_by(InspectionSession.created_at.desc())
         )
         return list(result.scalars().all())
 

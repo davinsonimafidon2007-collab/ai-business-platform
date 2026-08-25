@@ -57,10 +57,12 @@ const nextConfig: NextConfig = {
       }
     : {}),
   ...(isDockerBuild ? { output: "standalone" as const } : {}),
+  // Raíz de tracing en el repo (dedupe de lockfiles monorepo). En Docker NO:
+  // anidaría .next/standalone bajo un subdirectorio y rompería server.js.
+  ...(isDockerBuild ? {} : { outputFileTracingRoot: path.join(__dirname, "../") }),
   images: {
     unoptimized: true,
   },
-  outputFileTracingRoot: path.join(__dirname, "../"),
   async headers() {
     return [
       {

@@ -27,7 +27,9 @@ class UserRepository:
         return result.scalar_one_or_none()
 
     async def list(self) -> list[User]:
-        result = await self.session.execute(select(User))
+        from app.core.limits import clamp_limit
+
+        result = await self.session.execute(select(User).order_by(User.created_at.desc(), User.id.desc()).limit(clamp_limit(100)))
         return list(result.scalars().all())
 
     async def update(self, user: User) -> User:
