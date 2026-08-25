@@ -22,8 +22,8 @@ depends_on = None
 def upgrade() -> None:
     op.create_table(
         "opportunity_phases",
-        sa.Column("id", sa.String(length=36), nullable=False, primary_key=True),
-        sa.Column("opportunity_id", sa.String(length=36), nullable=False),
+        sa.Column("id", sa.Uuid(as_uuid=False), nullable=False, primary_key=True),
+        sa.Column("opportunity_id", sa.Uuid(as_uuid=False), nullable=False),
         sa.Column("title", sa.String(length=200), nullable=False),
         sa.Column("description", sa.Text(), nullable=True),
         sa.Column(
@@ -48,13 +48,21 @@ def upgrade() -> None:
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.ForeignKeyConstraint(["opportunity_id"], ["opportunities.id"], ondelete="CASCADE"),
     )
-    op.create_index("ix_opportunity_phases_opportunity_id", "opportunity_phases", ["opportunity_id"])
-    op.create_index("ix_opportunity_phases_status", "opportunity_phases", ["status"])
+    op.create_index(
+        "ix_opportunity_phases_opportunity_id",
+        "opportunity_phases",
+        ["opportunity_id"],
+    )
+    op.create_index(
+        "ix_opportunity_phases_opportunity_order",
+        "opportunity_phases",
+        ["opportunity_id", "order"],
+        unique=True,
+    )
 
 
 def downgrade() -> None:
-    op.drop_index("ix_opportunity_phases_status", table_name="opportunity_phases")
+    op.drop_index("ix_opportunity_phases_opportunity_order", table_name="opportunity_phases")
     op.drop_index("ix_opportunity_phases_opportunity_id", table_name="opportunity_phases")
     op.drop_table("opportunity_phases")
-    # El tipo Enum queda huérfano si no se borra
     sa.Enum(name="opportunity_phase_status").drop(op.get_bind(), checkfirst=True)
