@@ -229,32 +229,44 @@ def test_garbage_bearer_token_rejected_401(_no_db: None) -> None:
 
 @pytest.mark.asyncio
 async def test_require_role_blocks_non_admin() -> None:
-    dependency = require_admin()
+    # require_admin ya es la dependencia (factory aplicada), no una factory.
     with pytest.raises(AuthorizationError):
-        await dependency(current_user=_with_timestamps(_user(Role.USER)))
+        await require_admin(current_user=_with_timestamps(_user(Role.USER)))
 
 
 @pytest.mark.asyncio
 async def test_user_lacks_manage_users_permission() -> None:
     """USER tiene manage_own_api_keys pero NO manage_users → 403."""
-    dependency = require_manage_users()
     with pytest.raises(AuthorizationError):
-        await dependency(current_user=_with_timestamps(_user(Role.USER)))
+        await require_manage_users(current_user=_with_timestamps(_user(Role.USER)))
 
 
 @pytest.mark.asyncio
 async def test_local_admin_passes_every_permission_gate() -> None:
-    """Modo personal/multi-user: el ADMIN supera todos los gates de permisos."""
+    """Modo personal/multi-user: el ADMIN supera todos sus gates de permisos."""
     admin = _with_timestamps(_user(Role.ADMIN))
     for gate in (
-        require_admin(),
-        require_manage_users(),
-        require_search(),
-        require_view_admin(),
+        require_admin,
+        require_manage_users,
+        require_search,
+        require_view_admin,
         require_permission("manage_roles"),
         require_permission("manage_api_keys"),
         require_permission("view_audit_logs"),
-        require_permission("manage_own_api_keys"),
     ):
         resolved = await gate(current_user=admin)
         assert resolved.role == Role.ADMIN
+
+
+@pytest.mark.asyncio
+async def test_user_can_manage_own_api_keys_but_not_global_ones() -> None:
+    """Matriz RBAC: USER → manage_own_api_keys sí; manage_api_keys no."""
+    from app.dependencies.auth import require_manage_api_keys, require_manage_own_api_keys
+
+    user = _with_timestamps(_user(Role.USER))
+
+    resolved = await require_manage_own_api_keys(current_user=user)
+    assert resolved.role == Role.USER
+
+    with pytest.raises(AuthorizationError):
+        await require_manage_api_keys(current_user=user)

@@ -154,7 +154,7 @@ async def test_full_happy_flow_with_persistence(
     assert body["closed_at"] is not None
 
     # 5) Estado persistido en BD con closed_at.
-    await session.expire_all()
+    session.expire_all()
     stored = await session.get(Deal, deal_id)
     assert stored is not None
     assert stored.status == DealStatus.WON
@@ -192,7 +192,7 @@ async def test_impossible_transitions_rejected(
     assert resp.status_code == 422
 
     # El deal sigue en NEW en BD.
-    await session.expire_all()
+    session.expire_all()
     stored = await session.get(Deal, deal_id)
     assert stored.status == DealStatus.NEW
 
@@ -332,7 +332,7 @@ async def test_delete_deal_removes_history_cascade(
     del_resp = await client.delete(f"/api/v1/deals/{deal_id}")
     assert del_resp.status_code == 204
 
-    await session.expire_all()
+    session.expire_all()
     remaining_history = (
         (await session.execute(select(DealStatusHistory))).scalars().all()
     )

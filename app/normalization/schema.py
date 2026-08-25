@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import re
 from datetime import UTC, datetime
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 from pydantic import (
     BaseModel,
@@ -89,6 +89,7 @@ class NormalizedVehicle(BaseModel):
     provider_metadata: dict[str, Any] = Field(default_factory=dict)
     quality_score: float = Field(default=1.0, ge=0.0, le=1.0)
     quality_flags: list[str] = Field(default_factory=list)
+    _quality_initialized: bool = False
     normalized_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
     @field_validator("brand", "model", mode="before")
@@ -320,8 +321,10 @@ class NormalizedVehicle(BaseModel):
 
     @model_validator(mode="after")
     def validate_quality(self) -> NormalizedVehicle:
-        object.__setattr__(self, "quality_score", compute_quality_score(self)[0])
-        object.__setattr__(self, "quality_flags", compute_quality_score(self)[1])
+        if not self._quality_initialized:
+            object.__setattr__(self, "quality_score", compute_quality_score(self)[0])
+            object.__setattr__(self, "quality_flags", compute_quality_score(self)[1])
+            object.__setattr__(self, "_quality_initialized", True)
         return self
 
     def to_sqlalchemy_dict(self) -> dict[str, Any]:

@@ -156,13 +156,17 @@ class DealRepository:
         optimista) eleva ``StaleDataError`` desde el commit.
 
         Args:
-            deal: The Deal instance with updated fields.
+            deal: The Deal instance with updated fields (or the new Deal on
+                creation paths).
             history: The immutable DealStatusHistory row for this transition.
             audit_log: Optional AuditLog entry for the global audit trail.
 
         Returns:
             The refreshed Deal.
         """
+        # add() es idempotente: en transiciones el deal ya está persistente;
+        # en creación lo introduce en la sesión para que se inserte aquí.
+        self.session.add(deal)
         self.session.add(history)
         if audit_log is not None:
             self.session.add(audit_log)

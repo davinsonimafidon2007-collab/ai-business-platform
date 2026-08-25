@@ -1,31 +1,27 @@
+import { afterEach, describe, expect, it, vi } from "vitest";
+
 import { isAuthDisabled, LOCAL_USER } from "@/app/config/app-mode";
 
 describe("config/app-mode (PERSONAL.NOAUTH)", () => {
-  const ORIGINAL_ENV = process.env;
-
-  beforeEach(() => {
-    jest.resetModules();
-    process.env = { ...ORIGINAL_ENV };
-  });
-
-  afterAll(() => {
-    process.env = ORIGINAL_ENV;
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   describe("isAuthDisabled", () => {
     it("es false por defecto (multi-user con login)", () => {
+      vi.stubEnv("NEXT_PUBLIC_AUTH_DISABLED", "");
       delete process.env.NEXT_PUBLIC_AUTH_DISABLED;
       expect(isAuthDisabled()).toBe(false);
     });
 
     it("solo es true con NEXT_PUBLIC_AUTH_DISABLED=true exacto", () => {
-      process.env.NEXT_PUBLIC_AUTH_DISABLED = "true";
+      vi.stubEnv("NEXT_PUBLIC_AUTH_DISABLED", "true");
       expect(isAuthDisabled()).toBe(true);
 
-      process.env.NEXT_PUBLIC_AUTH_DISABLED = "TRUE";
+      vi.stubEnv("NEXT_PUBLIC_AUTH_DISABLED", "TRUE");
       expect(isAuthDisabled()).toBe(false);
 
-      process.env.NEXT_PUBLIC_AUTH_DISABLED = "1";
+      vi.stubEnv("NEXT_PUBLIC_AUTH_DISABLED", "1");
       expect(isAuthDisabled()).toBe(false);
     });
   });
@@ -40,7 +36,7 @@ describe("config/app-mode (PERSONAL.NOAUTH)", () => {
       expect(LOCAL_USER.email).toBe(BACKEND_LOCAL_USER_EMAIL);
     });
 
-    it("role usa el VALUE del enum backend en minúsculas ('admin')", () => {
+    it("role usa el VALUE del enum backend en minusculas ('admin')", () => {
       // El wire format de UserRead serializa Role por value ("admin"), no por
       // nombre ("ADMIN"). La UI compara contra este valor.
       expect(LOCAL_USER.role).toBe("admin");

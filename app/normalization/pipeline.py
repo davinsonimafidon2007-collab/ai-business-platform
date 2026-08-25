@@ -4,21 +4,15 @@ from __future__ import annotations
 
 import logging
 from decimal import Decimal
-from typing import Any
-from uuid import UUID
 
 from app.models.vehicle import Vehicle
-from app.providers.dto import VehicleDetail, VehicleSearchResult
-from app.repositories.vehicle_repository import VehicleRepository
 from app.normalization.schema import (
     NormalizedVehicle,
-    NormalizedEquipment,
-    compute_quality_score,
-    detect_corrupt_listing,
     deduplicate_vehicles,
-    convert_to_eur,
-    validate_vin,
+    detect_corrupt_listing,
 )
+from app.providers.dto import VehicleDetail, VehicleSearchResult
+from app.repositories.vehicle_repository import VehicleRepository
 
 logger = logging.getLogger(__name__)
 
@@ -134,9 +128,14 @@ class NormalizationPipeline:
         data["user_id"] = user_id
 
         if existing is not None:
+            # Don't overwrite the existing vehicle's ID
+            data.pop("id", None)
             for key, value in data.items():
                 if value is not None:
                     setattr(existing, key, value)
+            # Update timestamp
+            from datetime import UTC, datetime
+            existing.updated_at = datetime.now(UTC)
             return await self.repository.update(existing)
 
         vehicle = Vehicle(**data)
@@ -207,9 +206,6 @@ def normalize_search_results(
     exchange_rates: dict[str, Decimal] | None = None,
 ) -> list[Vehicle]:
     """Convenience function to normalize and persist search results."""
-    normalizer = VehicleNormalizer(exchange_rates=exchange_rates)
-    normalized = normalizer.normalize_batch(results)
-
     if repository is None:
         raise ValueError("Repository required for persistence")
 

@@ -254,30 +254,33 @@ class SearchPersistenceService:
             )
             return None
 
-        result = await self.session.execute(
-            select(Opportunity)
-            .where(Opportunity.vehicle_id == vehicle_id)
-            .order_by(Opportunity.created_at.desc())
-            .limit(1)
-        )
-        opp = result.scalar_one_or_none()
-        if opp is None:
-            opp = Opportunity(vehicle_id=vehicle_id)
-
+        # Build Opportunity object with all data
         rec = getattr(opportunity, "recommendation", None)
-        opp.opportunity_score = (
-            getattr(opportunity, "overall_score", None) or opp.opportunity_score
-        )
-        opp.recommendation = (
-            rec.value if hasattr(rec, "value") else _stringify(rec)
-        ) or opp.recommendation
-        opp.roi = getattr(opportunity, "roi", None) or opp.roi
-        opp.risk = getattr(opportunity, "risk_level", None) or opp.risk
-        opp.profit = getattr(opportunity, "estimated_profit", None) or opp.profit
-        opp.analyzed_at = datetime.now(UTC)
+        risk_level = getattr(opportunity, "risk_level", None)
 
-        self.session.add(opp)
-        await self.session.flush()
+        opp = Opportunity(
+            vehicle_id=vehicle_id,
+            opportunity_score=getattr(opportunity, "overall_score", None),
+            recommendation=rec.value if hasattr(rec, "value") else _stringify(rec),
+            roi=getattr(opportunity, "roi", None),
+            risk=risk_level.value if hasattr(risk_level, "value") else _stringify(risk_level),
+            profit=getattr(opportunity, "estimated_profit", None),
+            analyzed_at=datetime.now(UTC),
+            engine_version=getattr(opportunity, "engine_version", None),
+        )
+
+        # Use repository to upsert (prevents duplicates)
+        from app.repositories.opportunity_repository import OpportunityRepository
+
+        repo = OpportunityRepository(self.session)
+        opp = await repo.upsert_opportunity(opp)
+
+        # Seed workflow phases for this opportunity
+        from app.services.opportunity_phase_service import OpportunityPhaseService
+
+        phase_service = OpportunityPhaseService(self.session)
+        await phase_service.ensure_seeded(opp)
+
         return opp
 
     def _validate_opportunity_data(

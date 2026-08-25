@@ -30,6 +30,7 @@ def test_vehicle_create_rejects_missing_required_fields() -> None:
 def test_vehicle_read_allows_model_attributes() -> None:
     vehicle = VehicleRead(
         id="123e4567-e89b-12d3-a456-426614174000",
+        user_id="00000000-0000-4000-8000-000000000001",
         source="autoscout24",
         external_id="ext-002",
         brand="Audi",
@@ -39,6 +40,9 @@ def test_vehicle_read_allows_model_attributes() -> None:
     )
 
     assert vehicle.id == "123e4567-e89b-12d3-a456-426614174000"
+    assert (
+        vehicle.user_id == "00000000-0000-4000-8000-000000000001"
+    )
     assert vehicle.source == "autoscout24"
     assert vehicle.brand == "Audi"
     assert vehicle.model == "A4"

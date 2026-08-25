@@ -58,7 +58,9 @@ class ScoringAgent(BaseAgent[ScoringAgentInput, ScoringAgentOutput]):
     # Re-scoring (antiguo ReScoringAgent)
     # ------------------------------------------------------------------
 
-    async def rescore(self, input_data: RescoreAgentInput | dict[str, object]) -> RescoreAgentOutput:
+    async def rescore(
+        self, input_data: RescoreAgentInput | dict[str, object]
+    ) -> RescoreAgentOutput:
         """Recalcula el score con un precio nuevo y lo compara con el anterior."""
         validated = RescoreAgentInput.model_validate(input_data)
         previous_fields = dict(validated.vehicle.model_dump())

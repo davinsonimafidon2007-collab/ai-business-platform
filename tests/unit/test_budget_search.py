@@ -1,7 +1,9 @@
 """Tests para Budget Search Agent y endpoint."""
+
 import pytest
 from fastapi.testclient import TestClient
 
+from app.agents.base import AgentValidationError
 from app.agents.budget_search_agent import BudgetSearchAgent
 from app.api.v1.dependencies import get_search_engine_service
 from app.dependencies.auth import get_current_user
@@ -86,7 +88,7 @@ async def test_budget_agent_budget_too_low_returns_status_without_search():
 async def test_budget_agent_validates_input():
     agent = BudgetSearchAgent(profile_name="SPAIN", search_engine=_FakeEngine())
 
-    with pytest.raises(Exception):
+    with pytest.raises(AgentValidationError):
         await agent.run({"total_budget": -5})
 
 

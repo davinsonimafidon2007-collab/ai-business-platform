@@ -12,7 +12,12 @@ from app.main import app
 from app.models.search import SearchEngineResult, SearchResult, SearchSummary
 from app.models.user import User
 from app.orchestrator.pipeline import PipelineOrchestrator
-
+from app.providers.dto import VehicleSearchResult
+from app.services.opportunity_finder import (
+    OpportunityAnalysis,
+    OpportunityLevel,
+    Recommendation,
+)
 
 # =============================================================================
 # Registry
@@ -101,17 +106,6 @@ def test_get_agent_returns_404_for_unknown_id():
 # =============================================================================
 # POST /api/v1/agents/pipeline/run — pipeline SEARCH → ALERT con agents reales
 # =============================================================================
-
-
-class _Vehicle:
-    external_id = "ext-123"
-
-
-class _Opportunity:
-    opportunity_level = "EXCELLENT"
-    recommendation = "BUY_NOW"
-    estimated_profit = 3000.0
-    roi = 20.0
 
 
 def _fake_search_result() -> SearchResult:

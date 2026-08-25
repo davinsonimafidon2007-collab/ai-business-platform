@@ -10,10 +10,10 @@ from __future__ import annotations
 import pytest
 
 from app.agents.alert_agent import AlertAgent
+from app.agents.base import AgentValidationError
 from app.agents.budget_search_agent import BudgetSearchAgent
 from app.agents.negotiation_agent import NegotiationAgent
 from app.agents.opportunity_agent import OpportunityAgent
-from app.agents.scoring_agent import ScoringAgent
 from app.agents.schemas import (
     AlertAgentInput,
     AlertOpportunityInput,
@@ -23,8 +23,8 @@ from app.agents.schemas import (
     RescoreAgentInput,
     ScoringAgentInput,
 )
+from app.agents.scoring_agent import ScoringAgent
 from app.models.search import SearchEngineResult, SearchResult, SearchSummary
-
 
 # =============================================================================
 # ScoringAgent
@@ -56,7 +56,7 @@ async def test_scoring_agent_scores_real_vehicle_data():
 async def test_scoring_agent_rejects_invalid_input():
     agent = ScoringAgent()
 
-    with pytest.raises(Exception):
+    with pytest.raises(AgentValidationError):
         await agent.run({"vehicle": {"mileage": -5}})
 
 
@@ -81,7 +81,9 @@ async def test_scoring_agent_rescore_computes_delta():
 
 
 def test_rescore_input_requires_positive_price():
-    with pytest.raises(Exception):
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
         RescoreAgentInput(vehicle_id="v", new_price=0, vehicle={"price": 100})
 
 
@@ -183,7 +185,11 @@ async def test_negotiation_agent_builds_real_strategy_from_primitives():
             minimum_desired_profit=1000.0,
             target_margin=15.0,
             vehicle_score_data={"score": 65},
-            profit_analysis_data={"net_profit": 800.0, "roi_percentage": 8.0, "risk_level": "MEDIUM"},
+            profit_analysis_data={
+                "net_profit": 800.0,
+                "roi_percentage": 8.0,
+                "risk_level": "MEDIUM",
+            },
         )
     )
 
@@ -309,9 +315,7 @@ class _FakeEngine:
 
 @pytest.mark.asyncio
 async def test_budget_agent_filters_results_below_min_profit():
-    engine = _FakeEngine(
-        [_search_result(2000.0), _search_result(100.0), _search_result(None)]
-    )
+    engine = _FakeEngine([_search_result(2000.0), _search_result(100.0), _search_result(None)])
     agent = BudgetSearchAgent(search_engine=engine)
 
     output = await agent.run({"total_budget": 20000, "profit_margin_min": 500})

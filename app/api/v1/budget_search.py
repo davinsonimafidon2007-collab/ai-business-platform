@@ -1,4 +1,5 @@
 """Budget Search — Busca vehículos según capital total disponible."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -9,7 +10,7 @@ from pydantic import BaseModel, Field
 from app.agents.base import AgentError, AgentExecutionError, AgentTimeoutError
 from app.agents.budget_search_agent import BudgetSearchAgent
 from app.agents.schemas import BudgetSearchAgentInput
-from app.api.v1.dependencies import get_budget_search_agent, get_search_engine_service
+from app.api.v1.dependencies import get_search_engine_service
 from app.api.v1.routes.search import _build_search_result_item
 from app.api.v1.schemas.search import ProviderIssueSchema, SearchResultItem
 from app.config.import_costs import PROFILE_ALIASES, get_profile

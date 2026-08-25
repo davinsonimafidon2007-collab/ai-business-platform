@@ -24,7 +24,14 @@ class SearchRead(SearchBase):
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
     id: str
-    timestamp: datetime = Field(validation_alias="created_at", serialization_alias="timestamp")
+    user_id: str
+    created_at: datetime
+    # Compat: API exposes `timestamp` alias for created_at
+    timestamp: datetime | None = Field(default=None)
+
+    def model_post_init(self, __context: object) -> None:
+        if self.timestamp is None and getattr(self, "created_at", None) is not None:
+            object.__setattr__(self, "timestamp", self.created_at)
 
 
 class SearchUpdate(BaseModel):

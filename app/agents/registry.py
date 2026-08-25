@@ -8,7 +8,8 @@ agent listado es construible con los services reales.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Callable
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
 
 from app.agents.alert_agent import AlertAgent
 from app.agents.base import BaseAgent
@@ -40,10 +41,7 @@ def build_registry(
     search_engine: SearchEngineService | None = None,
 ) -> dict[str, BaseAgent[Any, Any]]:
     """Construye todas las instancias de agents registradas."""
-    return {
-        agent_id: factory()
-        for agent_id, factory in _default_factories(search_engine).items()
-    }
+    return {agent_id: factory() for agent_id, factory in _default_factories(search_engine).items()}
 
 
 def describe_agents(

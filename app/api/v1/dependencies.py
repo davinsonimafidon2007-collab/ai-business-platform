@@ -21,8 +21,15 @@ if TYPE_CHECKING:
 from fastapi import Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.agents.alert_agent import AlertAgent
+from app.agents.budget_search_agent import BudgetSearchAgent
+from app.agents.negotiation_agent import NegotiationAgent
+from app.agents.opportunity_agent import OpportunityAgent
+from app.agents.scoring_agent import ScoringAgent
+from app.agents.search_agent import SearchAgent
 from app.core.config import settings
 from app.database import get_db_session
+from app.orchestrator.pipeline import PipelineOrchestrator
 from app.providers.autoscout24 import AutoScout24Provider
 from app.providers.base import VehicleProvider
 from app.providers.http_client import ProviderHttpClient
@@ -156,7 +163,9 @@ def get_mobile_de_provider() -> MobileDeProvider:
         try:
             from app.providers.mobile_de_playwright import MobileDePlaywrightProvider
 
-            return MobileDePlaywrightProvider(http_client=client, base_url="https://suchen.mobile.de")  # type: ignore[return-value]
+            return MobileDePlaywrightProvider(
+                http_client=client, base_url="https://suchen.mobile.de"
+            )  # type: ignore[return-value]
         except ImportError:
             pass
     return MobileDeProvider(http_client=client, base_url="https://suchen.mobile.de")
@@ -258,6 +267,7 @@ def get_vision_provider():
     """
     if settings.gemini_api_key:
         from app.providers.gemini_vision import GeminiVisionProvider
+
         return GeminiVisionProvider(
             api_key=settings.gemini_api_key,
             model=settings.gemini_model,
@@ -286,12 +296,15 @@ def get_vehicle_evaluation_repository(
 ) -> VehicleEvaluationRepository:
     """Obtiene el repositorio de evaluaciones de vehículos."""
     from app.repositories.vehicle_evaluation_repository import VehicleEvaluationRepository
+
     return VehicleEvaluationRepository(session)
 
 
 def get_inspection_service(
     session_repo: InspectionSessionRepository = Depends(get_inspection_session_repository),
-    observation_repo: InspectionObservationRepository = Depends(get_inspection_observation_repository),
+    observation_repo: InspectionObservationRepository = Depends(
+        get_inspection_observation_repository
+    ),
     photo_repo: InspectionPhotoRepository = Depends(get_inspection_photo_repository),
     vision_service: VisionService = Depends(get_vision_service),
     evaluation_repo: VehicleEvaluationRepository = Depends(get_vehicle_evaluation_repository),
@@ -350,56 +363,42 @@ def get_search_engine_service(
 
 def get_search_agent(
     search_engine: SearchEngineService = Depends(get_search_engine_service),
-) -> "SearchAgent":
+) -> SearchAgent:
     """Obtiene el agent SEARCH cableado al motor de búsqueda real."""
-    from app.agents.search_agent import SearchAgent
-
     return SearchAgent(search_engine=search_engine)
 
 
-def get_scoring_agent() -> "ScoringAgent":
+def get_scoring_agent() -> ScoringAgent:
     """Obtiene el agent SCORE (VehicleScorer real)."""
-    from app.agents.scoring_agent import ScoringAgent
-
     return ScoringAgent()
 
 
-def get_opportunity_agent() -> "OpportunityAgent":
+def get_opportunity_agent() -> OpportunityAgent:
     """Obtiene el agent OPPORTUNITY (OpportunityFinder real)."""
-    from app.agents.opportunity_agent import OpportunityAgent
-
     return OpportunityAgent()
 
 
-def get_negotiation_agent() -> "NegotiationAgent":
+def get_negotiation_agent() -> NegotiationAgent:
     """Obtiene el agent NEGOTIATE (NegotiationEngine real)."""
-    from app.agents.negotiation_agent import NegotiationAgent
-
     return NegotiationAgent()
 
 
-def get_alert_agent() -> "AlertAgent":
+def get_alert_agent() -> AlertAgent:
     """Obtiene el agent ALERT (reglas umbral)."""
-    from app.agents.alert_agent import AlertAgent
-
     return AlertAgent()
 
 
 def get_budget_search_agent(
     search_engine: SearchEngineService = Depends(get_search_engine_service),
-) -> "BudgetSearchAgent":
+) -> BudgetSearchAgent:
     """Obtiene el agent de búsqueda por presupuesto cableado al motor real."""
-    from app.agents.budget_search_agent import BudgetSearchAgent
-
     return BudgetSearchAgent(search_engine=search_engine)
 
 
 def get_pipeline_orchestrator(
     search_engine: SearchEngineService = Depends(get_search_engine_service),
-) -> "PipelineOrchestrator":
+) -> PipelineOrchestrator:
     """Obtiene el orquestador del pipeline SEARCH → ALERT con agents reales."""
-    from app.orchestrator.pipeline import PipelineOrchestrator
-
     return PipelineOrchestrator(search_engine=search_engine)
 
 
@@ -428,4 +427,3 @@ def get_provider(provider_name: str) -> VehicleProvider:
             detail=f"Provider '{provider_name}' not found. "
             f"Available: {ProviderRegistry.list_providers()}",
         ) from exc
-

@@ -18,14 +18,11 @@ from __future__ import annotations
 import asyncio
 import time
 from abc import ABC, abstractmethod
-from typing import Any, ClassVar, Generic, TypeVar
+from typing import Any, ClassVar
 
 from pydantic import BaseModel, ValidationError
 
 from app.core.logging import get_logger
-
-InputT = TypeVar("InputT", bound=BaseModel)
-OutputT = TypeVar("OutputT", bound=BaseModel)
 
 
 class AgentError(Exception):
@@ -47,9 +44,7 @@ class AgentTimeoutError(AgentError):
     def __init__(self, agent_name: str, timeout_seconds: float) -> None:
         self.agent_name = agent_name
         self.timeout_seconds = timeout_seconds
-        super().__init__(
-            f"Agent '{agent_name}' timed out after {timeout_seconds:.1f}s"
-        )
+        super().__init__(f"Agent '{agent_name}' timed out after {timeout_seconds:.1f}s")
 
 
 class AgentExecutionError(AgentError):
@@ -61,7 +56,7 @@ class AgentExecutionError(AgentError):
         super().__init__(f"Agent '{agent_name}' failed: {detail}")
 
 
-class BaseAgent(ABC, Generic[InputT, OutputT]):
+class BaseAgent[InputT: BaseModel, OutputT: BaseModel](ABC):
     """Plantilla base para todos los agents del dominio.
 
     Subclases declaran:
@@ -85,9 +80,7 @@ class BaseAgent(ABC, Generic[InputT, OutputT]):
         if timeout_seconds is not None and timeout_seconds <= 0:
             raise ValueError("timeout_seconds debe ser > 0")
         self._timeout_seconds = (
-            timeout_seconds
-            if timeout_seconds is not None
-            else self.default_timeout_seconds
+            timeout_seconds if timeout_seconds is not None else self.default_timeout_seconds
         )
         self._logger = get_logger(f"app.agents.{self.name}")
 
@@ -119,32 +112,24 @@ class BaseAgent(ABC, Generic[InputT, OutputT]):
             raise AgentValidationError(self.name, str(exc)) from exc
 
         started = time.perf_counter()
-        self._logger.info(
-            "Agent '%s' started (timeout=%.1fs)", self.name, self._timeout_seconds
-        )
+        self._logger.info("Agent '%s' started (timeout=%.1fs)", self.name, self._timeout_seconds)
         try:
             output = await asyncio.wait_for(
                 self._execute(validated_input), timeout=self._timeout_seconds
             )
         except TimeoutError as exc:
             duration = time.perf_counter() - started
-            self._logger.warning(
-                "Agent '%s' timed out after %.1fs", self.name, duration
-            )
+            self._logger.warning("Agent '%s' timed out after %.1fs", self.name, duration)
             raise AgentTimeoutError(self.name, self._timeout_seconds) from exc
         except AgentError:
             raise
         except Exception as exc:
             duration = time.perf_counter() - started
-            self._logger.exception(
-                "Agent '%s' failed after %.1fs: %s", self.name, duration, exc
-            )
+            self._logger.exception("Agent '%s' failed after %.1fs: %s", self.name, duration, exc)
             raise AgentExecutionError(self.name, str(exc)) from exc
 
         duration = time.perf_counter() - started
-        self._logger.info(
-            "Agent '%s' completed in %.1fms", self.name, duration * 1000
-        )
+        self._logger.info("Agent '%s' completed in %.1fms", self.name, duration * 1000)
         return output
 
     @abstractmethod

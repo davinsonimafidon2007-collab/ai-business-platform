@@ -50,7 +50,7 @@ export default function OrdersPage() {
     mutationFn: searchOrdersService.markSeen,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["search-orders"] });
-      queryClient.invalidateQueries({ queryKey: ["dashboard", "stats"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboardStats"] });
     },
   });
 
@@ -60,7 +60,7 @@ export default function OrdersPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["search-orders"] });
-      queryClient.invalidateQueries({ queryKey: ["dashboard", "stats"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboardStats"] });
     },
   });
 

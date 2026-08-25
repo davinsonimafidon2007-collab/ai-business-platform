@@ -106,9 +106,7 @@ class PipelineOrchestrator(BaseAgent[PipelineInput, PipelineOutput]):
         rules: AlertRulesInput,
     ) -> list[ResultAlert]:
         """Aplica las reglas de alerta a cada resultado con oportunidad."""
-        if not any(
-            (rules.min_level, rules.min_profit is not None, rules.min_roi is not None)
-        ):
+        if not any((rules.min_level, rules.min_profit is not None, rules.min_roi is not None)):
             return []
 
         result_alerts: list[ResultAlert] = []
@@ -121,7 +119,9 @@ class PipelineOrchestrator(BaseAgent[PipelineInput, PipelineOutput]):
                     opportunity=AlertOpportunityInput(
                         opportunity_level=getattr(opportunity, "opportunity_level", ""),
                         recommendation=getattr(opportunity, "recommendation", ""),
-                        estimated_profit=float(getattr(opportunity, "estimated_profit", 0.0) or 0.0),
+                        estimated_profit=float(
+                            getattr(opportunity, "estimated_profit", 0.0) or 0.0
+                        ),
                         roi=float(getattr(opportunity, "roi", 0.0) or 0.0),
                     ),
                     rules=rules,

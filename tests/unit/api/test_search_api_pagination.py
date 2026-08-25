@@ -1,13 +1,20 @@
-"""Integration tests SEARCH.ORCH.1 — paginación, orden y trazabilidad en POST /api/v1/search."""
+"""Integration tests SEARCH.ORCH.1 — paginación, orden y trazabilidad en POST /api/v1/search.
+
+Viven en tests/unit/api porque no requieren PostgreSQL: el engine está
+mockeado, la auth se sobreescribe y la persistencia del historial es
+fail-soft (un fallo de BD no rompe la respuesta).
+"""
 
 from __future__ import annotations
 
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.api.v1.dependencies import get_search_engine_service
+from app.dependencies.auth import get_current_user
 from app.main import app
 from app.models.search import (
     SearchEngineResult,
@@ -15,9 +22,27 @@ from app.models.search import (
     SearchResult,
     SearchSummary,
 )
+from app.models.user import User
 from app.services.search_engine import SearchEngineService
 
 client = TestClient(app)
+
+
+@pytest.fixture
+def override_auth() -> Any:
+    """Override de get_current_user (patrón tests/integration/conftest.py)."""
+    test_user = User(
+        id="11111111-1111-1111-1111-111111111111",
+        email="search-pagination@example.com",
+        hashed_password="not-used-in-override",
+    )
+
+    async def _get_current_user() -> User:
+        return test_user
+
+    app.dependency_overrides[get_current_user] = _get_current_user
+    yield test_user
+    app.dependency_overrides.pop(get_current_user, None)
 
 
 def _make_result(available_in_sources: list[str] | None = None) -> SearchResult:
@@ -31,6 +56,10 @@ def _make_result(available_in_sources: list[str] | None = None) -> SearchResult:
         mileage=50000,
         price=25000.0,
         currency="EUR",
+        fuel_type="diesel",
+        transmission="manual",
+        power_hp=190,
+        location="Berlin",
         images=["img1.jpg"],
         description="ok",
     )

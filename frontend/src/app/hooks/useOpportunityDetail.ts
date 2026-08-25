@@ -120,7 +120,7 @@ export function useApprovePhase() {
         queryClient.invalidateQueries({ queryKey: ["opportunity", variables.opportunityId] }),
         queryClient.invalidateQueries({ queryKey: ["opportunities"] }),
         queryClient.invalidateQueries({ queryKey: ["approvals"] }),
-        queryClient.invalidateQueries({ queryKey: ["dashboard"] }),
+        queryClient.invalidateQueries({ queryKey: ["dashboardStats"] }),
       ]);
     },
 

@@ -47,7 +47,7 @@ function OrderDetailContent({ id }: { id: string }) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["search-order", id] });
       queryClient.invalidateQueries({ queryKey: ["search-orders"] });
-      queryClient.invalidateQueries({ queryKey: ["dashboard", "stats"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboardStats"] });
     },
   });
 
