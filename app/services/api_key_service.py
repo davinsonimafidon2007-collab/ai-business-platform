@@ -88,8 +88,14 @@ class ApiKeyService:
         if record is None:
             raise AuthenticationError("Invalid API key")
 
-        if record.expires_at and record.expires_at < datetime.now(UTC):
-            raise AuthenticationError("API key has expired")
+        # TEST.C fix: SQLite devuelve datetimes naive; comparar con now(UTC)
+        # aware lanzaba TypeError. Normalizamos a aware antes de comparar.
+        expires_at = record.expires_at
+        if expires_at is not None:
+            if expires_at.tzinfo is None:
+                expires_at = expires_at.replace(tzinfo=UTC)
+            if expires_at < datetime.now(UTC):
+                raise AuthenticationError("API key has expired")
 
         await self.repository.update_last_used(record.id)
         return record

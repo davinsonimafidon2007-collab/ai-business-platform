@@ -20,20 +20,44 @@ class PushTokenRepository:
         token: str,
         platform: str = "android",
     ) -> PushToken:
-        """Registra el token FCM del usuario (un token por usuario+plataforma)."""
+        """Registra el token FCM del usuario.
+
+        El ``token`` identifica al dispositivo (único en BD): si ya existe se
+        actualiza su dueño/plataforma (p.ej. tras logout/login). Si no existe
+        pero el usuario ya tiene un token para esa plataforma, se sustituye.
+        TEST.API.DOMAIN fix: antes un re-registro del mismo token con otra
+        plataforma violaba el UNIQUE(token) y devolvía 500.
+        """
+        now = datetime.now(UTC)
+
+        result = await self.session.execute(
+            select(PushToken).where(PushToken.token == token)
+        )
+        push_token = result.scalar_one_or_none()
+        if push_token is not None:
+            push_token.user_id = str(user_id)
+            push_token.platform = platform
+            push_token.updated_at = now
+            await self.session.commit()
+            await self.session.refresh(push_token)
+            return push_token
+
         result = await self.session.execute(
             select(PushToken).where(
                 PushToken.user_id == str(user_id),
                 PushToken.platform == platform,
             )
         )
-        push_token = result.scalar_one_or_none()
-        if push_token is None:
-            push_token = PushToken(user_id=str(user_id), token=token, platform=platform)
-            self.session.add(push_token)
-        else:
-            push_token.token = token
-            push_token.updated_at = datetime.now(UTC)
+        existing_for_platform = result.scalar_one_or_none()
+        if existing_for_platform is not None:
+            existing_for_platform.token = token
+            existing_for_platform.updated_at = now
+            await self.session.commit()
+            await self.session.refresh(existing_for_platform)
+            return existing_for_platform
+
+        push_token = PushToken(user_id=str(user_id), token=token, platform=platform)
+        self.session.add(push_token)
         await self.session.commit()
         await self.session.refresh(push_token)
         return push_token

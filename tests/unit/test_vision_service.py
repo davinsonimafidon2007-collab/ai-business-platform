@@ -57,19 +57,25 @@ def vision_service(mock_provider: AsyncMock) -> VisionService:
 
 
 @pytest.fixture
-def photos() -> list[InspectionPhoto]:
+def photos(tmp_path, monkeypatch: pytest.MonkeyPatch) -> list[InspectionPhoto]:
+    """Fotos DENTRO del upload_dir (SEC.LFI.1): el servicio filtra las externas."""
+    from app.core.config import settings
+
+    upload_root = tmp_path / "uploads"
+    upload_root.mkdir(parents=True)
+    monkeypatch.setattr(settings, "upload_dir", str(upload_root))
     return [
         InspectionPhoto(
             id="photo-1",
             session_id="session-1",
             observation_id="obs-1",
-            file_path="/img/photo1.jpg",
+            file_path=str(upload_root / "photo1.jpg"),
         ),
         InspectionPhoto(
             id="photo-2",
             session_id="session-1",
             observation_id="obs-2",
-            file_path="/img/photo2.jpg",
+            file_path=str(upload_root / "photo2.jpg"),
         ),
     ]
 
@@ -107,9 +113,9 @@ async def test_analyze_photos_calls_provider(
     assert len(call_args) == 2
     assert all(isinstance(img, VisionImage) for img in call_args)
     assert call_args[0].photo_id == "photo-1"
-    assert call_args[0].file_path == "/img/photo1.jpg"
+    assert call_args[0].file_path.endswith("photo1.jpg")
     assert call_args[1].photo_id == "photo-2"
-    assert call_args[1].file_path == "/img/photo2.jpg"
+    assert call_args[1].file_path.endswith("photo2.jpg")
     assert "summary" in result
     assert "suggestions" in result
 

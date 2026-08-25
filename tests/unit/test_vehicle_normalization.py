@@ -3,31 +3,27 @@
 from __future__ import annotations
 
 from decimal import Decimal
-from uuid import uuid4
 
 import pytest
 
+from app.normalization.pipeline import VehicleNormalizer
 from app.normalization.schema import (
     NormalizedVehicle,
-    NormalizedEquipment,
-    convert_to_eur,
     clean_vehicle_string,
     clean_version_string,
-    normalize_fuel,
-    normalize_transmission,
-    normalize_color,
-    extract_country_from_location,
-    parse_price_text,
-    normalize_image_url,
-    validate_vin,
-    compute_quality_score,
-    detect_corrupt_listing,
+    convert_to_eur,
     deduplicate_vehicles,
+    detect_corrupt_listing,
+    extract_country_from_location,
+    normalize_color,
+    normalize_fuel,
+    normalize_image_url,
+    normalize_transmission,
+    parse_price_text,
     select_preferred_vehicle,
-    EXCHANGE_RATES_TO_EUR,
+    validate_vin,
 )
-from app.providers.dto import VehicleDetail, VehicleSearchResult
-from app.normalization.pipeline import VehicleNormalizer
+from app.providers.dto import VehicleSearchResult
 
 
 # Fixtures for real provider data

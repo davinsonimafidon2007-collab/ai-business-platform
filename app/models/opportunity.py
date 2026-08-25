@@ -11,6 +11,7 @@ from app.models.base import Base
 
 if TYPE_CHECKING:
     from app.models.deal import Deal
+    from app.models.opportunity_phase import OpportunityPhase
     from app.models.vehicle import Vehicle
 
 
@@ -78,7 +79,7 @@ class Opportunity(Base):
         back_populates="opportunity",
         passive_deletes=True,
     )
-    phases: Mapped[list["OpportunityPhase"]] = relationship(
+    phases: Mapped[list[OpportunityPhase]] = relationship(
         "OpportunityPhase",
         back_populates="opportunity",
         order_by="OpportunityPhase.order",

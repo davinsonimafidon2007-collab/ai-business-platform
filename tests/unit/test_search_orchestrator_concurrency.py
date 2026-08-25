@@ -27,7 +27,6 @@ from app.services.opportunity_finder import OpportunityAnalysis, OpportunityLeve
 from app.services.opportunity_finder import Recommendation as OppRecommendation
 from app.services.search_orchestrator import SearchOrchestrator
 
-
 # =============================================================================
 # Helpers
 # =============================================================================

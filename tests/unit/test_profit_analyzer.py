@@ -37,8 +37,10 @@ from app.services.profit_analyzer import (
     CostBreakdown,
     ProfitAnalysis,
     ProfitAnalyzer,
-    ProfitRecommendation as Recommendation,
     RiskLevel,
+)
+from app.services.profit_analyzer import (
+    ProfitRecommendation as Recommendation,
 )
 
 # =============================================================================

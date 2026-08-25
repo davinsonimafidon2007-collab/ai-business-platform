@@ -3,18 +3,15 @@
 from __future__ import annotations
 
 from decimal import Decimal
-from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
 
 from app.models.vehicle import Vehicle
-from app.providers.dto import VehicleSearchResult
-from app.repositories.vehicle_repository import VehicleRepository
-from app.services.vehicle_service import VehicleService
 from app.normalization.pipeline import NormalizationPipeline, VehicleNormalizer
 from app.normalization.schema import NormalizedVehicle
-
+from app.providers.dto import VehicleSearchResult
+from app.services.vehicle_service import VehicleService
 
 TEST_USER_ID = str(uuid4())
 

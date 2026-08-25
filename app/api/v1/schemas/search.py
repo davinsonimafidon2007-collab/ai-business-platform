@@ -38,7 +38,12 @@ class SearchAPIRequest(BaseModel):
         max_price: Precio máximo (EUR). Se mapea internamente a budget_max.
     """
 
-    query: str = Field(..., min_length=1, description="Término de búsqueda")
+    query: str = Field(
+        ...,
+        min_length=1,
+        max_length=200,  # SEC.INPUT.1
+        description="Término de búsqueda",
+    )
     providers: list[str] = Field(
         default_factory=_default_search_providers,
         description="Proveedores a consultar",

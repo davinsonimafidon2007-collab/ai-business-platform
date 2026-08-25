@@ -5,7 +5,8 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from app.api.v1.routes.search import _build_search_result_item
-from app.services.profit_analyzer import CostBreakdown, ProfitAnalysis, ProfitRecommendation as Recommendation, RiskLevel
+from app.services.profit_analyzer import CostBreakdown, ProfitAnalysis, RiskLevel
+from app.services.profit_analyzer import ProfitRecommendation as Recommendation
 from app.services.vehicle_scorer import VehicleScore
 
 

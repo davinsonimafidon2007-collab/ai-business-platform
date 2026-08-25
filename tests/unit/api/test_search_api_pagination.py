@@ -17,6 +17,7 @@ from app.api.v1.dependencies import get_search_engine_service
 from app.dependencies.auth import get_current_user
 from app.main import app
 from app.models.search import (
+    ProviderIssue,
     SearchEngineResult,
     SearchRequest,
     SearchResult,
@@ -205,9 +206,43 @@ class TestResponseTraceability:
                 json={"query": "bmw", "providers": ["autoscout24", "mobile_de"]},
             )
             data = response.json()
-            assert data["providers_succeeded"] == ["autoscout24"]
+            # SEARCH.DIAG.1: la ruta deriva providers_succeeded de los
+            # providers pedidos menos los que reportaron issues (aquí ninguno).
+            assert data["providers_succeeded"] == ["autoscout24", "mobile_de"]
             assert isinstance(data["execution_time_ms"], (int, float))
             assert data["cache_hit"] is False
+        finally:
+            app.dependency_overrides.clear()
+
+    def test_failed_provider_excluded_from_succeeded(self, override_auth) -> None:
+        """Un provider con issue reportado no cuenta como exitoso."""
+        engine_result = SearchEngineResult(
+            summary=SearchSummary(total_results=1, excellent=1),
+            results=[_make_result(None)],
+            total_matches=45,
+            providers_succeeded=["autoscout24"],
+            provider_issues=[
+                ProviderIssue(
+                    provider="mobile_de",
+                    stage="search",
+                    error_type="ProviderConnectionError",
+                    message="403 anti-bot",
+                )
+            ],
+        )
+        engine = MagicMock(spec=SearchEngineService)
+        engine.search = AsyncMock(return_value=engine_result)
+        app.dependency_overrides[get_search_engine_service] = lambda: engine
+        try:
+            response = client.post(
+                "/api/v1/search",
+                json={"query": "bmw", "providers": ["autoscout24", "mobile_de"]},
+            )
+            data = response.json()
+            assert data["providers_succeeded"] == ["autoscout24"]
+            issue = data["provider_issues"][0]
+            assert issue["provider"] == "mobile_de"
+            assert "message_es" in issue
         finally:
             app.dependency_overrides.clear()
 

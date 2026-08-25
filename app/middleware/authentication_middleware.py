@@ -8,6 +8,7 @@ from starlette.responses import Response
 from app.core.config import settings
 from app.database import db_manager
 from app.exceptions import AuthenticationError
+from app.exceptions.base import UserNotFoundError
 from app.models.user import User
 from app.repositories.api_key_repository import ApiKeyRepository
 from app.repositories.user_repository import UserRepository
@@ -89,6 +90,13 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
                 request.state.user = user
                 request.state.auth_method = "jwt"
             except AuthenticationError:
+                return JSONResponse(
+                    status_code=401,
+                    content={"detail": "Invalid or expired token"},
+                )
+            except UserNotFoundError:
+                # TEST.C fix: el token era válido pero el usuario ya no existe
+                # (p.ej. borrado tras emitir el JWT) → 401, no 500.
                 return JSONResponse(
                     status_code=401,
                     content={"detail": "Invalid or expired token"},

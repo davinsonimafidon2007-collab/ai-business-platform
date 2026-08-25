@@ -5,11 +5,11 @@ from decimal import Decimal
 from uuid import UUID
 
 from app.models.vehicle import Vehicle
+from app.normalization.pipeline import NormalizationPipeline, VehicleNormalizer
+from app.normalization.schema import NormalizedVehicle
 from app.providers.base import VehicleProvider
 from app.providers.dto import VehicleDetail, VehicleSearchResult
 from app.repositories.vehicle_repository import VehicleRepository
-from app.normalization.pipeline import NormalizationPipeline, VehicleNormalizer
-from app.normalization.schema import NormalizedVehicle, convert_to_eur
 
 
 class VehicleService:

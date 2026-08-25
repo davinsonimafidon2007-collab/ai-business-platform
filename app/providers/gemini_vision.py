@@ -237,8 +237,8 @@ class GeminiVisionProvider:
             # Ya viene como base64 inline
             try:
                 return file_path.split(",", 1)[1]
-            except IndexError:
-                raise VisionProviderError("data URL malformada", provider="gemini")
+            except IndexError as exc:
+                raise VisionProviderError("data URL malformada", provider="gemini") from exc
         path = Path(file_path)
         if not path.exists():
             raise VisionProviderError(
@@ -254,6 +254,14 @@ class GeminiVisionProvider:
         return base64.b64encode(path.read_bytes()).decode("utf-8")
 
     def _guess_mime(self, file_path: str) -> str:
+        # TEST.PROV.GEMINI fix: una data URL declara su propio MIME; honrarlo
+        # antes del fallback por extensión (no tiene extensión).
+        if file_path.startswith("data:"):
+            header = file_path.split(",", 1)[0]
+            if header.startswith("data:") and "/" in header:
+                mime = header[len("data:") :].split(";", 1)[0]
+                if mime:
+                    return mime
         lower = file_path.lower()
         if lower.endswith(".png"):
             return "image/png"

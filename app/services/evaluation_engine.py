@@ -12,7 +12,8 @@ from datetime import datetime
 
 from app.core.config import settings
 from app.models.vehicle import Vehicle
-from app.services.profit_analyzer import ProfitAnalyzer, ProfitRecommendation as Recommendation
+from app.services.profit_analyzer import ProfitAnalyzer
+from app.services.profit_analyzer import ProfitRecommendation as Recommendation
 
 
 @dataclass

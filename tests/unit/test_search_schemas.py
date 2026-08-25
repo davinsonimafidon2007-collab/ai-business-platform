@@ -19,6 +19,7 @@ def test_search_create_rejects_missing_required_fields() -> None:
 def test_search_read_allows_model_attributes() -> None:
     search = SearchRead(
         id="123e4567-e89b-12d3-a456-426614174000",
+        user_id="123e4567-e89b-12d3-a456-426614174001",  # requerido desde SEARCH.OWN
         name="Audi en Alemania",
         country="DE",
         created_at="2024-01-01T00:00:00",
@@ -27,6 +28,8 @@ def test_search_read_allows_model_attributes() -> None:
     assert search.id == "123e4567-e89b-12d3-a456-426614174000"
     assert search.name == "Audi en Alemania"
     assert search.country == "DE"
+    # Alias de compatibilidad: timestamp refleja created_at
+    assert search.timestamp is not None
 
 
 def test_search_update_allows_partial_updates() -> None:

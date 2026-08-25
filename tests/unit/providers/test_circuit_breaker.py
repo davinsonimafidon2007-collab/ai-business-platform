@@ -1,9 +1,6 @@
 from __future__ import annotations
 
-import time
-
 from app.providers.circuit_breaker import ProviderCircuitBreaker
-from app.providers.exceptions import ProviderUnavailableError
 
 
 def test_open_after_consecutive_failures() -> None:

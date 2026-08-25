@@ -30,6 +30,7 @@ from tenacity import (
 
 from app.core.config import settings
 from app.core.logging import get_logger
+from app.core.url_guard import UnsafeURLError, ensure_public_http_url
 from app.providers.exceptions import (
     ProviderConnectionError,
     ProviderMaxRetriesExceededError,
@@ -216,6 +217,22 @@ class ProviderHttpClient:
         **kwargs: Any,
     ) -> httpx.Response:
         full_url = url
+        # SEC.SSRF.1: cualquier URL absoluta con esquema pasa por el guard
+        # antes de tocar la red (bloquea file://, data:, IPs internas, ...).
+        # Las rutas relativas se resuelven contra base_url (de confianza).
+        if "://" in url:
+            try:
+                full_url = ensure_public_http_url(url)
+            except UnsafeURLError as exc:
+                logger.error(
+                    "provider_http_client: SSRF bloqueado en %s — %s",
+                    self.provider_name,
+                    exc,
+                )
+                raise ProviderConnectionError(
+                    f"URL bloqueada por el guard SSRF: {exc}",
+                    provider=self.provider_name,
+                ) from exc
         if self.base_url and not url.startswith("http"):
             full_url = urljoin(self.base_url.rstrip("/") + "/", url.lstrip("/"))
 

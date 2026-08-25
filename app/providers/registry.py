@@ -7,18 +7,13 @@ from app.core.config import settings
 from app.providers.base import VehicleProvider
 
 if TYPE_CHECKING:
-    from app.providers.autoscout24_es import AutoScout24EsProvider
-    from app.providers.coches_net import CochesNetProvider
-    from app.providers.es_market_fixture import EsMarketFixtureProvider
-    from app.providers.coches_net_fixture import CochesNetFixtureProvider
-    from app.providers.coches_net_html_fixture import CochesNetHtmlFixtureProvider
+    pass
 
 logger = logging.getLogger(__name__)
 
 
 def _is_spain_import_profile() -> bool:
     """True si el perfil de costes destino es España."""
-    from app.core.config import settings
 
     raw = getattr(settings, "default_import_cost_profile", None) or "SPAIN"
     key = str(raw).strip().upper()
@@ -32,7 +27,6 @@ def _es_fixtures_blocked() -> bool:
     simulados de forma silenciosa, venga el registro del flag explícito o del
     auto-registro por perfil SPAIN/ES.
     """
-    from app.core.config import settings
 
     return str(getattr(settings, "es_data_mode", "fixture")) == "live"
 
@@ -234,7 +228,9 @@ class ProviderRegistry:
                 # usa browser headless, sino cae a httpx. No requiere proxy.
                 if getattr(settings, "enable_mobile_de_playwright", False):
                     try:
-                        from app.providers.mobile_de_playwright import MobileDePlaywrightProvider  # noqa: F401
+                        from app.providers.mobile_de_playwright import (
+                            MobileDePlaywrightProvider,  # noqa: F401
+                        )
 
                         use_pw = True
                     except ImportError:

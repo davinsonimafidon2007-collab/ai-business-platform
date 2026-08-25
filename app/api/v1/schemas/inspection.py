@@ -29,7 +29,9 @@ class ObservationUpdate(BaseModel):
     status: str = Field(
         ..., description="Status: GOOD, WARNING, BAD, or UNKNOWN"
     )
-    notes: str | None = Field(None, description="Optional inspector notes")
+    notes: str | None = Field(
+        None, max_length=5000, description="Optional inspector notes"
+    )  # SEC.INPUT.1
     estimated_repair_cost: float | None = Field(
         None, description="Estimated repair cost in EUR", ge=0
     )
@@ -39,7 +41,10 @@ class PhotoUploadRequest(BaseModel):
     """Request to upload a photo for an observation."""
 
     observation_id: str = Field(..., description="ID of the observation")
-    file_path: str = Field(..., description="Path or URL of the photo file")
+    # SEC.INPUT.1: rutas/URLs razonables; el guard real es path_safety.
+    file_path: str = Field(
+        ..., max_length=2048, description="Path or URL of the photo file"
+    )
     file_name: str | None = Field(None, description="Original file name")
     mime_type: str | None = Field(None, description="MIME type")
     file_size_bytes: int | None = Field(
@@ -50,7 +55,8 @@ class PhotoUploadRequest(BaseModel):
 class VisionAnalyzeRequest(BaseModel):
     """Optional subset of a session's uploaded photographs to analyze."""
 
-    photo_ids: list[str] | None = None
+    # SEC.INPUT.1: tope de lote por petición al proveedor de visión.
+    photo_ids: list[str] | None = Field(default=None, max_length=50)
 
 
 # =============================================================================

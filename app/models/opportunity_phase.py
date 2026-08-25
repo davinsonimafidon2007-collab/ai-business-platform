@@ -70,7 +70,7 @@ class OpportunityPhase(Base):
         nullable=False,
     )
 
-    opportunity: Mapped["Opportunity"] = relationship(
+    opportunity: Mapped[Opportunity] = relationship(
         "Opportunity", back_populates="phases"
     )
 

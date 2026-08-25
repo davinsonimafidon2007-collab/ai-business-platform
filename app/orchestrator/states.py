@@ -26,7 +26,7 @@ class PipelineStage(str, Enum):
     DEAL = "DEAL"
 
     @classmethod
-    def in_order(cls) -> tuple["PipelineStage", ...]:
+    def in_order(cls) -> tuple[PipelineStage, ...]:
         """Etapas en el orden canónico de ejecución."""
         return (
             cls.SEARCH,

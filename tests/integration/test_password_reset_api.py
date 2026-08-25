@@ -13,7 +13,7 @@ from app.models.password_reset_token import PasswordResetToken
 from app.models.user import User
 from app.services.audit_service import AuditService
 from app.services.auth_service import AuthService
-from app.services.password_reset_service import PasswordResetService, _hash_token
+from app.services.password_reset_service import PasswordResetService
 from app.services.refresh_token_service import RefreshTokenService
 
 

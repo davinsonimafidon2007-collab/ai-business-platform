@@ -288,7 +288,7 @@ class SearchOrchestrator:
                 dtos = await asyncio.wait_for(coro, timeout=timeout)
             else:
                 dtos = await coro
-        except asyncio.TimeoutError as exc:
+        except TimeoutError as exc:
             logger.error(
                 "Timeout (%.1fs) del provider %s durante la búsqueda",
                 timeout,
