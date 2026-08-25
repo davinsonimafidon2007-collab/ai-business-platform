@@ -13,7 +13,6 @@ e2e
 
 # Móvil / Capacitor: el APK/AAB se construye fuera de esta imagen
 android
-capacitor.config.ts
 google-services.json*
 
 # Artefactos locales
