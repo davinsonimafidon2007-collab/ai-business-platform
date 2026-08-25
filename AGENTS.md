@@ -8,7 +8,7 @@ authentication mechanism must be added, re-enabled, or assumed to be required.**
 ## Directive for any AI/human touching this repo
 - Authentication is **disabled by design for local use**. Set `AUTH_DISABLED=true`
   (backend) and `NEXT_PUBLIC_AUTH_DISABLED=true` (frontend). `get_current_user`
-  then injects a fixed local ADMIN user (`local@localhost`,
+  then injects a fixed local ADMIN user (`local@example.com`,
   UUID `00000000-0000-4000-8000-000000000001`) — **no registration, no login.**
 - `APP_MODE=personal` is documentation **only** — it does **not** disable auth.
   Never treat it as a substitute for `AUTH_DISABLED=true`.
