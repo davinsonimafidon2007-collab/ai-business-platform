@@ -41,8 +41,12 @@ jobs:
       - name: Run unit tests
         run: npm run test:run
 
-      - name: Build Next.js
-        run: npm run build
+      # Capacitor needs a static export in ./out, not a normal Next server build.
+      - name: Build Next.js export
+        run: BUILD_TARGET=capacitor npm run export
+        env:
+          NEXT_PUBLIC_API_URL: http://10.0.2.2:8000
+          NEXT_PUBLIC_AUTH_DISABLED: "true"
 
       - name: Sync Capacitor
         run: npx cap sync android
