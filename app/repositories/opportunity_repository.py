@@ -265,6 +265,12 @@ class OpportunityRepository:
         result = await self.session.execute(query)
         return list(result.scalars().all())
 
+    async def update(self, opportunity: Opportunity) -> Opportunity:
+        """Persists changes to an existing opportunity (e.g. PATCH)."""
+        await self.session.commit()
+        await self.session.refresh(opportunity)
+        return opportunity
+
     async def delete(self, opportunity: Opportunity) -> None:
         """Deletes an opportunity record.
 

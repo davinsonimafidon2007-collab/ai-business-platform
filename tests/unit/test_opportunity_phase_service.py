@@ -16,6 +16,8 @@ import pytest_asyncio
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.exceptions.base import AppError
+
 from app.database.manager import DatabaseManager
 from app.models.base import Base
 from app.models.opportunity import Opportunity
@@ -145,7 +147,7 @@ async def test_invalid_action_returns_400(
     service = OpportunityPhaseService(session)
     phases = await service.ensure_seeded(opportunity)
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises((HTTPException, AppError)) as exc_info:
         await service.apply_action(opportunity, phases[0].id, "force_close")
     assert exc_info.value.status_code == 400
 
@@ -166,11 +168,11 @@ async def test_phase_of_other_opportunity_returns_404(
     session.add(other)
     await session.commit()
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises((HTTPException, AppError)) as exc_info:
         await service.apply_action(other, phases[0].id, "approve")
     assert exc_info.value.status_code == 404
 
-    with pytest.raises(HTTPException):
+    with pytest.raises((HTTPException, AppError)):
         await service.apply_action(opportunity, "no-existe", "approve")
 
 

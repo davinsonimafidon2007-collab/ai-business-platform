@@ -25,10 +25,15 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from fastapi import HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm.exc import StaleDataError
 
+from app.exceptions.base import (
+    DealConcurrentModificationError,
+    DealConflictError,
+    DealNotFoundError,
+    DealValidationError,
+)
 from app.models.audit_log import AuditLog
 from app.models.deal import Deal, DealStatus, DealStatusHistory
 from app.repositories.deal_repository import DealRepository
@@ -116,9 +121,8 @@ class DealService:
             HTTPException 409: Si ya existe un deal activo para la oportunidad.
         """
         if not opportunity_id and not vehicle_id:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail="At least one of opportunity_id or vehicle_id is required",
+            raise DealValidationError(
+                "At least one of opportunity_id or vehicle_id is required"
             )
 
         # Un solo deal activo por opportunity/user. Comprobación optimista;
@@ -128,14 +132,9 @@ class DealService:
                 user_id, opportunity_id
             )
             if existing is not None:
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail={
-                        "message": (
-                            "You already have an active deal for this opportunity"
-                        ),
-                        "deal_id": existing.id,
-                    },
+                raise DealConflictError(
+                    "You already have an active deal for this opportunity",
+                    deal_id=existing.id,
                 )
 
         now = self._now()
@@ -167,13 +166,8 @@ class DealService:
         try:
             return await self.repository.save_transition(deal, creation_history, audit)
         except IntegrityError as exc:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail={
-                    "message": (
-                        "You already have an active deal for this opportunity"
-                    ),
-                },
+            raise DealConflictError(
+                "You already have an active deal for this opportunity"
             ) from exc
 
     async def list(
@@ -198,14 +192,11 @@ class DealService:
         """Obtiene un deal comprobando ownership.
 
         Raises:
-            HTTPException 404: Si el deal no existe o no pertenece al usuario.
+            DealNotFoundError 404: Si el deal no existe o no pertenece al usuario.
         """
         deal = await self.repository.get_by_id(deal_id)
         if deal is None or deal.user_id != user_id:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Deal not found",
-            )
+            raise DealNotFoundError("Deal not found")
         return deal
 
     async def get_history(
@@ -246,17 +237,11 @@ class DealService:
             HTTPException 409: Si otra escritura ganó la carrera.
         """
         if offer_price is not None and offer_price < 0:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail="offer_price must be >= 0",
-            )
+            raise DealValidationError("offer_price must be >= 0")
 
         deal = await self.repository.get_by_id(deal_id, for_update=True)
         if deal is None or deal.user_id != user_id:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Deal not found",
-            )
+            raise DealNotFoundError("Deal not found")
 
         current_status = deal.status
 
@@ -266,12 +251,9 @@ class DealService:
 
         allowed = self._TRANSITIONS.get(current_status, set())
         if new_status not in allowed:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail=(
-                    f"Invalid transition from {current_status.value} "
-                    f"to {new_status.value}"
-                ),
+            raise DealValidationError(
+                f"Invalid transition from {current_status.value} "
+                f"to {new_status.value}"
             )
 
         old_status_value = current_status.value
@@ -305,9 +287,8 @@ class DealService:
         except StaleDataError as exc:
             # Otra petición modificó el deal mientras esta transición
             # estaba en vuelo: el cliente debe releer y reintentar.
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="Deal was modified concurrently, please retry",
+            raise DealConcurrentModificationError(
+                "Deal was modified concurrently, please retry"
             ) from exc
 
     async def save_simulation(

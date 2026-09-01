@@ -57,12 +57,19 @@ async def app_error_handler(request: Request, exc: AppError) -> JSONResponse:
     if exc.status_code == status.HTTP_401_UNAUTHORIZED:
         headers = _unauthorized_headers(headers)
 
+    details = getattr(exc, "details", None)
+    # Compat: DealConflictError exposes deal_id separately
+    deal_id_attr = getattr(exc, "deal_id", None)
+    if details is None and deal_id_attr:
+        details = {"deal_id": deal_id_attr}
+
     return JSONResponse(
         status_code=exc.status_code,
         content=_build_error_response(
             message=exc.message,
             code=exc.code,
             request_id=_get_request_id(request),
+            details=details,
         ),
         headers=headers,
     )

@@ -305,8 +305,7 @@ async def update_opportunity(
         if value is not None:
             setattr(opportunity, attr, value)
 
-    await session.commit()
-    await session.refresh(opportunity)
+    opportunity = await OpportunityRepository(session).update(opportunity)
     return _to_opportunity_read(opportunity)
 
 

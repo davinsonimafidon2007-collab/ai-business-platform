@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.exceptions.base import PhaseNotFoundError, PhaseValidationError
 from app.models.opportunity import Opportunity
 from app.models.opportunity_phase import OpportunityPhase
 from app.repositories.opportunity_phase_repository import OpportunityPhaseRepository
@@ -31,18 +32,12 @@ class OpportunityPhaseService:
     ) -> OpportunityPhase:
         phase = await self.get_phase(phase_id)
         if phase is None or phase.opportunity_id != opportunity.id:
-            from fastapi import HTTPException, status
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Phase not found for this opportunity",
-            )
+            raise PhaseNotFoundError("Phase not found for this opportunity")
 
         allowed = {"approve", "reject", "request_changes", "start"}
         if action not in allowed:
-            from fastapi import HTTPException, status
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid action '{action}'. Allowed: {sorted(allowed)}",
+            raise PhaseValidationError(
+                f"Invalid action '{action}'. Allowed: {sorted(allowed)}"
             )
 
         return await self.repo.update_from_action(phase, action, feedback=feedback)

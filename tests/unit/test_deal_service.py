@@ -11,6 +11,7 @@ from fastapi import HTTPException
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm.exc import StaleDataError
 
+from app.exceptions.base import AppError
 from app.models.deal import Deal, DealStatus
 from app.services.deal_service import DealService
 
@@ -95,7 +96,7 @@ class TestTransitionMatrix:
                     continue
                 deal = _make_deal(status=current)
                 service, _ = _make_service(deal)
-                with pytest.raises(HTTPException) as exc:
+                with pytest.raises((HTTPException, AppError)) as exc:
                     await service.transition(
                         deal_id="deal-1", user_id="user-1", new_status=target
                     )
@@ -148,7 +149,7 @@ class TestIdempotency:
         """NEW -> WON directo es imposible (422): hay que pasar por el flujo."""
         deal = _make_deal(status=DealStatus.NEW)
         service, _ = _make_service(deal)
-        with pytest.raises(HTTPException) as exc:
+        with pytest.raises((HTTPException, AppError)) as exc:
             await service.transition(
                 deal_id="deal-1", user_id="user-1", new_status=DealStatus.WON
             )
@@ -179,7 +180,7 @@ class TestConcurrency:
         deal = _make_deal(status=DealStatus.NEW)
         service, repo = _make_service(deal)
         repo.save_transition.side_effect = StaleDataError("stmt", {}, None)
-        with pytest.raises(HTTPException) as exc:
+        with pytest.raises((HTTPException, AppError)) as exc:
             await service.transition(
                 deal_id="deal-1",
                 user_id="user-1",
@@ -236,7 +237,7 @@ class TestAuditTrail:
         deal = _make_deal(user_id="user-2")
         service, repo = _make_service(deal)
         repo.list_history.return_value = ([], 0)
-        with pytest.raises(HTTPException) as exc:
+        with pytest.raises((HTTPException, AppError)) as exc:
             await service.get_history("deal-1", "user-1")
         assert exc.value.status_code == 404
 
@@ -261,7 +262,7 @@ class TestCreate:
     async def test_create_requires_opportunity_or_vehicle(self) -> None:
         """Sin opportunity_id ni vehicle_id -> 422."""
         service, _ = _make_service(_make_deal())
-        with pytest.raises(HTTPException) as exc:
+        with pytest.raises((HTTPException, AppError)) as exc:
             await service.create(user_id="user-1")
         assert exc.value.status_code == 422
 
@@ -284,10 +285,22 @@ class TestCreate:
         """Segundo create con misma opportunity activa -> 409."""
         existing = _make_deal(deal_id="deal-existing", status=DealStatus.NEGOTIATING)
         service, _ = _make_service(_make_deal(), active_for_opportunity=existing)
-        with pytest.raises(HTTPException) as exc:
+        with pytest.raises((HTTPException, AppError)) as exc:
             await service.create(user_id="user-1", opportunity_id="opp-1")
         assert exc.value.status_code == 409
-        assert exc.value.detail["deal_id"] == "deal-existing"
+        deal_id = getattr(exc.value, "deal_id", None)
+        if deal_id is None:
+            details = getattr(exc.value, "details", None)
+            if isinstance(details, dict):
+                deal_id = details.get("deal_id")
+        if deal_id is None and hasattr(exc.value, "detail"):
+            try:
+                detail = getattr(exc.value, "detail")  # type: ignore[union-attr]
+                if isinstance(detail, dict):
+                    deal_id = detail.get("deal_id")
+            except Exception:
+                deal_id = None
+        assert deal_id == "deal-existing"
 
     @pytest.mark.asyncio
     async def test_create_race_lost_by_unique_index_returns_409(self) -> None:
@@ -296,7 +309,7 @@ class TestCreate:
         repo.save_transition.side_effect = IntegrityError(
             "INSERT", {}, Exception("uq_deals_active_per_opportunity")
         )
-        with pytest.raises(HTTPException) as exc:
+        with pytest.raises((HTTPException, AppError)) as exc:
             await service.create(user_id="user-1", opportunity_id="opp-1")
         assert exc.value.status_code == 409
 
@@ -319,7 +332,7 @@ class TestDataValidation:
         """offer_price negativo -> 422, sin tocar el deal."""
         deal = _make_deal(status=DealStatus.ANALYZING)
         service, repo = _make_service(deal)
-        with pytest.raises(HTTPException) as exc:
+        with pytest.raises((HTTPException, AppError)) as exc:
             await service.transition(
                 deal_id="deal-1",
                 user_id="user-1",
@@ -354,7 +367,7 @@ class TestOwnership:
         """Transición sobre deal ajeno -> 404."""
         deal = _make_deal(user_id="user-2", status=DealStatus.NEW)
         service, _ = _make_service(deal)
-        with pytest.raises(HTTPException) as exc:
+        with pytest.raises((HTTPException, AppError)) as exc:
             await service.transition(
                 deal_id="deal-1",
                 user_id="user-1",
@@ -367,7 +380,7 @@ class TestOwnership:
         """Deal inexistente -> 404."""
         service, repo = _make_service(None)
         repo.get_by_id.return_value = None
-        with pytest.raises(HTTPException) as exc:
+        with pytest.raises((HTTPException, AppError)) as exc:
             await service.transition(
                 deal_id="missing",
                 user_id="user-1",
@@ -380,7 +393,7 @@ class TestOwnership:
         """GET de un deal ajeno -> 404 (no filtra existencia)."""
         deal = _make_deal(user_id="user-2")
         service, _ = _make_service(deal)
-        with pytest.raises(HTTPException) as exc:
+        with pytest.raises((HTTPException, AppError)) as exc:
             await service.get("deal-1", "user-1")
         assert exc.value.status_code == 404
 
@@ -437,7 +450,7 @@ async def test_save_simulation_ownership_rejected() -> None:
     """Guardar simulación sobre deal ajeno -> 404."""
     deal = _make_deal(user_id="user-2", status=DealStatus.NEW)
     service, _ = _make_service(deal)
-    with pytest.raises(HTTPException) as exc:
+    with pytest.raises((HTTPException, AppError)) as exc:
         await service.save_simulation(
             deal_id="deal-1",
             user_id="user-1",

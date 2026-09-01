@@ -7,7 +7,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 
 from app.api.v1.metrics import router as metrics_router
-from app.api.v1.mobile import router as mobile_router
 from app.api.v1.router import api_router
 from app.api.v1.routes.health import router as health_router
 from app.core.config import settings
@@ -155,10 +154,9 @@ app.add_middleware(
 )
 
 app.include_router(api_router, prefix="/api/v1")
-app.include_router(mobile_router, prefix="/api/v1")
-# Health compuesto (DB + Redis) también en raíz para el healthcheck de Docker.
+# Health y métricas en raíz para healthcheck Docker / scraping Prometheus.
+# api_router ya expone /api/v1/health y /api/v1/metrics; aquí solo raíz.
 app.include_router(health_router)
-# Métricas Prometheus públicas (scraping interno perfil obs; Bloque 6).
 app.include_router(metrics_router)
 
 

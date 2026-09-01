@@ -135,6 +135,15 @@ class Settings(BaseSettings):
         return self
 
     @model_validator(mode="after")
+    def validate_es_data_mode(self) -> "Settings":
+        """Fail-fast si ES_DATA_MODE no es fixture|live (TASK 1)."""
+        if self.es_data_mode not in ("fixture", "live"):
+            raise ValueError(
+                f"ES_DATA_MODE inválido: '{self.es_data_mode}'. Debe ser 'fixture' o 'live'."
+            )
+        return self
+
+    @model_validator(mode="after")
     def validate_cors_for_env(self) -> "Settings":
         """Enforce strict CORS defaults for production (SEC-001).
 
