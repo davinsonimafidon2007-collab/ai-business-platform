@@ -186,6 +186,9 @@ class ProviderHttpClient:
             if code == 429 or 500 <= code < 600:
                 return True
             return False
+        from app.providers.exceptions import ProviderRateLimitError
+        if isinstance(exception, ProviderRateLimitError):
+            return True
         return False
 
     def _log_retry(self, retry_state: Any) -> None:
@@ -222,11 +225,20 @@ class ProviderHttpClient:
         request_headers = self._build_headers(headers)
         backoff_min = int(getattr(settings, "provider_http_retry_backoff_min", 1))
         backoff_max = int(getattr(settings, "provider_http_retry_backoff_max", 60))
+        exponential_wait = wait_exponential_jitter(initial=backoff_min, max=backoff_max)
+
+        def _wait(retry_state: Any) -> Any:
+            exc = retry_state.outcome.exception() if retry_state.outcome else None
+            if isinstance(exc, ProviderRateLimitError):
+                retry_after = getattr(exc, "retry_after", None)
+                if retry_after:
+                    return retry_after
+            return exponential_wait(retry_state)
 
         try:
             async for attempt in AsyncRetrying(
                 stop=stop_after_attempt(self.max_retries),
-                wait=wait_exponential_jitter(initial=backoff_min, max=backoff_max),
+                wait=_wait,
                 retry=retry_if_exception(self._should_retry),
                 reraise=True,
                 before_sleep=self._log_retry,

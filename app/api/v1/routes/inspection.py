@@ -72,12 +72,25 @@ async def create_session(
 ) -> InspectionSessionResponse:
     """Creates a new inspection session for a vehicle."""
     vehicle = await vehicle_repo.get_by_id(data.vehicle_id)
-    if vehicle is None or vehicle.user_id != current_user.id:
+    if vehicle is None:
+        # Support lookups by external_id from provider results.
+        if data.external_id:
+            vehicle = await vehicle_repo.get_by_external_id(
+                source=data.source or "",
+                external_id=data.external_id,
+                user_id=str(current_user.id),
+            )
+        if vehicle is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Vehicle '{data.vehicle_id}' not found",
+            )
+    if vehicle.user_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Vehicle '{data.vehicle_id}' not found",
         )
-    session = await service.create_session(data.vehicle_id, current_user.id)
+    session = await service.create_session(vehicle.id, current_user.id)
     return InspectionSessionResponse(**session.to_dict())
 
 

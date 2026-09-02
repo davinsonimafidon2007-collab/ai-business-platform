@@ -333,6 +333,20 @@ async def search_vehicles(
     # Ejecutar búsqueda (pipeline completo)
     engine_result = await search_engine.search(domain_request)
 
+    # Persistir resultados de la búsqueda síncrona para que el dashboard/radar
+    # los refleje sin depender solo de jobs en segundo plano.
+    try:
+        from app.services.search_persistence import SearchPersistenceService
+        persistence = SearchPersistenceService(session)
+        await persistence.persist_engine_result(current_user.id, engine_result)
+        await session.commit()
+    except Exception:  # noqa: BLE001 — persistence is best-effort here
+        import logging
+        logging.getLogger("app.api.search_persistence").exception(
+            "sync_search_persistence_failed"
+        )
+        await session.rollback()
+
     # Convertir resultados internos → API responses
     items = [_build_search_result_item(r) for r in engine_result.results]
     summary = engine_result.summary

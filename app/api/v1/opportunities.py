@@ -131,6 +131,7 @@ async def list_opportunities(
     ),
     min_score: float | None = Query(None, ge=0, description="Score mínimo (0-100)"),
     min_roi: float | None = Query(None, description="ROI mínimo (%)"),
+    status: str | None = Query(None, description="Filtro por estado de la oportunidad"),
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
     current_user: User = Depends(get_current_user),
@@ -396,6 +397,45 @@ async def list_opportunity_phases(
         )
     phases = await service.ensure_seeded(opportunity)
     return [OpportunityPhaseService.to_read(p) for p in phases]
+
+
+class OpportunityFeedbackCreate(BaseModel):
+    """Cuerpo para registrar feedback/notas sobre una oportunidad."""
+    feedback: str = Field(..., min_length=1, description="Notas o retroalimentación sobre la oportunidad")
+
+
+@router.post("/{opportunity_id}/feedback", response_model=OpportunityRead)
+async def create_opportunity_feedback(
+    opportunity_id: str,
+    payload: OpportunityFeedbackCreate,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db_session),
+) -> OpportunityRead:
+    """Registra feedback/notas sobre una oportunidad propia.
+
+    Por simplicidad, almacena el feedback creando una fase de workflow
+    especial con el texto recibido, reutilizando la tabla existente.
+    """
+    await _get_owned_opportunity(session, current_user.id, opportunity_id)
+    opportunity = await OpportunityRepository(session).get(opportunity_id)
+    if opportunity is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Opportunity not found",
+        )
+
+    phase_service = OpportunityPhaseService(session)
+    await phase_service.ensure_seeded(opportunity)
+    # Crear una fase de feedback con el texto recibido.
+    await phase_service.apply_action(
+        opportunity=opportunity,
+        phase_id="feedback",
+        action="start",
+        feedback=payload.feedback,
+    )
+    # Devolver la oportunidad actualizada.
+    refreshed = await OpportunityRepository(session).get(opportunity_id)
+    return _to_opportunity_read(refreshed or opportunity)
 
 
 @router.patch("/{opportunity_id}/phases/{phase_id}")

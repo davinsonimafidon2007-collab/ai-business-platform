@@ -41,12 +41,16 @@ async def create_deal(
     if vehicle_id is None and payload.source and payload.external_id:
         vehicle_repository = VehicleRepository(session)
         vehicle = await vehicle_repository.get_by_external_id(
-            payload.source,
-            payload.external_id,
-            str(current_user.id),
+            source=payload.source,
+            external_id=payload.external_id,
+            user_id=str(current_user.id),
         )
-        if vehicle is not None:
-            vehicle_id = vehicle.id
+        if vehicle is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Vehicle not found for source={payload.source}, external_id={payload.external_id}",
+            )
+        vehicle_id = vehicle.id
     deal = await service.create(
         user_id=current_user.id,
         opportunity_id=payload.opportunity_id,

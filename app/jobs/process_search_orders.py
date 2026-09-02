@@ -259,13 +259,7 @@ class ProcessSearchOrdersJob(Job):
             query=query,
             max_results=int(filters.get("max_results", 30)),
             providers=filters.get("providers")
-            or [
-                "mobile_de",
-                "autoscout24",
-                "autoscout24_es",
-                "es_market_fixture",
-                "coches_net_fixture",
-            ],
+            or ProviderRegistry.list_providers(),
             country=filters.get("country") or "ES",
             budget_max=order.max_purchase_price,
             brand=filters.get("brand"),

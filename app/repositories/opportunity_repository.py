@@ -132,6 +132,7 @@ class OpportunityRepository:
         recommendation: str | None = None,
         min_score: float | None = None,
         min_roi: float | None = None,
+        status: str | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> tuple[list[Opportunity], int]:
@@ -167,6 +168,8 @@ class OpportunityRepository:
             base_query = base_query.where(Opportunity.opportunity_score >= min_score)
         if min_roi is not None:
             base_query = base_query.where(Opportunity.roi >= min_roi)
+        if status is not None:
+            base_query = base_query.where(Opportunity.status == status)
 
         # Count query
         count_query = select(func.count(Opportunity.id)).select_from(

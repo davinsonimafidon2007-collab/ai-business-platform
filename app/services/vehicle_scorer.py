@@ -170,7 +170,7 @@ class VehicleScorer:
     Uso:
         scorer = VehicleScorer()
         result = scorer.score(vehicle)
-        print(result.category, result.score)
+        logger.debug("vehicle_score: %s %s", result.category, result.score)
     """
 
     def __init__(self) -> None:

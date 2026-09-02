@@ -473,14 +473,41 @@ class VehicleProvider(ABC):
 
         title = title.strip()
 
-        # Los títulos suelen ser: "Marca Modelo Versión"
-        # Ej: "BMW Serie 3 (F30) 320d"
+        # Marcas conocidas multipalabra: si el título empieza por una de ellas,
+        # la marca es la fracción coincidente y el resto es modelo.
+        known_brands = [
+            "Alfa Romeo",
+            "Aston Martin",
+            "DS Automobiles",
+            "Land Rover",
+            "Mercedes-Benz",
+            "General Motors",
+            "Jeep",
+            "Range Rover",
+            "Rolls-Royce",
+            "Hongqi",
+            "BYD",
+            "Great Wall",
+            "Smart",
+            "Borgward",
+            "LEVC",
+            "Lynk & Co",
+            "Volkswagen",
+            "Mercedes-AMG",
+        ]
+        for brand in known_brands:
+            if title.lower().startswith(brand.lower()):
+                rest = title[len(brand):].strip()
+                model = rest if rest else None
+                return brand, model
+
+        # Fallback: primera palabra = marca, resto = modelo.
         parts = title.split()
         if len(parts) >= 2:
             brand = parts[0]
             model = " ".join(parts[1:])
             return brand, model
-        elif len(parts) == 1:
+        if len(parts) == 1:
             return parts[0], None
         return None, None
 

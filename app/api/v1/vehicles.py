@@ -43,9 +43,20 @@ async def get_vehicle_evaluation_service(
 
 async def _get_owned_vehicle(vehicle_id: str, current_user: User, service: VehicleService) -> Vehicle:
     vehicle = await service.get_vehicle(vehicle_id)
-    if vehicle is None or vehicle.user_id != current_user.id:
+    if vehicle is not None:
+        if vehicle.user_id == current_user.id:
+            return vehicle
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vehicle not found")
-    return vehicle
+
+    # Fallback por external_id cuando la UI envía un identificador de proveedor.
+    candidate = await service.get_vehicle_by_external_id(
+        source="",
+        external_id=vehicle_id,
+        user_id=str(current_user.id),
+    )
+    if candidate is not None:
+        return candidate
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vehicle not found")
 
 
 @router.post("", response_model=VehicleRead, status_code=status.HTTP_201_CREATED)
