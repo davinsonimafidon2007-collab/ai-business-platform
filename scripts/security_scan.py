@@ -31,7 +31,7 @@ def scan_secrets():
             if any(filename.endswith(ext) for ext in ['.py', '.ts', '.tsx', '.js', '.json', '.env', '.yml']):
                 filepath = os.path.join(dirpath, filename)
                 try:
-                    with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
+                    with open(filepath, encoding='utf-8', errors='ignore') as f:
                         content = f.read()
                         for pattern in patterns:
                             if re.search(pattern, content):
