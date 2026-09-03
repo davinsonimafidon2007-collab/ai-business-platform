@@ -15,6 +15,7 @@ from app.main import app
 from app.models.deal import Deal, DealStatus, DealStatusHistory
 from app.models.user import User
 from app.repositories.deal_repository import DealRepository
+from app.repositories.vehicle_repository import VehicleRepository
 
 client = TestClient(app)
 
@@ -125,6 +126,63 @@ def test_create_deal_without_link_returns_422(auth_override: None) -> None:
         app.dependency_overrides[get_db_session] = _get_db_session
         response = client.post("/api/v1/deals", json={"notes": "sin vinculo"})
         assert response.status_code == 422
+
+
+def test_create_deal_by_external_id_resolves_vehicle(auth_override: None) -> None:
+    """POST /deals con source+external_id (sin vehicle_id) resuelve el
+    vehículo interno y crea el deal -> 201 (no 500 por FK nula)."""
+    deal = _make_deal(vehicle_id="vehicle-real-uuid")
+
+    class _FakeVehicle:
+        id = "vehicle-real-uuid"
+
+    async def _fake_get_by_external_id(self, source, external_id, user_id=None):
+        return _FakeVehicle()
+
+    async def _fake_save_transition(self, deal_arg, history, audit_log=None):
+        return deal
+
+    async def _fake_get_active(self, user_id, opportunity_id):
+        return None
+
+    async def _get_db_session() -> AsyncMock:
+        return AsyncMock()
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(VehicleRepository, "get_by_external_id", _fake_get_by_external_id)
+        mp.setattr(DealRepository, "save_transition", _fake_save_transition)
+        mp.setattr(DealRepository, "get_active_by_opportunity", _fake_get_active)
+        app.dependency_overrides[get_db_session] = _get_db_session
+
+        response = client.post(
+            "/api/v1/deals",
+            json={"source": "autoscout24", "external_id": "ext-123"},
+        )
+        assert response.status_code == 201
+        assert response.json()["vehicle_id"] == "vehicle-real-uuid"
+
+
+def test_create_deal_unresolvable_external_id_returns_404_not_500(
+    auth_override: None,
+) -> None:
+    """POST /deals con source+external_id que no resuelve a ningún vehículo
+    -> 404 explícito, nunca 500 por vehicle_id=None violando la FK."""
+
+    async def _fake_get_by_external_id(self, source, external_id, user_id=None):
+        return None
+
+    async def _get_db_session() -> AsyncMock:
+        return AsyncMock()
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(VehicleRepository, "get_by_external_id", _fake_get_by_external_id)
+        app.dependency_overrides[get_db_session] = _get_db_session
+
+        response = client.post(
+            "/api/v1/deals",
+            json={"source": "autoscout24", "external_id": "does-not-exist"},
+        )
+        assert response.status_code == 404
 
 
 def test_create_duplicate_active_returns_409(auth_override: None) -> None:
