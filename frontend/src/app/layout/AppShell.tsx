@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { Sidebar } from "@/app/layout/sidebar";
 import { Navbar } from "@/app/layout/navbar";
 import { MobileTabBar } from "@/app/layout/MobileTabBar";
@@ -9,21 +11,57 @@ import { useAuthStore } from "@/app/store/auth-store";
 import { Button } from "@/app/components/ui/button";
 import { useLogout } from "@/app/hooks/use-logout";
 import { isAuthDisabled } from "@/app/config/app-mode";
-import { Moon, Sun, LogOut } from "lucide-react";
+import { useApprovals } from "@/app/hooks/useApprovals";
+import { Moon, Sun, LogOut, Bell } from "lucide-react";
 
-/** Cabecera compacta para el shell móvil (mantiene tema + logout). */
+const PAGE_TITLES: Record<string, string> = {
+  "/dashboard": "Dashboard",
+  "/search": "Búsqueda",
+  "/vehicles": "Vehículos",
+  "/opportunities": "Oportunidades",
+  "/deals": "Deals",
+  "/inspection": "Inspección",
+  "/agents": "Agentes",
+  "/approvals": "Aprobaciones",
+  "/workflows": "Workflows",
+  "/history": "Historial",
+  "/more": "Más",
+  "/settings": "Configuración",
+};
+
+function pageTitleFor(pathname: string): string {
+  const match = Object.keys(PAGE_TITLES).find((p) => pathname.startsWith(p));
+  return match ? PAGE_TITLES[match] : "AI Business";
+}
+
+/** Cabecera compacta para el shell móvil (título de página + notificaciones + tema). */
 function MobileHeader() {
+  const pathname = usePathname();
   const { theme, toggleTheme } = useThemeStore();
   const user = useAuthStore((s) => s.user);
   const logout = useLogout();
   const authDisabled = isAuthDisabled();
+  const { data: approvals } = useApprovals();
+  const pendingApprovals = approvals?.length ?? 0;
 
   return (
     <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-secondary-200 bg-white/90 px-4 backdrop-blur dark:border-primary-900/30 dark:bg-secondary-900/90">
-      <p className="text-sm font-semibold text-secondary-900 dark:text-primary-100">
-        AI Business
+      <p className="text-base font-bold text-secondary-900 dark:text-primary-100">
+        {pageTitleFor(pathname)}
       </p>
       <div className="flex items-center gap-1">
+        <Link
+          href="/approvals/"
+          className="relative rounded-lg p-2 text-secondary-500 hover:bg-secondary-100 dark:hover:bg-secondary-800"
+          aria-label="Notificaciones"
+        >
+          <Bell className="h-5 w-5" />
+          {pendingApprovals > 0 && (
+            <span className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-bold leading-none text-white">
+              {pendingApprovals > 99 ? "99+" : pendingApprovals}
+            </span>
+          )}
+        </Link>
         <button
           onClick={toggleTheme}
           className="rounded-lg p-2 text-secondary-500 hover:bg-secondary-100 dark:hover:bg-secondary-800"

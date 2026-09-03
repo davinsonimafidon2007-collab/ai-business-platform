@@ -152,6 +152,60 @@ class DealRepository:
 
         return items, total
 
+    async def get_portfolio_aggregates(self, user_id: str | UUID) -> dict:
+        """Agregados de cartera para reporting (previsto vs. real, cashflow).
+
+        Toda la suma se hace en SQL (no trayendo filas a Python) para que
+        escale con el número de deals. ``func.sum`` ignora NULLs por
+        defecto, que es justo el comportamiento deseado (un deal sin
+        ``actual_taxes`` capturado no debe contarse como 0 en la suma).
+
+        Returns:
+            dict con conteos por estado, agregados de deals SOLD (real vs.
+            previsto) y del pipeline activo (solo previsto, aún no hay real).
+        """
+        user_id_str = str(user_id)
+
+        status_counts_query = (
+            select(Deal.status, func.count())
+            .where(Deal.user_id == user_id_str)
+            .group_by(Deal.status)
+        )
+        status_result = await self.session.execute(status_counts_query)
+        by_status = {row[0]: row[1] for row in status_result.all()}
+
+        sold_query = select(
+            func.count(),
+            func.sum(Deal.actual_profit),
+            func.sum(Deal.last_sim_net_profit),
+            func.sum(Deal.sale_price),
+            func.sum(Deal.actual_purchase_price),
+            func.sum(Deal.transport_cost),
+            func.sum(Deal.registration_cost),
+            func.sum(Deal.actual_taxes),
+        ).where(Deal.user_id == user_id_str, Deal.status == DealStatus.SOLD.value)
+        sold_row = (await self.session.execute(sold_query)).one()
+
+        active_statuses = [s.value for s in ACTIVE_STATUSES]
+        pipeline_query = select(func.count(), func.sum(Deal.last_sim_net_profit)).where(
+            Deal.user_id == user_id_str, Deal.status.in_(active_statuses)
+        )
+        pipeline_row = (await self.session.execute(pipeline_query)).one()
+
+        return {
+            "by_status": by_status,
+            "sold_count": sold_row[0] or 0,
+            "sold_actual_profit_sum": sold_row[1],
+            "sold_projected_profit_sum": sold_row[2],
+            "sold_revenue_sum": sold_row[3],
+            "sold_purchase_sum": sold_row[4],
+            "sold_transport_sum": sold_row[5],
+            "sold_registration_sum": sold_row[6],
+            "sold_taxes_sum": sold_row[7],
+            "pipeline_count": pipeline_row[0] or 0,
+            "pipeline_projected_profit_sum": pipeline_row[1],
+        }
+
     async def save_transition(
         self,
         deal: Deal,

@@ -15,6 +15,8 @@ import {
   createDeal,
   updateDealStatus,
   updateDealSimulation,
+  fetchPortfolioSummary,
+  fetchDealVariance,
 } from "@/app/services/deals";
 
 describe("deals service", () => {
@@ -46,11 +48,11 @@ describe("deals service", () => {
         data: { items: [], total: 0, limit: 50, offset: 0 },
       } as any);
 
-      await fetchDeals({ status: "OFFER" });
+      await fetchDeals({ status: "NEGOTIATING" });
 
       expect(api.get).toHaveBeenCalledWith("/deals", {
         params: {
-          status: "OFFER",
+          status: "NEGOTIATING",
           limit: 50,
           offset: 0,
         },
@@ -198,6 +200,46 @@ describe("deals service", () => {
         net_profit: 1000,
         roi_percentage: 5,
       });
+    });
+  });
+
+  describe("fetchPortfolioSummary", () => {
+    it("fetches the portfolio reporting endpoint", async () => {
+      const mockSummary = {
+        by_status: { SOLD: 1 },
+        sold_count: 1,
+        sold_actual_profit_sum: 2550,
+        sold_projected_profit_sum: 2500,
+        profit_variance_sum: 50,
+        total_revenue: 19000,
+        total_invested: 16450,
+        pipeline_count: 0,
+        pipeline_projected_profit: null,
+      };
+      vi.mocked(api.get).mockResolvedValue({ data: mockSummary } as any);
+
+      const result = await fetchPortfolioSummary();
+
+      expect(api.get).toHaveBeenCalledWith("/deals/reports/portfolio");
+      expect(result).toEqual(mockSummary);
+    });
+  });
+
+  describe("fetchDealVariance", () => {
+    it("fetches variance for a single deal", async () => {
+      const mockVariance = {
+        deal_id: "deal-1",
+        status: "BOUGHT",
+        projected_purchase_price: 15000,
+        actual_purchase_price: 14800,
+        profit_variance: null,
+      };
+      vi.mocked(api.get).mockResolvedValue({ data: mockVariance } as any);
+
+      const result = await fetchDealVariance("deal-1");
+
+      expect(api.get).toHaveBeenCalledWith("/deals/deal-1/variance");
+      expect(result).toEqual(mockVariance);
     });
   });
 });

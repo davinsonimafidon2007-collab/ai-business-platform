@@ -3,22 +3,24 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  Home,
-  Search,
-  Sparkles,
-  Handshake,
+  LayoutDashboard,
+  Briefcase,
+  Bot,
+  CheckSquare,
   LayoutGrid,
   type LucideIcon,
 } from "lucide-react";
-import { useDashboardStats } from "@/app/hooks/use-search";
+import { useApprovals } from "@/app/hooks/useApprovals";
 
-const TABS: { href: string; label: string; Icon: LucideIcon; badge?: boolean }[] = [
-  { href: "/dashboard/", label: "Inicio", Icon: Home, badge: true },
-  { href: "/search/", label: "Buscar", Icon: Search },
-  { href: "/opportunities/", label: "Oport.", Icon: Sparkles },
-  { href: "/deals/", label: "Deals", Icon: Handshake },
-  { href: "/more/", label: "Más", Icon: LayoutGrid },
-];
+type Tab = {
+  href: string;
+  label: string;
+  Icon: LucideIcon;
+  /** Insignia con un conteo real (no decorativa). */
+  badgeCount?: number;
+  /** Botón central destacado (como el acceso a Agentes en el diseño). */
+  featured?: boolean;
+};
 
 /**
  * MOBILE.SHELL.1 — Barra de navegación inferior (5 destinos, pulgar).
@@ -26,19 +28,62 @@ const TABS: { href: string; label: string; Icon: LucideIcon; badge?: boolean }[]
  */
 export function MobileTabBar() {
   const pathname = usePathname();
-  const { data: stats } = useDashboardStats();
-  const newResults = stats?.new_search_results ?? 0;
+  const { data: approvals } = useApprovals();
+  const pendingApprovals = approvals?.length ?? 0;
+
+  const tabs: Tab[] = [
+    { href: "/dashboard/", label: "Dashboard", Icon: LayoutDashboard },
+    { href: "/opportunities/", label: "Oport.", Icon: Briefcase },
+    { href: "/agents/", label: "Agentes", Icon: Bot, featured: true },
+    {
+      href: "/approvals/",
+      label: "Aprob.",
+      Icon: CheckSquare,
+      badgeCount: pendingApprovals,
+    },
+    { href: "/more/", label: "Más", Icon: LayoutGrid },
+  ];
 
   return (
     <nav
       className="fixed bottom-0 left-0 right-0 z-50 border-t border-secondary-200 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur dark:border-primary-900/40 dark:bg-secondary-950/95"
       aria-label="Navegación principal"
     >
-      <ul className="flex h-14 items-stretch justify-around">
-        {TABS.map((tab) => {
-          const active =
-            pathname === tab.href || pathname.startsWith(tab.href);
-          const showBadge = tab.badge && newResults > 0;
+      <ul className="flex h-16 items-stretch justify-around">
+        {tabs.map((tab) => {
+          const active = pathname === tab.href || pathname.startsWith(tab.href);
+
+          if (tab.featured) {
+            return (
+              <li key={tab.href} className="relative flex-1">
+                <Link
+                  href={tab.href}
+                  aria-current={active ? "page" : undefined}
+                  className="flex h-full flex-col items-center justify-center gap-0.5"
+                >
+                  <span
+                    className={`-mt-6 flex h-12 w-12 items-center justify-center rounded-full shadow-lg shadow-primary-900/30 transition-colors ${
+                      active
+                        ? "bg-primary-600 text-white"
+                        : "bg-primary-500 text-white"
+                    }`}
+                  >
+                    <tab.Icon className="h-5 w-5" aria-hidden />
+                  </span>
+                  <span
+                    className={`text-[10px] font-medium ${
+                      active
+                        ? "text-primary-600 dark:text-primary-400"
+                        : "text-secondary-500 dark:text-secondary-400"
+                    }`}
+                  >
+                    {tab.label}
+                  </span>
+                </Link>
+              </li>
+            );
+          }
+
           return (
             <li key={tab.href} className="relative flex-1">
               <Link
@@ -60,9 +105,9 @@ export function MobileTabBar() {
                 />
                 {tab.label}
               </Link>
-              {showBadge && (
-                <span className="absolute top-1 rounded-full bg-red-500 px-1.5 py-0.5 text-[9px] font-bold leading-tight text-white">
-                  {newResults > 99 ? "99+" : newResults}
+              {!!tab.badgeCount && (
+                <span className="absolute right-[calc(50%-20px)] top-1 rounded-full bg-red-500 px-1.5 py-0.5 text-[9px] font-bold leading-tight text-white">
+                  {tab.badgeCount > 99 ? "99+" : tab.badgeCount}
                 </span>
               )}
             </li>

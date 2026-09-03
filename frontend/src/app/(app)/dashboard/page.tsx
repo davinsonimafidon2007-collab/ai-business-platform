@@ -3,18 +3,22 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { Search } from "lucide-react";
-import { useSearchHistory, useDashboardStats } from "@/app/hooks/use-search";
+import { Search, Plus, Briefcase, Loader2, Clock, CheckCircle2 } from "lucide-react";
+import { useSearchHistory } from "@/app/hooks/use-search";
+import { useApprovals } from "@/app/hooks/useApprovals";
 import {
   fetchOpportunities,
   type Opportunity,
 } from "@/app/services/opportunities";
+import { fetchPortfolioSummary } from "@/app/services/deals";
 import { fetchHealth } from "@/app/services/health";
 import { useNetworkStatus } from "@/app/hooks/useNetworkStatus";
 import { useAuthStore } from "@/app/store/auth-store";
 import { HomeGreeting } from "@/app/features/home/HomeGreeting";
 import { KpiRow } from "@/app/features/home/KpiRow";
 import { HomeSection } from "@/app/features/home/HomeSection";
+import { PhaseFlowStepper, type PhaseFlowStep } from "@/app/features/home/PhaseFlowStepper";
+import { ApprovalTaskCard, timeAgoEs } from "@/app/features/home/ApprovalTaskCard";
 import {
   OpportunityTeaserCard,
   type BadgeTone,
@@ -59,12 +63,21 @@ export default function DashboardPage() {
   const user = useAuthStore((s) => s.user);
   const { isOnline } = useNetworkStatus();
   const isOffline = !isOnline;
+
   const { data: history, isLoading: historyLoading, isError: historyError, refetch: refetchHistory } = useSearchHistory();
-  const { data: stats, isLoading: statsLoading, isError: statsError, refetch: refetchStats } = useDashboardStats();
   const { data: opportunities, isLoading: oppLoading, isError: oppError, refetch: refetchOpps } = useQuery({
     queryKey: ["opportunities", "home"],
     queryFn: () => fetchOpportunities({ limit: 5 }),
   });
+  const { data: openOpps } = useQuery({
+    queryKey: ["opportunities", "open-count"],
+    queryFn: () => fetchOpportunities({ status: "OPEN", limit: 1 }),
+  });
+  const { data: portfolio, isLoading: portfolioLoading } = useQuery({
+    queryKey: ["deals-portfolio-summary", "dashboard"],
+    queryFn: fetchPortfolioSummary,
+  });
+  const { data: approvals, isLoading: approvalsLoading } = useApprovals();
   const { data: health, isError: healthError } = useQuery({
     queryKey: ["health", "dashboard"],
     queryFn: fetchHealth,
@@ -73,60 +86,99 @@ export default function DashboardPage() {
   });
 
   const backendDown = healthError && !health;
-  const anyError = historyError || statsError || oppError;
+  const anyError = historyError || oppError;
   const refetchAll = () => {
     void refetchHistory();
-    void refetchStats();
     void refetchOpps();
   };
 
-  const totalSearches = stats?.total_searches ?? history?.length ?? 0;
-  const totalVehicles =
-    history?.reduce((sum, h) => sum + (h.results_count || 0), 0) || 0;
-  const averageResultsPerSearch =
-    stats?.average_results_per_search ??
-    (totalSearches > 0 ? Math.round(totalVehicles / totalSearches) : 0);
   const oppItems = opportunities?.items ?? [];
-  const oppTotal = opportunities?.total ?? oppItems.length;
-  const estProfit = oppItems.reduce(
-    (sum, o) => sum + (o.estimated_profit || 0),
-    0
-  );
+  const byStatus = portfolio?.by_status ?? {};
+
+  // KPIs: conteos reales (oportunidades abiertas, deals activos/vendidos,
+  // aprobaciones pendientes reales) — no hay ningún número inventado.
+  const activeOpportunities = openOpps?.total ?? 0;
+  const inProgress = portfolio?.pipeline_count ?? 0;
+  const pendingApproval = approvals?.length ?? 0;
+  const completed = portfolio?.sold_count ?? 0;
+  const kpiSum = inProgress + pendingApproval + completed;
+  const pct = (n: number) => (kpiSum > 0 ? `${Math.round((n / kpiSum) * 100)}% del total` : undefined);
 
   const kpis = [
     {
-      label: "Búsquedas",
-      value: totalSearches,
-      hint: totalSearches > 0 ? "Total acumulado" : "Sin actividad aún",
+      label: "Oportunidades",
+      value: activeOpportunities,
+      hint: "Activas",
+      icon: Briefcase,
+      tone: "info" as const,
     },
     {
-      label: "Vehículos en el radar",
-      value: totalVehicles,
-      hint:
-        totalVehicles > 0 ? `${averageResultsPerSearch} por búsqueda` : "Sin datos",
+      label: "En progreso",
+      value: inProgress,
+      hint: pct(inProgress),
+      icon: Loader2,
+      tone: "primary" as const,
     },
-    { label: "Oportunidades", value: oppTotal, hint: "Destacadas" },
     {
-      label: "Beneficio est.",
-      value: estProfit > 0 ? eur(estProfit) : "—",
-      hint: oppItems.length > 0 ? "Σ oportunidades" : "Sin estimaciones",
+      label: "Pendientes",
+      value: pendingApproval,
+      hint: pct(pendingApproval),
+      icon: Clock,
+      tone: "warning" as const,
+    },
+    {
+      label: "Completadas",
+      value: completed,
+      hint: pct(completed),
+      icon: CheckCircle2,
+      tone: "success" as const,
     },
   ];
 
+  // Flujo de fases: agrupación de los mismos estados reales de deals
+  // (GET /deals/reports/portfolio) en 5 etapas de negocio. No es un
+  // conteo nuevo/inventado, solo otra forma de mostrar by_status.
+  const phaseFlow: PhaseFlowStep[] = [
+    {
+      key: "busqueda",
+      label: "Búsqueda",
+      count: (byStatus.NEW ?? 0) + (byStatus.ANALYZING ?? 0),
+    },
+    {
+      key: "documentacion",
+      label: "Documentación",
+      count: (byStatus.NEGOTIATING ?? 0) + (byStatus.WON ?? 0),
+    },
+    {
+      key: "traslado",
+      label: "Traslado",
+      count: (byStatus.BOUGHT ?? 0) + (byStatus.IN_TRANSIT ?? 0),
+    },
+    {
+      key: "matriculacion",
+      label: "Matriculación",
+      count: byStatus.REGISTERED ?? 0,
+    },
+    { key: "venta", label: "Venta", count: byStatus.SOLD ?? 0 },
+  ];
+  const hasAnyDeals = phaseFlow.some((s) => s.count > 0);
+
+  const pendingApprovals = (approvals ?? []).slice(0, 2);
+
   return (
     <div className="space-y-5">
-      <HomeGreeting name={user?.full_name ?? user?.email} />
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <HomeGreeting name={user?.full_name ?? user?.email} />
+        <Link
+          href="/search/"
+          className="flex items-center gap-1.5 rounded-xl bg-primary-600 px-3.5 py-2 text-sm font-semibold text-white shadow-sm shadow-primary-900/20 transition-colors hover:bg-primary-700"
+        >
+          <Plus className="h-4 w-4" aria-hidden />
+          Nueva oportunidad
+        </Link>
+      </div>
 
       <KpiRow items={kpis} />
-
-      {/* CTA principal */}
-      <Link
-        href="/search"
-        className="mt-4 flex items-center justify-center gap-2 rounded-2xl bg-primary-600 px-4 py-3 text-center text-sm font-semibold text-white shadow-sm shadow-primary-900/20 transition-colors hover:bg-primary-700"
-      >
-        <Search className="h-4 w-4" aria-hidden />
-        Buscar vehículos
-      </Link>
 
       {isOffline && (
         <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-900/20">
@@ -157,8 +209,37 @@ export default function DashboardPage() {
         />
       )}
 
+      {/* Flujo de fases: solo se muestra si hay algún deal activo o cerrado */}
+      {!portfolioLoading && hasAnyDeals && (
+        <HomeSection title="Flujo de fases" href="/deals/">
+          <div className="rounded-2xl border border-secondary-200 bg-white p-3 dark:border-secondary-700 dark:bg-secondary-900">
+            <PhaseFlowStepper steps={phaseFlow} />
+          </div>
+        </HomeSection>
+      )}
+
+      {/* Tareas que requieren aprobación */}
+      {!approvalsLoading && pendingApprovals.length > 0 && (
+        <HomeSection
+          title={`Tareas que requieren tu aprobación (${approvals?.length ?? 0})`}
+          href="/approvals/"
+        >
+          <div className="space-y-2">
+            {pendingApprovals.map((task) => (
+              <ApprovalTaskCard
+                key={task.id}
+                title={task.title}
+                category={task.category}
+                description={task.description}
+                timeLabel={timeAgoEs(task.created_at)}
+              />
+            ))}
+          </div>
+        </HomeSection>
+      )}
+
       {/* Oportunidades + Actividad (stack en móvil, grid 2 cols en desktop) */}
-      <div className="mt-6 grid gap-6 md:grid-cols-2">
+      <div className="grid gap-6 md:grid-cols-2">
         <HomeSection title="Oportunidades destacadas" href="/opportunities">
           {oppLoading ? (
             <div className="space-y-3">
@@ -262,6 +343,15 @@ export default function DashboardPage() {
           )}
         </HomeSection>
       </div>
+
+      {/* CTA secundaria (móvil: acceso directo a búsqueda) */}
+      <Link
+        href="/search"
+        className="flex items-center justify-center gap-2 rounded-2xl border border-primary-600/40 bg-primary-600/10 px-4 py-3 text-center text-sm font-semibold text-primary-600 transition-colors hover:bg-primary-600/20 dark:text-primary-400 sm:hidden"
+      >
+        <Search className="h-4 w-4" aria-hidden />
+        Buscar vehículos
+      </Link>
     </div>
   );
 }

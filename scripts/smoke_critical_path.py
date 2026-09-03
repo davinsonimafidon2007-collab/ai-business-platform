@@ -19,6 +19,7 @@ import argparse
 import os
 import sys
 import uuid
+
 import httpx
 
 BASE = os.environ.get("BASE_URL", "http://localhost:8000").rstrip("/")

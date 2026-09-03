@@ -16,12 +16,11 @@ export default function ApprovalsPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const { data, isLoading, isError, refetch } = useApprovals();
 
-  const approvalsData = data ?? [];
-
   const filtered = useMemo(() => {
+    const approvalsData = data ?? [];
     if (activeFilter === "Todas") return approvalsData;
     return approvalsData.filter((a: any) => a.category === activeFilter);
-  }, [approvalsData, activeFilter]);
+  }, [data, activeFilter]);
 
   const selectedApproval = filtered.find((a: any) => a.id === selectedId);
 

@@ -272,7 +272,20 @@ class Deal(Base):
     registration_cost: Mapped[float | None] = mapped_column(
         Numeric(12, 2), nullable=True
     )
-    """Coste real de matriculación (EUR)."""
+    """Coste real de matriculación (gestoría/admin, EUR). Distinto de
+    ``actual_taxes``: aquí solo va el coste administrativo, no el impuesto."""
+
+    actual_taxes: Mapped[float | None] = mapped_column(
+        Numeric(12, 2), nullable=True
+    )
+    """Impuestos reales pagados en la matriculación (IEDMT + IVA si aplica,
+    EUR). Se captura junto con ``registration_cost`` porque es cuando se
+    conoce el importe real (antes solo era una estimación del motor
+    económico). Separado de ``registration_cost`` porque en
+    ProfitAnalyzer._compute_cost_breakdown los impuestos y el coste de
+    matriculación ya son líneas distintas — el lado "real" debe reflejar
+    la misma separación para que la comparación prevista-vs-real tenga
+    sentido campo a campo."""
 
     registered_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True

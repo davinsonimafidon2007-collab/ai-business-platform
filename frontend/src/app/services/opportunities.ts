@@ -54,6 +54,8 @@ export type OpportunityFilters = {
   recommendation?: string;
   min_score?: number;
   min_roi?: number;
+  /** OPEN | CONVERTED (TASK 3). */
+  status?: string;
   limit?: number;
   offset?: number;
 };
@@ -66,6 +68,7 @@ export async function fetchOpportunities(
       recommendation: params.recommendation || undefined,
       min_score: params.min_score ?? undefined,
       min_roi: params.min_roi ?? undefined,
+      status: params.status || undefined,
       limit: params.limit ?? 50,
       offset: params.offset ?? 0,
     },

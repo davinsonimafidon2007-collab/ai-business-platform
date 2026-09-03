@@ -15,6 +15,7 @@ from app.main import app
 from app.models.deal import Deal, DealStatus, DealStatusHistory
 from app.models.user import User
 from app.repositories.deal_repository import DealRepository
+from app.repositories.vehicle_repository import VehicleRepository
 
 client = TestClient(app)
 
@@ -125,6 +126,63 @@ def test_create_deal_without_link_returns_422(auth_override: None) -> None:
         app.dependency_overrides[get_db_session] = _get_db_session
         response = client.post("/api/v1/deals", json={"notes": "sin vinculo"})
         assert response.status_code == 422
+
+
+def test_create_deal_by_external_id_resolves_vehicle(auth_override: None) -> None:
+    """POST /deals con source+external_id (sin vehicle_id) resuelve el
+    vehículo interno y crea el deal -> 201 (no 500 por FK nula)."""
+    deal = _make_deal(vehicle_id="vehicle-real-uuid")
+
+    class _FakeVehicle:
+        id = "vehicle-real-uuid"
+
+    async def _fake_get_by_external_id(self, source, external_id, user_id=None):
+        return _FakeVehicle()
+
+    async def _fake_save_transition(self, deal_arg, history, audit_log=None):
+        return deal
+
+    async def _fake_get_active(self, user_id, opportunity_id):
+        return None
+
+    async def _get_db_session() -> AsyncMock:
+        return AsyncMock()
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(VehicleRepository, "get_by_external_id", _fake_get_by_external_id)
+        mp.setattr(DealRepository, "save_transition", _fake_save_transition)
+        mp.setattr(DealRepository, "get_active_by_opportunity", _fake_get_active)
+        app.dependency_overrides[get_db_session] = _get_db_session
+
+        response = client.post(
+            "/api/v1/deals",
+            json={"source": "autoscout24", "external_id": "ext-123"},
+        )
+        assert response.status_code == 201
+        assert response.json()["vehicle_id"] == "vehicle-real-uuid"
+
+
+def test_create_deal_unresolvable_external_id_returns_404_not_500(
+    auth_override: None,
+) -> None:
+    """POST /deals con source+external_id que no resuelve a ningún vehículo
+    -> 404 explícito, nunca 500 por vehicle_id=None violando la FK."""
+
+    async def _fake_get_by_external_id(self, source, external_id, user_id=None):
+        return None
+
+    async def _get_db_session() -> AsyncMock:
+        return AsyncMock()
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(VehicleRepository, "get_by_external_id", _fake_get_by_external_id)
+        app.dependency_overrides[get_db_session] = _get_db_session
+
+        response = client.post(
+            "/api/v1/deals",
+            json={"source": "autoscout24", "external_id": "does-not-exist"},
+        )
+        assert response.status_code == 404
 
 
 def test_create_duplicate_active_returns_409(auth_override: None) -> None:
@@ -506,3 +564,88 @@ def test_patch_simulation_foreign_deal_returns_404(auth_override: None) -> None:
             json={"net_profit": 1000.0},
         )
         assert response.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# GET /deals/reports/portfolio, GET /deals/{id}/variance
+# ---------------------------------------------------------------------------
+
+
+def test_portfolio_summary_returns_aggregates(auth_override: None) -> None:
+    """GET /deals/reports/portfolio expone los agregados de cartera."""
+    from app.repositories.deal_repository import DealRepository as _DR
+
+    async def _fake_aggregates(self, user_id):
+        return {
+            "by_status": {"SOLD": 2, "NEGOTIATING": 1},
+            "sold_count": 2,
+            "sold_actual_profit_sum": 5000.0,
+            "sold_projected_profit_sum": 4500.0,
+            "sold_revenue_sum": 38000.0,
+            "sold_purchase_sum": 29600.0,
+            "sold_transport_sum": 1800.0,
+            "sold_registration_sum": 900.0,
+            "sold_taxes_sum": 600.0,
+            "pipeline_count": 1,
+            "pipeline_projected_profit_sum": 1000.0,
+        }
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(_DR, "get_portfolio_aggregates", _fake_aggregates)
+        response = client.get("/api/v1/deals/reports/portfolio")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["sold_count"] == 2
+    assert data["sold_actual_profit_sum"] == 5000.0
+    assert data["profit_variance_sum"] == 500.0
+    assert data["total_invested"] == 29600.0 + 1800.0 + 900.0 + 600.0
+    assert data["pipeline_count"] == 1
+    assert data["pipeline_projected_profit"] == 1000.0
+    assert data["by_status"]["SOLD"] == 2
+
+
+def test_portfolio_summary_requires_auth() -> None:
+    """Sin token -> 401, igual que el resto de /deals."""
+    with patch.object(settings, "auth_disabled", False):
+        response = client.get("/api/v1/deals/reports/portfolio")
+        assert response.status_code == 401
+
+
+def test_deal_variance_returns_projected_vs_actual(auth_override: None) -> None:
+    """GET /deals/{id}/variance compara previsto vs. real de un deal propio."""
+    deal = _make_deal(status=DealStatus.BOUGHT)
+    deal.last_sim_purchase_price = 15000.0
+    deal.last_sim_net_profit = 2500.0
+    deal.last_sim_roi = 16.67
+    deal.actual_purchase_price = 14800.0
+
+    async def _fake_get_by_id(self, deal_id):
+        return deal
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(DealRepository, "get_by_id", _fake_get_by_id)
+
+        response = client.get("/api/v1/deals/deal-1/variance")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["deal_id"] == "deal-1"
+    assert data["projected_purchase_price"] == 15000.0
+    assert data["actual_purchase_price"] == 14800.0
+    assert data["profit_variance"] is None  # aún no SOLD
+
+
+def test_deal_variance_foreign_deal_returns_404(auth_override: None) -> None:
+    """GET /deals/{id}/variance sobre deal ajeno -> 404."""
+    deal = _make_deal(user_id="user-2")
+
+    async def _fake_get_by_id(self, deal_id):
+        return deal
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(DealRepository, "get_by_id", _fake_get_by_id)
+
+        response = client.get("/api/v1/deals/deal-1/variance")
+
+    assert response.status_code == 404
