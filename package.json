@@ -1,5 +1,6 @@
 {
   "scripts": {
+    "dev": "npm --prefix frontend run dev",
     "test": "npm --prefix frontend test",
     "lint": "npm --prefix frontend run lint",
     "build": "npm --prefix frontend run build"

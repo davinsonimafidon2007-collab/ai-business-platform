@@ -10,7 +10,10 @@ interface ThemeState {
 }
 
 export const useThemeStore = create<ThemeState>((set) => ({
-  theme: "light",
+  // Oscuro por defecto: es la identidad visual de la plataforma (ver
+  // diseño de agents/AgentCard, ya construidas solo en oscuro). El toggle
+  // sigue disponible y la preferencia guardada en localStorage manda.
+  theme: "dark",
   toggleTheme: () =>
     set((state) => {
       const newTheme = state.theme === "light" ? "dark" : "light";
@@ -30,31 +33,13 @@ export const useThemeStore = create<ThemeState>((set) => ({
   initialize: () => {
     if (typeof window !== "undefined") {
       const stored = localStorage.getItem("theme") as Theme | null;
-      const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
-      const theme = stored || (mediaQuery.matches ? "dark" : "light");
+      // Sin preferencia guardada -> oscuro (identidad de la plataforma),
+      // salvo que el sistema pida explícitamente claro (respeta esa señal
+      // en el primer arranque; a partir de ahí manda el toggle guardado).
+      const mediaQueryLight = window.matchMedia("(prefers-color-scheme: light)");
+      const theme = stored || (mediaQueryLight.matches ? "light" : "dark");
       document.documentElement.classList.toggle("dark", theme === "dark");
       set({ theme });
-
-      // Escuchar cambios de tema del sistema nativo en tiempo real (TASK-020)
-      const listener = (e: MediaQueryListEvent) => {
-        const hasStored = localStorage.getItem("theme");
-        if (!hasStored) {
-          const newTheme = e.matches ? "dark" : "light";
-          document.documentElement.classList.toggle("dark", newTheme === "dark");
-          set({ theme: newTheme });
-        }
-      };
-      if (mediaQuery.addEventListener) {
-        try {
-          mediaQuery.addEventListener("change", listener);
-        } catch (err) {
-          if (mediaQuery.addListener) {
-            mediaQuery.addListener(listener);
-          }
-        }
-      } else if (mediaQuery.addListener) {
-        mediaQuery.addListener(listener);
-      }
     }
   },
 }));

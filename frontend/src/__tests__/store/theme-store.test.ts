@@ -8,8 +8,10 @@ function resetStore() {
   document.documentElement.classList.remove("dark");
 }
 
-/** jsdom no implementa matchMedia: hay que stubearlo, no espiarlo. */
-function stubPrefersDark(matches: boolean) {
+/** jsdom no implementa matchMedia: hay que stubearlo, no espiarlo.
+ * El store consulta `(prefers-color-scheme: light)` (el oscuro es el
+ * default; solo se cae a claro si el sistema lo pide explícitamente). */
+function stubPrefersLight(matches: boolean) {
   vi.stubGlobal(
     "matchMedia",
     vi.fn().mockReturnValue({ matches } as MediaQueryList)
@@ -45,30 +47,31 @@ describe("useThemeStore", () => {
   });
 
   it("initialize prefers the stored value over the OS preference", () => {
-    localStorage.setItem("theme", "dark");
-    stubPrefersDark(false);
-
-    useThemeStore.getState().initialize();
-
-    expect(useThemeStore.getState().theme).toBe("dark");
-    expect(document.documentElement.classList.contains("dark")).toBe(true);
-  });
-
-  it("initialize falls back to the OS preference when nothing is stored", () => {
-    stubPrefersDark(true);
-
-    useThemeStore.getState().initialize();
-
-    expect(useThemeStore.getState().theme).toBe("dark");
-  });
-
-  it("initialize defaults to light without preference", () => {
-    stubPrefersDark(false);
+    localStorage.setItem("theme", "light");
+    stubPrefersLight(false);
 
     useThemeStore.getState().initialize();
 
     expect(useThemeStore.getState().theme).toBe("light");
     expect(document.documentElement.classList.contains("dark")).toBe(false);
+  });
+
+  it("initialize falls back to light when the OS explicitly prefers light and nothing is stored", () => {
+    stubPrefersLight(true);
+
+    useThemeStore.getState().initialize();
+
+    expect(useThemeStore.getState().theme).toBe("light");
+    expect(document.documentElement.classList.contains("dark")).toBe(false);
+  });
+
+  it("initialize defaults to dark without any OS preference or stored value", () => {
+    stubPrefersLight(false);
+
+    useThemeStore.getState().initialize();
+
+    expect(useThemeStore.getState().theme).toBe("dark");
+    expect(document.documentElement.classList.contains("dark")).toBe(true);
   });
 });
 
