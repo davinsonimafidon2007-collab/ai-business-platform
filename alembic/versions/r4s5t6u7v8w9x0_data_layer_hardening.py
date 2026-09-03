@@ -51,10 +51,11 @@ def upgrade() -> None:
         # opportunity_phases: fix id and opportunity_id to uuid
         op.execute("ALTER TABLE opportunity_phases ALTER COLUMN id TYPE uuid USING id::uuid")
         op.execute("ALTER TABLE opportunity_phases ALTER COLUMN opportunity_id TYPE uuid USING opportunity_id::uuid")
-        # unique constraint opportunity_id + order
-        op.create_index(
-            "ix_opportunity_phases_opportunity_order", "opportunity_phases", ["opportunity_id", "order"], unique=True
-        )
+        # NOTA: ix_opportunity_phases_opportunity_order (unique opportunity_id+order)
+        # ya lo crea q3r4s5t6u7v8_add_opportunity_phases_table.py al crear la tabla.
+        # Recrearlo aquí rompía "alembic upgrade head" contra Postgres real con
+        # asyncpg.exceptions.DuplicateTableError — en SQLite pasaba desapercibido
+        # porque la rama de abajo lo envolvía en try/except.
     else:
         # sqlite: use batch to add FKs (sqlite FKs are not type-strict, String ok)
         # Alembic sqlite batch for FK creation
@@ -68,11 +69,8 @@ def upgrade() -> None:
                 batch.create_foreign_key("fk_password_reset_tokens_user_id", "users", ["user_id"], ["id"], ondelete="CASCADE")
             except Exception:
                 pass
-        # unique constraint via index for sqlite
-        try:
-            op.create_index("ix_opportunity_phases_opportunity_order", "opportunity_phases", ["opportunity_id", "order"], unique=True)
-        except Exception:
-            pass
+        # ix_opportunity_phases_opportunity_order: ya la crea
+        # q3r4s5t6u7v8_add_opportunity_phases_table.py — ver nota en la rama postgres.
 
     # -- indexes (safe for both dialects, IF NOT EXISTS via try) --
     def _create_index(name, table, cols, unique=False):
@@ -136,7 +134,8 @@ def downgrade() -> None:
     _drop("ix_vehicle_evaluations_vehicle_id", "vehicle_evaluations")
     _drop("ix_search_order_vehicles_vehicle_id", "search_order_vehicles")
     _drop("ix_search_order_vehicles_search_order_id", "search_order_vehicles")
-    _drop("ix_opportunity_phases_opportunity_order", "opportunity_phases")
+    # ix_opportunity_phases_opportunity_order: la crea y la borra
+    # q3r4s5t6u7v8_add_opportunity_phases_table.py, no esta migración.
 
     if _is_postgres():
         try:
