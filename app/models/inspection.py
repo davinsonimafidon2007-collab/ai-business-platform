@@ -44,15 +44,21 @@ class InspectionSession(Base):
     id: Mapped[str] = mapped_column(
         Uuid(as_uuid=False), primary_key=True, default=lambda: str(uuid4())
     )
+    # TASK 9 (AUD-017): índices en las FKs más consultadas (antes ninguna
+    # tabla de inspección tenía índice: InspectionObservationRepository.
+    # get_by_session, InspectionPhotoRepository.get_by_session/
+    # get_by_observation escaneaban la tabla entera).
     vehicle_id: Mapped[str] = mapped_column(
         Uuid(as_uuid=False),
         ForeignKey("vehicles.id", ondelete="CASCADE"),
         nullable=False,
+        index=True,
     )
     user_id: Mapped[str] = mapped_column(
         Uuid(as_uuid=False),
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
+        index=True,
     )
     status: Mapped[str] = mapped_column(
         String(20),
@@ -196,6 +202,7 @@ class InspectionObservation(Base):
         Uuid(as_uuid=False),
         ForeignKey("inspection_sessions.id", ondelete="CASCADE"),
         nullable=False,
+        index=True,
     )
     category_id: Mapped[str] = mapped_column(String(50), nullable=False)
     """ID de la categoría (ej: 'exterior'). Ref al catálogo estático."""
@@ -283,11 +290,13 @@ class InspectionPhoto(Base):
         Uuid(as_uuid=False),
         ForeignKey("inspection_observations.id", ondelete="CASCADE"),
         nullable=False,
+        index=True,
     )
     session_id: Mapped[str] = mapped_column(
         Uuid(as_uuid=False),
         ForeignKey("inspection_sessions.id", ondelete="CASCADE"),
         nullable=False,
+        index=True,
     )
 
     # Almacenamos la URL/ruta del archivo
