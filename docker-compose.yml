@@ -48,6 +48,13 @@ services:
       ENABLE_MOBILE_DE: "${ENABLE_MOBILE_DE:-false}"
       PROVIDER_HTTP_PROXY: "${PROVIDER_HTTP_PROXY:-}"
       FIREBASE_CREDENTIALS_JSON: "${FIREBASE_CREDENTIALS_JSON:-}"
+      # Bug real encontrado probando el stack en vivo: sin este passthrough
+      # el contenedor ignora el CORS_ORIGINS del .env del host y usa el
+      # default de app/core/config.py (puertos 3000/5173/8080), que NO
+      # incluye el puerto 3001 donde este mismo compose sirve el frontend
+      # (FRONTEND_PORT) — el navegador bloquea todas las llamadas a la API
+      # por CORS aunque los healthchecks pasen y los contenedores estén sanos.
+      CORS_ORIGINS: "${CORS_ORIGINS:-http://localhost:3001,http://127.0.0.1:3001}"
       # Uso personal (PERS.CLOSE.1): sin este passthrough el contenedor arranca
       # con AUTH_DISABLED vacío (=false) y la API responde 401 aunque el .env
       # del host diga true.
