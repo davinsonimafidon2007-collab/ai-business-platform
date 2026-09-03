@@ -32,6 +32,7 @@ Propiedades garantizadas:
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from sqlalchemy.exc import IntegrityError
@@ -49,6 +50,63 @@ from app.repositories.deal_repository import DealRepository
 from app.repositories.vehicle_evaluation_repository import VehicleEvaluationRepository
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class DealVariance:
+    """Comparación previsto (última simulación) vs. real de un deal.
+
+    Campos ``projected_*`` vienen de ``last_sim_*`` (la última simulación
+    guardada, si la hubo); ``actual_*`` vienen de los campos de
+    cumplimiento físico (TASK 3). ``None`` cuando el dato aún no existe
+    (p.ej. ``actual_total_cost`` antes de BOUGHT, o cualquier campo
+    ``projected_*`` si nunca se guardó una simulación).
+    """
+
+    deal_id: str
+    status: str
+    projected_purchase_price: float | None
+    actual_purchase_price: float | None
+    projected_sale_price: float | None
+    actual_sale_price: float | None
+    projected_total_cost: float | None
+    actual_total_cost: float | None
+    projected_net_profit: float | None
+    actual_net_profit: float | None
+    profit_variance: float | None
+    """actual_net_profit - projected_net_profit. Positivo = fue mejor de lo
+    previsto. None si falta cualquiera de los dos lados."""
+    projected_roi_percentage: float | None
+
+
+@dataclass
+class PortfolioSummary:
+    """Reporting de cartera: cerrados (real) + pipeline activo (previsto).
+
+    Los agregados de deals SOLD comparan real contra lo que se había
+    previsto en la última simulación guardada de CADA uno de esos deals
+    (no una previsión global), así que la comparación es coherente
+    aunque perfiles/vehículos sean distintos entre sí.
+    """
+
+    by_status: dict[str, int]
+    sold_count: int
+    sold_actual_profit_sum: float | None
+    sold_projected_profit_sum: float | None
+    """Suma de last_sim_net_profit de los MISMOS deals que ya están SOLD
+    (no de todos los deals históricos): compara lo previsto para estas
+    operaciones concretas contra lo que realmente dieron."""
+    profit_variance_sum: float | None
+    """sold_actual_profit_sum - sold_projected_profit_sum."""
+    total_revenue: float | None
+    """Suma de sale_price de deals SOLD (cashflow de entrada)."""
+    total_invested: float | None
+    """Suma de purchase + transport + registration + taxes reales de
+    deals SOLD (cashflow de salida ya materializado)."""
+    pipeline_count: int
+    pipeline_projected_profit: float | None
+    """Beneficio previsto (last_sim_net_profit) de deals aún activos
+    (NEW..REGISTERED): lo que hay "en juego", no realizado todavía."""
 
 
 class DealService:
@@ -280,6 +338,7 @@ class DealService:
         transport_cost: float | None = None,
         registration_plate: str | None = None,
         registration_cost: float | None = None,
+        actual_taxes: float | None = None,
         sale_price: float | None = None,
         buyer_name: str | None = None,
         buyer_contact: str | None = None,
@@ -297,7 +356,8 @@ class DealService:
 
           - BOUGHT: ``actual_purchase_price`` (si se omite, usa ``offer_price``).
           - IN_TRANSIT: ``transport_carrier``, ``transport_cost`` (opcionales).
-          - REGISTERED: ``registration_plate``, ``registration_cost`` (opcionales).
+          - REGISTERED: ``registration_plate``, ``registration_cost``,
+            ``actual_taxes`` (IEDMT + IVA reales, opcionales).
           - SOLD: ``sale_price`` (obligatorio), ``buyer_name``/``buyer_contact``
             (opcionales). Al llegar a SOLD se calcula ``actual_profit`` real
             (no una estimación) a partir de los costes efectivamente
@@ -368,6 +428,8 @@ class DealService:
                 deal.registration_plate = registration_plate
             if registration_cost is not None:
                 deal.registration_cost = registration_cost
+            if actual_taxes is not None:
+                deal.actual_taxes = actual_taxes
             deal.transport_completed_at = deal.transport_completed_at or now
             deal.registered_at = now
 
@@ -414,7 +476,8 @@ class DealService:
 
     @staticmethod
     def _compute_actual_profit(deal: Deal) -> float | None:
-        """Beneficio REAL: sale_price - (compra + transporte + matriculación).
+        """Beneficio REAL: sale_price - (compra + transporte + matriculación
+        + impuestos reales).
 
         Distinto de ``last_sim_net_profit`` (una estimación previa a la
         venta): este cálculo usa únicamente costes efectivamente registrados
@@ -431,6 +494,7 @@ class DealService:
             float(purchase)
             + float(deal.transport_cost or 0)
             + float(deal.registration_cost or 0)
+            + float(deal.actual_taxes or 0)
         )
         return round(float(deal.sale_price) - total_cost, 2)
 
@@ -476,3 +540,97 @@ class DealService:
             details=f"Deal deleted while in status {deal.status.value}",
         )
         await self.repository.delete(deal, audit)
+
+    # ------------------------------------------------------------------
+    # Reporting: previsto vs. real, cartera
+    # ------------------------------------------------------------------
+
+    async def get_deal_variance(self, deal_id: str, user_id: str) -> DealVariance:
+        """Compara la última simulación guardada de un deal contra lo real.
+
+        Raises:
+            DealNotFoundError 404: Si el deal no existe o no pertenece al usuario.
+        """
+        deal = await self.get(deal_id, user_id)
+
+        actual_total_cost: float | None = None
+        purchase_for_cost = (
+            deal.actual_purchase_price
+            if deal.actual_purchase_price is not None
+            else deal.offer_price
+        )
+        if purchase_for_cost is not None:
+            actual_total_cost = round(
+                float(purchase_for_cost)
+                + float(deal.transport_cost or 0)
+                + float(deal.registration_cost or 0)
+                + float(deal.actual_taxes or 0),
+                2,
+            )
+
+        profit_variance = None
+        if deal.actual_profit is not None and deal.last_sim_net_profit is not None:
+            profit_variance = round(
+                float(deal.actual_profit) - float(deal.last_sim_net_profit), 2
+            )
+
+        return DealVariance(
+            deal_id=deal.id,
+            status=deal.status.value,
+            projected_purchase_price=deal.last_sim_purchase_price,
+            actual_purchase_price=deal.actual_purchase_price,
+            projected_sale_price=deal.last_sim_sale_price,
+            actual_sale_price=deal.sale_price,
+            projected_total_cost=deal.last_sim_total_cost,
+            actual_total_cost=actual_total_cost,
+            projected_net_profit=deal.last_sim_net_profit,
+            actual_net_profit=deal.actual_profit,
+            profit_variance=profit_variance,
+            projected_roi_percentage=deal.last_sim_roi,
+        )
+
+    async def get_portfolio_summary(self, user_id: str) -> PortfolioSummary:
+        """Reporting de cartera del usuario: cerrados (real vs. previsto) +
+        pipeline activo (previsto, aún no realizado).
+        """
+        agg = await self.repository.get_portfolio_aggregates(user_id)
+
+        sold_actual = agg["sold_actual_profit_sum"]
+        sold_projected = agg["sold_projected_profit_sum"]
+        profit_variance_sum = None
+        if sold_actual is not None and sold_projected is not None:
+            profit_variance_sum = round(float(sold_actual) - float(sold_projected), 2)
+
+        total_invested = None
+        cost_parts = [
+            agg["sold_purchase_sum"],
+            agg["sold_transport_sum"],
+            agg["sold_registration_sum"],
+            agg["sold_taxes_sum"],
+        ]
+        if any(part is not None for part in cost_parts):
+            total_invested = round(sum(float(p or 0) for p in cost_parts), 2)
+
+        return PortfolioSummary(
+            by_status=agg["by_status"],
+            sold_count=agg["sold_count"],
+            sold_actual_profit_sum=(
+                round(float(sold_actual), 2) if sold_actual is not None else None
+            ),
+            sold_projected_profit_sum=(
+                round(float(sold_projected), 2) if sold_projected is not None else None
+            ),
+            profit_variance_sum=profit_variance_sum,
+            total_revenue=(
+                round(float(agg["sold_revenue_sum"]), 2)
+                if agg["sold_revenue_sum"] is not None
+                else None
+            ),
+            total_invested=total_invested,
+            pipeline_count=agg["pipeline_count"],
+            pipeline_projected_profit=(
+                round(float(agg["pipeline_projected_profit_sum"]), 2)
+                if agg["pipeline_projected_profit_sum"] is not None
+                else None
+            ),
+        )

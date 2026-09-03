@@ -44,6 +44,7 @@ export type Deal = {
   transport_completed_at?: string | null;
   registration_plate?: string | null;
   registration_cost?: number | null;
+  actual_taxes?: number | null;
   registered_at?: string | null;
   sale_price?: number | null;
   buyer_name?: string | null;
@@ -116,6 +117,7 @@ export async function updateDealStatus(
     transport_cost?: number;
     registration_plate?: string;
     registration_cost?: number;
+    actual_taxes?: number;
     sale_price?: number;
     buyer_name?: string;
     buyer_contact?: string;
@@ -133,5 +135,44 @@ export async function updateDealSimulation(
     `/deals/${dealId}/simulation`,
     body
   );
+  return data;
+}
+
+/** Reporting de cartera: deals cerrados (real vs. previsto) + pipeline activo. */
+export type PortfolioSummary = {
+  by_status: Record<string, number>;
+  sold_count: number;
+  sold_actual_profit_sum?: number | null;
+  sold_projected_profit_sum?: number | null;
+  profit_variance_sum?: number | null;
+  total_revenue?: number | null;
+  total_invested?: number | null;
+  pipeline_count: number;
+  pipeline_projected_profit?: number | null;
+};
+
+export async function fetchPortfolioSummary(): Promise<PortfolioSummary> {
+  const { data } = await api.get<PortfolioSummary>("/deals/reports/portfolio");
+  return data;
+}
+
+/** Comparación previsto (última simulación) vs. real de un deal. */
+export type DealVariance = {
+  deal_id: string;
+  status: DealStatus;
+  projected_purchase_price?: number | null;
+  actual_purchase_price?: number | null;
+  projected_sale_price?: number | null;
+  actual_sale_price?: number | null;
+  projected_total_cost?: number | null;
+  actual_total_cost?: number | null;
+  projected_net_profit?: number | null;
+  actual_net_profit?: number | null;
+  profit_variance?: number | null;
+  projected_roi_percentage?: number | null;
+};
+
+export async function fetchDealVariance(dealId: string): Promise<DealVariance> {
+  const { data } = await api.get<DealVariance>(`/deals/${dealId}/variance`);
   return data;
 }

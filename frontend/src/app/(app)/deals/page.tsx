@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { fetchDeals, updateDealStatus } from "@/app/services/deals";
+import { fetchDeals, fetchPortfolioSummary, updateDealStatus } from "@/app/services/deals";
 import type { Deal, DealStatus } from "@/app/services/deals";
 import { offerPricePrefill } from "@/app/(app)/deals/offerPrefill";
 import { Button } from "@/app/components/ui/button";
@@ -124,7 +124,8 @@ const STAGE_FIELDS: Partial<Record<DealStatus, StageField[]>> = {
   ],
   REGISTERED: [
     { key: "registration_plate", label: "Matrícula", type: "text", placeholder: "ej. 1234ABC" },
-    { key: "registration_cost", label: "Coste de matriculación (EUR)", type: "number", placeholder: "ej. 450" },
+    { key: "registration_cost", label: "Coste de gestoría (EUR)", type: "number", placeholder: "ej. 450" },
+    { key: "actual_taxes", label: "Impuestos pagados (IEDMT+IVA, EUR)", type: "number", placeholder: "ej. 300" },
   ],
   SOLD: [
     {
@@ -463,6 +464,70 @@ function DealRow({ deal }: { deal: Deal }) {
   );
 }
 
+function StatCard({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone?: "positive" | "negative" | "neutral";
+}) {
+  const toneClass =
+    tone === "positive"
+      ? "text-emerald-600 dark:text-emerald-400"
+      : tone === "negative"
+        ? "text-red-600 dark:text-red-400"
+        : "text-secondary-900 dark:text-secondary-100";
+  return (
+    <div className="rounded-lg border border-secondary-200 bg-white p-4 dark:border-secondary-700 dark:bg-secondary-800">
+      <p className="text-xs font-medium text-secondary-500 dark:text-secondary-400">
+        {label}
+      </p>
+      <p className={`mt-1 text-xl font-semibold ${toneClass}`}>{value}</p>
+    </div>
+  );
+}
+
+function PortfolioSummaryPanel() {
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ["deals-portfolio-summary"],
+    queryFn: fetchPortfolioSummary,
+  });
+
+  if (isLoading || isError || !data) return null;
+  // Nada cerrado ni en pipeline todavía: no hay nada útil que mostrar.
+  if (data.sold_count === 0 && data.pipeline_count === 0) return null;
+
+  const variance = data.profit_variance_sum;
+  const varianceTone =
+    variance == null ? "neutral" : variance >= 0 ? "positive" : "negative";
+
+  return (
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+      <StatCard label="Deals vendidos" value={String(data.sold_count)} />
+      <StatCard
+        label="Beneficio real (vendidos)"
+        value={eur(data.sold_actual_profit_sum)}
+      />
+      <StatCard
+        label="Previsto vs. real"
+        value={
+          variance == null
+            ? "—"
+            : `${variance >= 0 ? "+" : ""}${eur(variance)}`
+        }
+        tone={varianceTone}
+      />
+      <StatCard
+        label="En pipeline (previsto)"
+        value={`${data.pipeline_count} · ${eur(data.pipeline_projected_profit)}`}
+      />
+      <StatCard label="Invertido (vendidos)" value={eur(data.total_invested)} />
+    </div>
+  );
+}
+
 function DealsContent() {
   const [status, setStatus] = useState<string>("");
   const [message, setMessage] = useState<string | null>(null);
@@ -501,6 +566,8 @@ function DealsContent() {
           </Button>
         </div>
       </div>
+
+      <PortfolioSummaryPanel />
 
       {/* Filter */}
       <div className="flex flex-wrap items-center gap-4 rounded-lg border border-secondary-200 bg-white p-4 dark:border-secondary-700 dark:bg-secondary-800">

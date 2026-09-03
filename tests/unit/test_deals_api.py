@@ -564,3 +564,88 @@ def test_patch_simulation_foreign_deal_returns_404(auth_override: None) -> None:
             json={"net_profit": 1000.0},
         )
         assert response.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# GET /deals/reports/portfolio, GET /deals/{id}/variance
+# ---------------------------------------------------------------------------
+
+
+def test_portfolio_summary_returns_aggregates(auth_override: None) -> None:
+    """GET /deals/reports/portfolio expone los agregados de cartera."""
+    from app.repositories.deal_repository import DealRepository as _DR
+
+    async def _fake_aggregates(self, user_id):
+        return {
+            "by_status": {"SOLD": 2, "NEGOTIATING": 1},
+            "sold_count": 2,
+            "sold_actual_profit_sum": 5000.0,
+            "sold_projected_profit_sum": 4500.0,
+            "sold_revenue_sum": 38000.0,
+            "sold_purchase_sum": 29600.0,
+            "sold_transport_sum": 1800.0,
+            "sold_registration_sum": 900.0,
+            "sold_taxes_sum": 600.0,
+            "pipeline_count": 1,
+            "pipeline_projected_profit_sum": 1000.0,
+        }
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(_DR, "get_portfolio_aggregates", _fake_aggregates)
+        response = client.get("/api/v1/deals/reports/portfolio")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["sold_count"] == 2
+    assert data["sold_actual_profit_sum"] == 5000.0
+    assert data["profit_variance_sum"] == 500.0
+    assert data["total_invested"] == 29600.0 + 1800.0 + 900.0 + 600.0
+    assert data["pipeline_count"] == 1
+    assert data["pipeline_projected_profit"] == 1000.0
+    assert data["by_status"]["SOLD"] == 2
+
+
+def test_portfolio_summary_requires_auth() -> None:
+    """Sin token -> 401, igual que el resto de /deals."""
+    with patch.object(settings, "auth_disabled", False):
+        response = client.get("/api/v1/deals/reports/portfolio")
+        assert response.status_code == 401
+
+
+def test_deal_variance_returns_projected_vs_actual(auth_override: None) -> None:
+    """GET /deals/{id}/variance compara previsto vs. real de un deal propio."""
+    deal = _make_deal(status=DealStatus.BOUGHT)
+    deal.last_sim_purchase_price = 15000.0
+    deal.last_sim_net_profit = 2500.0
+    deal.last_sim_roi = 16.67
+    deal.actual_purchase_price = 14800.0
+
+    async def _fake_get_by_id(self, deal_id):
+        return deal
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(DealRepository, "get_by_id", _fake_get_by_id)
+
+        response = client.get("/api/v1/deals/deal-1/variance")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["deal_id"] == "deal-1"
+    assert data["projected_purchase_price"] == 15000.0
+    assert data["actual_purchase_price"] == 14800.0
+    assert data["profit_variance"] is None  # aún no SOLD
+
+
+def test_deal_variance_foreign_deal_returns_404(auth_override: None) -> None:
+    """GET /deals/{id}/variance sobre deal ajeno -> 404."""
+    deal = _make_deal(user_id="user-2")
+
+    async def _fake_get_by_id(self, deal_id):
+        return deal
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(DealRepository, "get_by_id", _fake_get_by_id)
+
+        response = client.get("/api/v1/deals/deal-1/variance")
+
+    assert response.status_code == 404

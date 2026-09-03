@@ -198,3 +198,148 @@ class TestDealFulfillmentFlow:
                 deal_id=deal.id, user_id=USER_ID, new_status=DealStatus.SOLD
             )
         assert exc.value.status_code == 422
+
+
+class TestPortfolioReporting:
+    """Reporting de cartera: previsto (última simulación) vs. real."""
+
+    @pytest.mark.asyncio
+    async def test_portfolio_summary_aggregates_sold_and_pipeline(
+        self,
+        deal_repo: DealRepository,
+        vehicle_evaluation_repo: VehicleEvaluationRepository,
+    ) -> None:
+        service = DealService(deal_repo, vehicle_evaluation_repo)
+
+        # Deal 1: se lleva hasta SOLD, con simulación previa guardada.
+        sold_deal = await service.create(
+            user_id=USER_ID, vehicle_id="00000000-0000-0000-0000-0000000000c1"
+        )
+        await service.save_simulation(
+            deal_id=sold_deal.id,
+            user_id=USER_ID,
+            purchase_price=15000.0,
+            estimated_sale_price=19000.0,
+            total_cost=16500.0,
+            net_profit=2500.0,
+            roi_percentage=16.67,
+            profile_name="SPAIN",
+        )
+        for target in (
+            DealStatus.ANALYZING,
+            DealStatus.NEGOTIATING,
+            DealStatus.WON,
+        ):
+            sold_deal = await service.transition(
+                deal_id=sold_deal.id, user_id=USER_ID, new_status=target
+            )
+        sold_deal = await service.transition(
+            deal_id=sold_deal.id,
+            user_id=USER_ID,
+            new_status=DealStatus.BOUGHT,
+            actual_purchase_price=14800.0,
+        )
+        sold_deal = await service.transition(
+            deal_id=sold_deal.id,
+            user_id=USER_ID,
+            new_status=DealStatus.IN_TRANSIT,
+            transport_cost=900.0,
+        )
+        sold_deal = await service.transition(
+            deal_id=sold_deal.id,
+            user_id=USER_ID,
+            new_status=DealStatus.REGISTERED,
+            registration_cost=450.0,
+            actual_taxes=300.0,
+        )
+        sold_deal = await service.transition(
+            deal_id=sold_deal.id,
+            user_id=USER_ID,
+            new_status=DealStatus.SOLD,
+            sale_price=19000.0,
+        )
+        # 19000 - (14800 + 900 + 450 + 300) = 2550 (real, algo peor que
+        # los 2500 previstos... en realidad mejor: 2550 > 2500).
+        assert sold_deal.actual_profit == pytest.approx(2550.0, abs=0.01)
+
+        # Deal 2: sigue activo en el pipeline (aún no SOLD), con su propia
+        # simulación previa — no debe contarse en los agregados de SOLD.
+        pipeline_deal = await service.create(
+            user_id=USER_ID, vehicle_id="00000000-0000-0000-0000-0000000000c2"
+        )
+        await service.save_simulation(
+            deal_id=pipeline_deal.id,
+            user_id=USER_ID,
+            purchase_price=10000.0,
+            estimated_sale_price=12000.0,
+            total_cost=11000.0,
+            net_profit=1000.0,
+            roi_percentage=10.0,
+            profile_name="GERMANY",
+        )
+        pipeline_deal = await service.transition(
+            deal_id=pipeline_deal.id, user_id=USER_ID, new_status=DealStatus.ANALYZING
+        )
+
+        summary = await service.get_portfolio_summary(USER_ID)
+
+        assert summary.sold_count == 1
+        assert summary.sold_actual_profit_sum == pytest.approx(2550.0, abs=0.01)
+        assert summary.sold_projected_profit_sum == pytest.approx(2500.0, abs=0.01)
+        assert summary.profit_variance_sum == pytest.approx(50.0, abs=0.01)
+        assert summary.total_revenue == pytest.approx(19000.0, abs=0.01)
+        assert summary.total_invested == pytest.approx(
+            14800.0 + 900.0 + 450.0 + 300.0, abs=0.01
+        )
+        # El deal en pipeline (ANALYZING) no cuenta en los agregados de SOLD,
+        # pero sí en el beneficio previsto del pipeline activo.
+        assert summary.pipeline_count == 1
+        assert summary.pipeline_projected_profit == pytest.approx(1000.0, abs=0.01)
+        assert summary.by_status.get("SOLD") == 1
+        assert summary.by_status.get("ANALYZING") == 1
+
+    @pytest.mark.asyncio
+    async def test_deal_variance_compares_projected_vs_actual(
+        self,
+        deal_repo: DealRepository,
+        vehicle_evaluation_repo: VehicleEvaluationRepository,
+    ) -> None:
+        service = DealService(deal_repo, vehicle_evaluation_repo)
+        deal = await service.create(
+            user_id=USER_ID, vehicle_id="00000000-0000-0000-0000-0000000000c3"
+        )
+        await service.save_simulation(
+            deal_id=deal.id,
+            user_id=USER_ID,
+            purchase_price=15000.0,
+            estimated_sale_price=19000.0,
+            total_cost=16500.0,
+            net_profit=2500.0,
+            roi_percentage=16.67,
+            profile_name="SPAIN",
+        )
+        for target in (
+            DealStatus.ANALYZING,
+            DealStatus.NEGOTIATING,
+            DealStatus.WON,
+        ):
+            deal = await service.transition(
+                deal_id=deal.id, user_id=USER_ID, new_status=target
+            )
+        deal = await service.transition(
+            deal_id=deal.id,
+            user_id=USER_ID,
+            new_status=DealStatus.BOUGHT,
+            actual_purchase_price=14800.0,
+        )
+
+        variance = await service.get_deal_variance(deal.id, USER_ID)
+        assert variance.projected_purchase_price == pytest.approx(15000.0, abs=0.01)
+        assert variance.actual_purchase_price == pytest.approx(14800.0, abs=0.01)
+        assert variance.projected_net_profit == pytest.approx(2500.0, abs=0.01)
+        # Aún no SOLD: no hay actual_profit ni actual_total_cost completo
+        # (falta transport/registration/taxes), pero sí un total parcial
+        # basado en lo que hay hasta ahora (compra real, sin extras aún).
+        assert variance.actual_net_profit is None
+        assert variance.actual_total_cost == pytest.approx(14800.0, abs=0.01)
+        assert variance.profit_variance is None  # falta el lado real

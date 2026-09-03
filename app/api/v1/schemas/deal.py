@@ -53,8 +53,9 @@ class DealUpdateStatus(BaseModel):
     Los campos de cumplimiento (TASK 3) solo se usan al transicionar al
     estado correspondiente: ``actual_purchase_price`` en BOUGHT,
     ``transport_carrier``/``transport_cost`` en IN_TRANSIT,
-    ``registration_plate``/``registration_cost`` en REGISTERED, y
-    ``sale_price`` (obligatorio)/``buyer_name``/``buyer_contact`` en SOLD.
+    ``registration_plate``/``registration_cost``/``actual_taxes`` en
+    REGISTERED, y ``sale_price`` (obligatorio)/``buyer_name``/
+    ``buyer_contact`` en SOLD.
     """
 
     status: DealStatus
@@ -65,6 +66,7 @@ class DealUpdateStatus(BaseModel):
     transport_cost: float | None = None
     registration_plate: str | None = None
     registration_cost: float | None = None
+    actual_taxes: float | None = None
     sale_price: float | None = None
     buyer_name: str | None = None
     buyer_contact: str | None = None
@@ -145,6 +147,7 @@ class DealRead(BaseModel):
     transport_completed_at: datetime | None = None
     registration_plate: str | None = None
     registration_cost: float | None = None
+    actual_taxes: float | None = None
     registered_at: datetime | None = None
     sale_price: float | None = None
     buyer_name: str | None = None
@@ -164,3 +167,39 @@ class DealListResponse(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+class DealVarianceResponse(BaseModel):
+    """Comparación previsto (última simulación) vs. real de un deal."""
+
+    deal_id: str
+    status: str
+    projected_purchase_price: float | None = None
+    actual_purchase_price: float | None = None
+    projected_sale_price: float | None = None
+    actual_sale_price: float | None = None
+    projected_total_cost: float | None = None
+    actual_total_cost: float | None = None
+    projected_net_profit: float | None = None
+    actual_net_profit: float | None = None
+    profit_variance: float | None = None
+    projected_roi_percentage: float | None = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class PortfolioSummaryResponse(BaseModel):
+    """Reporting de cartera: deals cerrados (real vs. previsto) + pipeline
+    activo (previsto, aún no realizado)."""
+
+    by_status: dict[str, int]
+    sold_count: int
+    sold_actual_profit_sum: float | None = None
+    sold_projected_profit_sum: float | None = None
+    profit_variance_sum: float | None = None
+    total_revenue: float | None = None
+    total_invested: float | None = None
+    pipeline_count: int
+    pipeline_projected_profit: float | None = None
+
+    model_config = ConfigDict(from_attributes=True)

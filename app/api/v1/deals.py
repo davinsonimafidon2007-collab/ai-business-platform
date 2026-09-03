@@ -13,6 +13,8 @@ from app.api.v1.schemas.deal import (
     DealSimulationUpdate,
     DealStatusHistoryEntry,
     DealUpdateStatus,
+    DealVarianceResponse,
+    PortfolioSummaryResponse,
 )
 from app.database import get_db_session
 from app.dependencies.auth import get_current_user
@@ -116,6 +118,24 @@ async def list_deals(
     )
 
 
+@router.get("/reports/portfolio", response_model=PortfolioSummaryResponse)
+async def get_portfolio_summary(
+    service: DealService = Depends(get_deal_service),
+    current_user: User = Depends(get_current_user),
+) -> PortfolioSummaryResponse:
+    """Reporting de cartera del usuario autenticado.
+
+    Compara, para los deals ya cerrados en SOLD, el beneficio REAL contra
+    lo que se había previsto en la última simulación guardada de cada uno
+    (``profit_variance_sum``); y muestra el beneficio previsto (aún no
+    realizado) de los deals que siguen en el pipeline activo.
+    Declarado antes de ``GET /{deal_id}`` para que "reports" no se
+    interprete como un deal_id.
+    """
+    summary = await service.get_portfolio_summary(current_user.id)
+    return PortfolioSummaryResponse(**summary.__dict__)
+
+
 @router.get("/{deal_id}", response_model=DealRead)
 async def get_deal(
     deal_id: str,
@@ -154,6 +174,24 @@ async def get_deal_history(
     )
 
 
+@router.get("/{deal_id}/variance", response_model=DealVarianceResponse)
+async def get_deal_variance(
+    deal_id: str,
+    service: DealService = Depends(get_deal_service),
+    current_user: User = Depends(get_current_user),
+) -> DealVarianceResponse:
+    """Compara la última simulación guardada de un deal propio contra lo
+    realmente ejecutado (precio de compra, coste total, beneficio, ROI).
+
+    Los campos ``projected_*`` son ``None`` si nunca se guardó una
+    simulación (``PATCH /{deal_id}/simulation``); los ``actual_*`` son
+    ``None`` mientras el deal no haya avanzado lo suficiente en el
+    pipeline para tener ese dato real.
+    """
+    variance = await service.get_deal_variance(deal_id, current_user.id)
+    return DealVarianceResponse(**variance.__dict__)
+
+
 @router.patch("/{deal_id}/status", response_model=DealRead)
 async def update_deal_status(
     deal_id: str,
@@ -181,6 +219,7 @@ async def update_deal_status(
         transport_cost=payload.transport_cost,
         registration_plate=payload.registration_plate,
         registration_cost=payload.registration_cost,
+        actual_taxes=payload.actual_taxes,
         sale_price=payload.sale_price,
         buyer_name=payload.buyer_name,
         buyer_contact=payload.buyer_contact,
