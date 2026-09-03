@@ -1,4 +1,9 @@
 {
+  "scripts": {
+    "test": "npm --prefix frontend test",
+    "lint": "npm --prefix frontend run lint",
+    "build": "npm --prefix frontend run build"
+  },
   "dependencies": {
     "@capacitor/android": "^8.4.2",
     "@capacitor/camera": "^8.2.1",
