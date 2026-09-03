@@ -143,7 +143,7 @@ async def get_health(response: Response) -> HealthResponse:
         },
     },
 )
-async def get_health_ready() -> ReadyResponse:
+async def get_health_ready(response: Response) -> ReadyResponse:
     """Readiness: DB y Redis realmente configurados en esta instancia.
 
     TASK 7: antes usaba `socket` sin importarlo (NameError garantizado en
@@ -153,13 +153,21 @@ async def get_health_ready() -> ReadyResponse:
     check habría fallado siempre aunque `socket` estuviera importado.
     Reutiliza los mismos checks reales que ``/health`` (DB vía el engine
     configurado, Redis vía el cliente compartido).
+
+    Redis "disabled" (sin configurar) cuenta como accesible: es un estado
+    soportado deliberadamente (ver ``_check_redis``), igual que en
+    ``/health`` — solo "error" (Redis configurado pero no responde) cuenta
+    como fallo. Y a diferencia de la versión anterior, el código HTTP
+    ahora refleja de verdad el resultado: 500 si no está listo.
     """
     db_ok = await _check_database()
     redis_state = await _check_redis()
-    redis_ok = redis_state == "ok"
+    redis_ok = redis_state != "error"
 
     ready = db_ok and redis_ok
     status_value = "ok" if ready else "degraded"
+    if not ready:
+        response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
     return ReadyResponse(
         status=status_value,
         db=db_ok,

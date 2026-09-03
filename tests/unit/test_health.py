@@ -118,6 +118,85 @@ async def test_health_db_down_redis_error() -> None:
 
 
 @pytest.mark.asyncio
+async def test_health_ready_ok_all_checks() -> None:
+    """DB ok + Redis ok → status 'ok', 200 (TASK 7)."""
+    with patch(
+        "app.api.v1.routes.health._check_database",
+        new=AsyncMock(return_value=True),
+    ), patch(
+        "app.api.v1.routes.health._check_redis",
+        new=AsyncMock(return_value="ok"),
+    ):
+        response = client.get("/health/ready")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "ok"
+    assert body["db"] is True
+    assert body["redis"] is True
+
+
+@pytest.mark.asyncio
+async def test_health_ready_redis_disabled_still_ready() -> None:
+    """DB ok + Redis no configurado (opcional) → sigue 'ok', 200 (TASK 7).
+
+    Redis "disabled" es un estado soportado deliberadamente, no un fallo:
+    un despliegue sin Redis configurado no debe quedar en 'degraded' para
+    siempre.
+    """
+    with patch(
+        "app.api.v1.routes.health._check_database",
+        new=AsyncMock(return_value=True),
+    ), patch(
+        "app.api.v1.routes.health._check_redis",
+        new=AsyncMock(return_value="disabled"),
+    ):
+        response = client.get("/health/ready")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "ok"
+    assert body["redis"] is True
+
+
+@pytest.mark.asyncio
+async def test_health_ready_redis_error_not_ready() -> None:
+    """DB ok + Redis configurado pero caído → 'degraded', 500 (TASK 7)."""
+    with patch(
+        "app.api.v1.routes.health._check_database",
+        new=AsyncMock(return_value=True),
+    ), patch(
+        "app.api.v1.routes.health._check_redis",
+        new=AsyncMock(return_value="error"),
+    ):
+        response = client.get("/health/ready")
+
+    assert response.status_code == 500
+    body = response.json()
+    assert body["status"] == "degraded"
+    assert body["db"] is True
+    assert body["redis"] is False
+
+
+@pytest.mark.asyncio
+async def test_health_ready_database_down_not_ready() -> None:
+    """DB down → 'degraded', 500 — el código HTTP refleja el fallo (TASK 7)."""
+    with patch(
+        "app.api.v1.routes.health._check_database",
+        new=AsyncMock(return_value=False),
+    ), patch(
+        "app.api.v1.routes.health._check_redis",
+        new=AsyncMock(return_value="ok"),
+    ):
+        response = client.get("/health/ready")
+
+    assert response.status_code == 500
+    body = response.json()
+    assert body["status"] == "degraded"
+    assert body["db"] is False
+
+
+@pytest.mark.asyncio
 async def test_health_live_always_ok() -> None:
     """Liveness (TASK-004): /health/live responde 200 sin tocar DB/Redis."""
     # No se parchean _check_database/_check_redis a propósito: el liveness no
