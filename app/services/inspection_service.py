@@ -138,6 +138,77 @@ class InspectionService:
         }
 
     # ------------------------------------------------------------------
+    # Integración con el pipeline de búsqueda (TASK 4/6 — AUD-012)
+    # ------------------------------------------------------------------
+    #
+    # SearchResultAnalyzer._load_inspection_result llamaba a estos tres
+    # métodos, que NO existían: el wiring nunca pudo funcionar y su
+    # `except Exception` convertía el AttributeError en un silencioso
+    # "no hay inspección". Implementados aquí sobre los repositorios
+    # reales para que la negociación automática use defectos reales en
+    # vez de la heurística vacía.
+
+    async def get_latest_session_for_vehicle(
+        self, vehicle_id: str | UUID | None
+    ) -> InspectionSession | None:
+        """Última sesión de inspección de un vehículo (o None si no hay).
+
+        Prioriza sesiones finalizadas (COMPLETED) sobre borradores: si el
+        usuario terminó una inspección, esa es la que refleja el estado real
+        del vehículo. Dentro de cada grupo se toma la más reciente.
+        """
+        if not vehicle_id:
+            return None
+        sessions = await self._session_repo.get_by_vehicle_id(vehicle_id)
+        if not sessions:
+            return None
+        completed = [
+            s
+            for s in sessions
+            if s.status == InspectionSessionStatus.COMPLETED.value
+        ]
+        # get_by_vehicle_id ya ordena por created_at DESC.
+        return completed[0] if completed else sessions[0]
+
+    async def get_session_observations(
+        self, session_id: str | UUID
+    ) -> list[InspectionObservation]:
+        """Observaciones registradas en una sesión de inspección."""
+        return await self._observation_repo.get_by_session(session_id)
+
+    def build_inspection_result(
+        self, observations: list[InspectionObservation]
+    ) -> InspectionResult:
+        """Convierte observaciones en el InspectionResult del dominio de negociación.
+
+        Usa la misma escala de ``overall_condition`` que ``_build_summary``
+        (10 = perfecto; -1 por cada WARNING, -2 por cada BAD, mínimo 1) para
+        no tener dos definiciones distintas del estado del vehículo.
+        """
+        defects = self._build_defect_items(observations)
+        warning_items = [
+            obs
+            for obs in observations
+            if obs.status == InspectionItemStatus.WARNING.value
+        ]
+        bad_items = [
+            obs for obs in observations if obs.status == InspectionItemStatus.BAD.value
+        ]
+        if not defects:
+            overall_condition = 10
+        else:
+            penalty = len(warning_items) * 1 + len(bad_items) * 2
+            overall_condition = max(1, 10 - penalty)
+
+        notes = [obs.notes for obs in observations if getattr(obs, "notes", None)]
+        return InspectionResult(
+            defects=defects,
+            overall_condition=overall_condition,
+            has_accident_history=False,
+            inspection_notes=notes,
+        )
+
+    # ------------------------------------------------------------------
     # Item management
     # ------------------------------------------------------------------
 

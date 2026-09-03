@@ -32,8 +32,19 @@ class VehicleRepository:
         )
         return result.scalar_one_or_none()
 
-    async def get_by_external_id(self, source: str, external_id: str, user_id: str | None = None) -> Vehicle | None:
-        query = select(Vehicle).where(Vehicle.source == source, Vehicle.external_id == external_id)
+    async def get_by_external_id(
+        self, source: str | None, external_id: str, user_id: str | None = None
+    ) -> Vehicle | None:
+        """Busca un vehículo por external_id, opcionalmente acotado por source.
+
+        ``source`` vacío/None NO se traduce a ``Vehicle.source == ""`` (que
+        nunca matchea nada real): en ese caso la búsqueda queda solo por
+        ``external_id`` (+ ``user_id`` si se pasa), para soportar el caso
+        de "no sé de qué proveedor viene este id, solo tengo el id".
+        """
+        query = select(Vehicle).where(Vehicle.external_id == external_id)
+        if source:
+            query = query.where(Vehicle.source == source)
         if user_id is not None:
             query = query.where(Vehicle.user_id == str(user_id))
         query = query.options(selectinload(Vehicle.evaluations), selectinload(Vehicle.opportunities))

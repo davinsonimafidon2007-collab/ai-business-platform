@@ -338,10 +338,15 @@ def get_search_engine_service(
     profit_analyzer: ProfitAnalyzer = Depends(get_profit_analyzer),
     opportunity_finder: OpportunityFinder = Depends(get_opportunity_finder),
     negotiation_engine: NegotiationEngine = Depends(get_negotiation_engine),
+    inspection_service: InspectionService = Depends(get_inspection_service),
 ) -> SearchEngineService:
     """Obtiene el servicio principal de búsqueda con todas las dependencias.
 
     Este es el punto de entrada único para las búsquedas end-to-end.
+
+    TASK 4/6 (AUD-012): se inyecta el InspectionService para que la
+    negociación automática use los defectos reales de la última inspección
+    del vehículo (antes el analyzer lo recibía siempre como None).
     """
     return SearchEngineService(
         vehicle_service=vehicle_service,
@@ -353,6 +358,7 @@ def get_search_engine_service(
         opportunity_finder=opportunity_finder,
         negotiation_engine=negotiation_engine,
         import_cost_profile=settings.default_import_cost_profile,
+        inspection_service=inspection_service,
     )
 
 

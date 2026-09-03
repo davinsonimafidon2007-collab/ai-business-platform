@@ -63,30 +63,41 @@ def resolve_comparable_provider_names(
     *,
     request_names: list[str] | None = None,
     settings_csv: str = "",
+    simulated_names: set[str] | None = None,
 ) -> list[str]:
     """Resuelve qué sources usar para los comparables del estimador de mercado.
 
     Prioridad: ``request_names`` si no está vacía → ``settings_csv`` si no está
-    vacía → ``registry_names`` (comportamiento actual: todo el registry).
+    vacía → ``registry_names`` (todo el registry).
 
     Siempre se intersecta con ``registry_names``: los nombres desconocidos se
     ignoran (no falla ni produce 500).
+
+    TASK 4: los providers simulados (fixtures) se excluyen de la selección
+    automática. El precio de mercado calculado con estos comparables alimenta
+    directamente el ROI y el beneficio estimado, así que anuncios inventados
+    no deben fijar el precio de un vehículo real. Siguen siendo usables si se
+    piden explícitamente (``request_names`` o ``COMPARABLE_PROVIDERS``), que
+    es el caso de desarrollo offline.
 
     Args:
         registry_names: Nombres de providers registrados (fuente canónica).
         request_names: Allowlist explícita del request (opcional). Tiene prioridad.
         settings_csv: CSV de settings (``COMPARABLE_PROVIDERS``). Fallback.
+        simulated_names: Nombres de providers cuyos datos son simulados.
 
     Returns:
         Lista de nombres de providers a usar, en orden estable.
     """
     available = list(registry_names)
+    simulated = simulated_names or set()
     if request_names:
         wanted = [str(n).strip() for n in request_names if n is not None and str(n).strip()]
     elif settings_csv and settings_csv.strip():
         wanted = [n.strip() for n in settings_csv.split(",") if n.strip()]
     else:
-        return available
+        # Selección automática: nunca fijar precio de mercado con fixtures.
+        return [n for n in available if n not in simulated]
     allowed = set(available)
     return [n for n in wanted if n in allowed]
 
@@ -492,10 +503,18 @@ class ComparableMarketEstimator:
         all_candidates: list[VehicleSearchResult] = []
         provider_sources: set[str] = set()
         registry_names = self._provider_registry.list_providers()
+        simulated_names: set[str] = set()
+        for name in registry_names:
+            try:
+                if getattr(self._provider_registry.get(name), "is_simulated", False):
+                    simulated_names.add(name)
+            except KeyError:  # pragma: no cover — registry mutado en carrera
+                continue
         provider_names = resolve_comparable_provider_names(
             registry_names,
             request_names=comparable_providers,
             settings_csv=getattr(settings, "comparable_providers", "") or "",
+            simulated_names=simulated_names,
         )
         for provider_name in provider_names:
             try:

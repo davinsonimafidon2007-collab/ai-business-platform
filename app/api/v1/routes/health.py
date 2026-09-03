@@ -17,8 +17,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import socket
-from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Response, status
 
@@ -35,31 +33,6 @@ router = APIRouter(tags=["Health"])
 # Short timeouts so /health stays lightweight under dependency hiccups.
 _DB_CHECK_TIMEOUT_S = 2.0
 _REDIS_CHECK_TIMEOUT_S = 2.0
-_TCP_PROBE_TIMEOUT_S = 1.0
-
-
-def _host_port_from_url(url: str, default_port: int) -> tuple[str, int]:
-    """Extrae (host, puerto) de una URL de conexión (DATABASE_URL/REDIS_URL).
-
-    Soporta esquemas con driver (postgresql+asyncpg://, redis://) y hosts
-    docker-compose (db, redis) o localhost. Nunca lanza: si no se puede
-    parsear devuelve localhost + puerto por defecto.
-    """
-    try:
-        parts = urlsplit(url)
-        host = parts.hostname or "localhost"
-        port = parts.port or default_port
-        return host, port
-    except Exception:
-        return "localhost", default_port
-
-
-def _db_host_port() -> tuple[str, int]:
-    return _host_port_from_url(settings.database_url, 5432)
-
-
-def _redis_host_port() -> tuple[str, int]:
-    return _host_port_from_url(settings.redis_url, 6379)
 
 
 async def _check_database() -> bool:
@@ -172,28 +145,32 @@ async def get_health(response: Response) -> HealthResponse:
         },
     },
 )
-async def get_health_ready() -> ReadyResponse:
-    db_ok = False
-    redis_ok = False
+async def get_health_ready(response: Response) -> ReadyResponse:
+    """Readiness: DB y Redis realmente configurados en esta instancia.
 
-    try:
-        with socket.create_connection(_db_host_port(), timeout=_TCP_PROBE_TIMEOUT_S):
-            pass
-        db_ok = True
-    except Exception:
-        db_ok = False
+    TASK 7: antes usaba `socket` sin importarlo (NameError garantizado en
+    cada llamada — sin tests que lo ejercitaran) y además abría un socket
+    en crudo a hostnames hardcodeados ("db", "redis"), que solo resuelven
+    dentro de la red de docker-compose; en cualquier otro despliegue el
+    check habría fallado siempre aunque `socket` estuviera importado.
+    Reutiliza los mismos checks reales que ``/health`` (DB vía el engine
+    configurado — un ``SELECT 1`` real, no solo TCP-reachable —, Redis vía
+    el cliente compartido).
 
-    try:
-        with socket.create_connection(
-            _redis_host_port(), timeout=_TCP_PROBE_TIMEOUT_S
-        ):
-            pass
-        redis_ok = True
-    except Exception:
-        redis_ok = False
+    Redis "disabled" (sin configurar) cuenta como accesible: es un estado
+    soportado deliberadamente (ver ``_check_redis``), igual que en
+    ``/health`` — solo "error" (Redis configurado pero no responde) cuenta
+    como fallo. Y a diferencia de la versión anterior, el código HTTP
+    ahora refleja de verdad el resultado: 500 si no está listo.
+    """
+    db_ok = await _check_database()
+    redis_state = await _check_redis()
+    redis_ok = redis_state != "error"
 
     ready = db_ok and redis_ok
     status_value = "ok" if ready else "degraded"
+    if not ready:
+        response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
     return ReadyResponse(
         status=status_value,
         db=db_ok,

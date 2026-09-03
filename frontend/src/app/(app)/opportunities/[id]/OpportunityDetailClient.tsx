@@ -4,25 +4,34 @@ import { useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { cn } from "@/app/utils/cn";
-import { useOpportunityDetail, useApprovePhase } from "@/app/hooks/useOpportunityDetail";
+import { useOpportunityDetail, useApprovePhase, type Phase } from "@/app/hooks/useOpportunityDetail";
 import { PhaseTimeline } from "@/app/components/opportunity/PhaseTimeline";
-import { AgentResult } from "@/app/components/opportunity/AgentResult";
-import { GeneratedFiles } from "@/app/components/opportunity/GeneratedFiles";
 import { ApprovalActions } from "@/app/components/opportunity/ApprovalActions";
 import { HumanSupervision } from "@/app/components/opportunity/HumanSupervision";
-import { ActivityLog } from "@/app/components/opportunity/ActivityLog";
 import { RequestChangesModal } from "@/app/components/opportunity/RequestChangesModal";
 import { Skeleton } from "@/app/components/ui/Skeleton";
 import { ErrorDisplay } from "@/app/components/ui/ErrorDisplay";
-import { ArrowLeft, Copy, FileText, Archive, Activity, Info } from "lucide-react";
+import { ArrowLeft, Copy, FileText, Activity, Info } from "lucide-react";
 
+// TASK 4/6 (AUD-014): las pestañas "Archivos" y "Actividad" se retiraron
+// porque no existe ninguna fuente de datos en el backend para ellas (el
+// hook declaraba files[]/activity_log[] que la API nunca ha devuelto).
 const tabs = [
   { id: "summary", label: "Resumen", icon: FileText },
   { id: "phases", label: "Fases", icon: Activity },
-  { id: "archives", label: "Archivos", icon: Archive },
-  { id: "activity", label: "Actividad", icon: Activity },
   { id: "info", label: "Información", icon: Info },
 ];
+
+const eur = (n?: number | null) =>
+  n == null
+    ? "—"
+    : new Intl.NumberFormat("es-ES", {
+        style: "currency",
+        currency: "EUR",
+        maximumFractionDigits: 0,
+      }).format(n);
+
+const pct = (n?: number | null) => (n == null ? "—" : `${Number(n).toFixed(1)} %`);
 
 export function OpportunityDetailClient() {
   const params = useParams();
@@ -50,7 +59,8 @@ export function OpportunityDetailClient() {
     activity_log: raw.activity_log ?? [],
   } : null;
 
-  const currentPhase = opportunity?.phases?.find((p: any) => p.status === "pending_approval");
+  const phases: Phase[] = opportunity?.phases ?? [];
+  const currentPhase = phases.find((p: Phase) => p.status === "pending_approval");
   const currentPhaseId = currentPhase?.id;
 
   const handleApprove = async () => {
@@ -91,6 +101,13 @@ export function OpportunityDetailClient() {
     );
   }
 
+  const vehicle = opportunity.vehicle;
+  const title =
+    [vehicle?.brand, vehicle?.model].filter(Boolean).join(" ") || "Oportunidad";
+  const isConverted = opportunity.status === "CONVERTED";
+  const recommendation =
+    opportunity.recommendation_label_es || opportunity.recommendation || null;
+
   return (
     <div className="max-w-5xl mx-auto space-y-6">
       {/* Header */}
@@ -104,16 +121,22 @@ export function OpportunityDetailClient() {
             Volver
           </Link>
           <div className="flex items-center gap-3 flex-wrap">
-            <h1 className="text-xl font-bold text-white">{opportunity.title}</h1>
-            <span className={cn(
-              "px-2.5 py-0.5 rounded-full text-xs font-bold border",
-              opportunity.status === "active" ? "bg-green-400/10 border-green-400/20 text-green-400" :
-              opportunity.status === "completed" ? "bg-blue-400/10 border-blue-400/20 text-blue-400" :
-              opportunity.status === "aborted" ? "bg-red-400/10 border-red-400/20 text-red-400" :
-              "bg-yellow-400/10 border-yellow-400/20 text-yellow-400"
-            )}>
-              {opportunity.status === "active" ? "Activa" : opportunity.status === "completed" ? "Completada" : opportunity.status === "aborted" ? "Abortada" : "Pendiente"}
+            <h1 className="text-xl font-bold text-white">{title}</h1>
+            <span
+              className={cn(
+                "px-2.5 py-0.5 rounded-full text-xs font-bold border",
+                isConverted
+                  ? "bg-blue-400/10 border-blue-400/20 text-blue-400"
+                  : "bg-green-400/10 border-green-400/20 text-green-400"
+              )}
+            >
+              {isConverted ? "Convertida en deal" : "Abierta"}
             </span>
+            {recommendation && (
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold border bg-primary-400/10 border-primary-400/20 text-primary-400">
+                {recommendation}
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-2 mt-1.5">
             <span className="text-[11px] text-secondary-500 font-mono">ID: {opportunity.id}</span>
@@ -156,27 +179,18 @@ export function OpportunityDetailClient() {
           <div className="lg:col-span-2 space-y-4">
             <div className="rounded-2xl bg-[#111118] border border-[#1e1e2d] p-4">
               <h3 className="text-sm font-semibold text-white mb-4">Fases del workflow</h3>
-              <PhaseTimeline
-                phases={opportunity.phases}
-                opportunityId={id}
-                onPhaseAction={refetch}
-              />
+              {phases.length > 0 ? (
+                <PhaseTimeline
+                  phases={phases}
+                  opportunityId={id}
+                  onPhaseAction={refetch}
+                />
+              ) : (
+                <p className="text-sm text-secondary-500">
+                  Esta oportunidad todavía no tiene fases de workflow.
+                </p>
+              )}
             </div>
-
-            {opportunity.agent_result && (
-              <AgentResult
-                confidence={opportunity.agent_result.confidence}
-                suggestion={opportunity.agent_result.suggestion}
-                explanation={opportunity.agent_result.explanation}
-                keyData={opportunity.agent_result.key_data}
-              />
-            )}
-
-            {opportunity.files && opportunity.files.length > 0 && (
-              <div className="rounded-2xl bg-[#111118] border border-[#1e1e2d] p-4">
-                <GeneratedFiles files={opportunity.files} />
-              </div>
-            )}
           </div>
 
           <div className="space-y-4">
@@ -197,61 +211,96 @@ export function OpportunityDetailClient() {
         </div>
       )}
 
-      {activeTab === "archives" && (
-        <div className="rounded-2xl bg-[#111118] border border-[#1e1e2d] p-4">
-          {opportunity.files && opportunity.files.length > 0 ? (
-            <GeneratedFiles files={opportunity.files} />
-          ) : (
-            <div className="text-center py-8">
-              <p className="text-sm text-secondary-500">No hay archivos generados aún</p>
-            </div>
-          )}
-        </div>
-      )}
-
-      {activeTab === "activity" && (
-        <div className="rounded-2xl bg-[#111118] border border-[#1e1e2d] p-4">
-          <ActivityLog items={opportunity.activity_log} />
-        </div>
-      )}
-
       {activeTab === "summary" && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <div className="rounded-2xl bg-[#111118] border border-[#1e1e2d] p-4 space-y-4">
-            <h3 className="text-sm font-semibold text-white">Información general</h3>
+            <h3 className="text-sm font-semibold text-white">Vehículo</h3>
             <div className="grid grid-cols-2 gap-3">
               <div className="p-3 rounded-xl bg-[#16161f]">
                 <p className="text-[11px] text-secondary-500 uppercase">Marca</p>
-                <p className="text-sm font-semibold text-white">{opportunity.brand}</p>
+                <p className="text-sm font-semibold text-white">{vehicle?.brand ?? "—"}</p>
               </div>
               <div className="p-3 rounded-xl bg-[#16161f]">
                 <p className="text-[11px] text-secondary-500 uppercase">Modelo</p>
-                <p className="text-sm font-semibold text-white">{opportunity.model}</p>
+                <p className="text-sm font-semibold text-white">{vehicle?.model ?? "—"}</p>
               </div>
               <div className="p-3 rounded-xl bg-[#16161f]">
                 <p className="text-[11px] text-secondary-500 uppercase">Año</p>
-                <p className="text-sm font-semibold text-white">{opportunity.year}</p>
+                <p className="text-sm font-semibold text-white">{vehicle?.year ?? "—"}</p>
+              </div>
+              <div className="p-3 rounded-xl bg-[#16161f]">
+                <p className="text-[11px] text-secondary-500 uppercase">Kilometraje</p>
+                <p className="text-sm font-semibold text-white">
+                  {vehicle?.mileage != null
+                    ? `${vehicle.mileage.toLocaleString("es-ES")} km`
+                    : "—"}
+                </p>
               </div>
               <div className="p-3 rounded-xl bg-[#16161f]">
                 <p className="text-[11px] text-secondary-500 uppercase">Precio</p>
-                <p className="text-sm font-semibold text-white">${opportunity.price?.toLocaleString()}</p>
+                <p className="text-sm font-semibold text-white">{eur(vehicle?.price)}</p>
+              </div>
+              <div className="p-3 rounded-xl bg-[#16161f]">
+                <p className="text-[11px] text-secondary-500 uppercase">Fuente</p>
+                <p className="text-sm font-semibold text-white">{vehicle?.source ?? "—"}</p>
               </div>
             </div>
+            {vehicle?.url && (
+              <a
+                href={vehicle.url}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-block text-xs font-medium text-primary-400 hover:text-primary-300"
+              >
+                Ver anuncio original →
+              </a>
+            )}
           </div>
+
           <div className="rounded-2xl bg-[#111118] border border-[#1e1e2d] p-4 space-y-4">
-            <h3 className="text-sm font-semibold text-white">Márgenes</h3>
+            <h3 className="text-sm font-semibold text-white">Análisis económico</h3>
             <div className="space-y-3">
               <div className="flex justify-between items-center p-3 rounded-xl bg-[#16161f]">
-                <span className="text-xs text-secondary-400">Precio de mercado</span>
-                <span className="text-sm font-semibold text-white">${opportunity.market_price?.toLocaleString()}</span>
+                <span className="text-xs text-secondary-400">Beneficio estimado</span>
+                <span className="text-sm font-semibold text-white">
+                  {eur(opportunity.estimated_profit)}
+                </span>
               </div>
               <div className="flex justify-between items-center p-3 rounded-xl bg-[#16161f]">
-                <span className="text-xs text-secondary-400">Margen estimado</span>
-                <span className={cn(
-                  "text-sm font-bold",
-                  opportunity.margin >= 15 ? "text-green-400" : opportunity.margin >= 10 ? "text-yellow-400" : "text-red-400"
-                )}>
-                  {opportunity.margin}%
+                <span className="text-xs text-secondary-400">ROI estimado</span>
+                <span
+                  className={cn(
+                    "text-sm font-bold",
+                    (opportunity.roi_percentage ?? 0) >= 15
+                      ? "text-green-400"
+                      : (opportunity.roi_percentage ?? 0) >= 10
+                        ? "text-yellow-400"
+                        : "text-red-400"
+                  )}
+                >
+                  {pct(opportunity.roi_percentage)}
+                </span>
+              </div>
+              <div className="flex justify-between items-center p-3 rounded-xl bg-[#16161f]">
+                <span className="text-xs text-secondary-400">Score de oportunidad</span>
+                <span className="text-sm font-semibold text-white">
+                  {opportunity.score != null ? `${Math.round(opportunity.score)}/100` : "—"}
+                </span>
+              </div>
+              <div className="flex justify-between items-center p-3 rounded-xl bg-[#16161f]">
+                <span className="text-xs text-secondary-400">Riesgo</span>
+                <span className="text-sm font-semibold text-white">
+                  {opportunity.risk_label_es || opportunity.risk_level || "—"}
+                </span>
+              </div>
+              <div className="flex justify-between items-center p-3 rounded-xl bg-[#16161f]">
+                <span className="text-xs text-secondary-400">
+                  Confianza de los datos
+                </span>
+                <span className="text-sm font-semibold text-white">
+                  {opportunity.confidence != null
+                    ? `${Math.round(opportunity.confidence)} %`
+                    : "—"}
                 </span>
               </div>
             </div>
@@ -269,23 +318,39 @@ export function OpportunityDetailClient() {
             </div>
             <div className="flex justify-between py-2 border-b border-[#1e1e2d]">
               <span className="text-secondary-400">Estado</span>
-              <span className="text-white capitalize">{opportunity.status}</span>
+              <span className="text-white">
+                {isConverted ? "Convertida en deal" : "Abierta"}
+              </span>
+            </div>
+            <div className="flex justify-between py-2 border-b border-[#1e1e2d]">
+              <span className="text-secondary-400">Recomendación</span>
+              <span className="text-white">{recommendation ?? "—"}</span>
             </div>
             <div className="flex justify-between py-2 border-b border-[#1e1e2d]">
               <span className="text-secondary-400">Fase actual</span>
-              <span className="text-white">{opportunity.phases?.find((p: any) => p.status === "pending_approval" || p.status === "in_progress")?.title || "Completado"}</span>
+              <span className="text-white">
+                {phases.find(
+                  (p) => p.status === "pending_approval" || p.status === "in_progress"
+                )?.title || "Completado"}
+              </span>
             </div>
             <div className="flex justify-between py-2 border-b border-[#1e1e2d]">
               <span className="text-secondary-400">Total fases</span>
-              <span className="text-white">{opportunity.phases?.length || 0}</span>
+              <span className="text-white">{phases.length}</span>
             </div>
             <div className="flex justify-between py-2 border-b border-[#1e1e2d]">
               <span className="text-secondary-400">Fases completadas</span>
-              <span className="text-white">{opportunity.phases?.filter((p: any) => p.status === "completed").length || 0}</span>
+              <span className="text-white">
+                {phases.filter((p) => p.status === "completed").length}
+              </span>
             </div>
             <div className="flex justify-between py-2">
-              <span className="text-secondary-400">Archivos generados</span>
-              <span className="text-white">{opportunity.files?.length || 0}</span>
+              <span className="text-secondary-400">Último análisis</span>
+              <span className="text-white text-xs">
+                {opportunity.updated_at
+                  ? new Date(opportunity.updated_at).toLocaleString("es-ES")
+                  : "—"}
+              </span>
             </div>
           </div>
         </div>

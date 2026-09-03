@@ -16,9 +16,20 @@ from pydantic import BaseModel, Field
 
 
 class InspectionSessionCreate(BaseModel):
-    """Request to create a new inspection session."""
+    """Request to create a new inspection session.
+
+    ``vehicle_id`` can be an internal id or a not-yet-persisted provider id;
+    when the internal lookup misses, the route falls back to
+    ``source``/``external_id`` (provider result reference) if provided.
+    """
 
     vehicle_id: str = Field(..., description="ID of the vehicle to inspect")
+    source: str | None = Field(
+        None, description="Provider source, used with external_id as a fallback lookup"
+    )
+    external_id: str | None = Field(
+        None, description="Provider external_id, used as a fallback lookup"
+    )
 
 
 class ObservationUpdate(BaseModel):

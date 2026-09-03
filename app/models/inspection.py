@@ -49,6 +49,13 @@ class InspectionSession(Base):
     id: Mapped[str] = mapped_column(
         Uuid(as_uuid=False), primary_key=True, default=lambda: str(uuid4())
     )
+    # TASK 9 (AUD-017): índices en las FKs más consultadas (antes ninguna
+    # tabla de inspección tenía índice: InspectionObservationRepository.
+    # get_by_session, InspectionPhotoRepository.get_by_session/
+    # get_by_observation escaneaban la tabla entera). Declarados en
+    # __table_args__ arriba (no también como index=True por columna: crear
+    # el mismo índice dos veces con el mismo nombre auto-generado rompe
+    # create_all en SQLite).
     vehicle_id: Mapped[str] = mapped_column(
         Uuid(as_uuid=False),
         ForeignKey("vehicles.id", ondelete="CASCADE"),

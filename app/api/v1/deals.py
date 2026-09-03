@@ -19,6 +19,7 @@ from app.dependencies.auth import get_current_user
 from app.models.deal import DealStatus
 from app.models.user import User
 from app.repositories.deal_repository import DealRepository
+from app.repositories.vehicle_evaluation_repository import VehicleEvaluationRepository
 from app.repositories.vehicle_repository import VehicleRepository
 from app.services.deal_service import DealService
 
@@ -29,7 +30,9 @@ async def get_deal_service(
     session: AsyncSession = Depends(get_db_session),
 ) -> DealService:
     """Obtiene el servicio de deals con su repositorio."""
-    return DealService(DealRepository(session))
+    return DealService(
+        DealRepository(session), VehicleEvaluationRepository(session)
+    )
 
 
 def _parse_status_filter(value: str | None) -> DealStatus | None:
@@ -63,12 +66,16 @@ async def create_deal(
     if vehicle_id is None and payload.source and payload.external_id:
         vehicle_repository = VehicleRepository(session)
         vehicle = await vehicle_repository.get_by_external_id(
-            payload.source,
-            payload.external_id,
-            str(current_user.id),
+            source=payload.source,
+            external_id=payload.external_id,
+            user_id=str(current_user.id),
         )
-        if vehicle is not None:
-            vehicle_id = vehicle.id
+        if vehicle is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Vehicle not found for source={payload.source}, external_id={payload.external_id}",
+            )
+        vehicle_id = vehicle.id
     deal = await service.create(
         user_id=current_user.id,
         opportunity_id=payload.opportunity_id,
@@ -159,6 +166,9 @@ async def update_deal_status(
     - Transición inválida según la máquina de estados -> 422.
     - Mismo estado actual -> 200 idempotente (no-op).
     - Escritura concurrente perdida -> 409.
+    - Los campos de cumplimiento (TASK 3) solo se aplican cuando ``status``
+      es la etapa correspondiente (BOUGHT/IN_TRANSIT/REGISTERED/SOLD); se
+      ignoran en cualquier otra transición.
     """
     deal = await service.transition(
         deal_id=deal_id,
@@ -166,6 +176,14 @@ async def update_deal_status(
         new_status=payload.status,
         notes=payload.notes,
         offer_price=payload.offer_price,
+        actual_purchase_price=payload.actual_purchase_price,
+        transport_carrier=payload.transport_carrier,
+        transport_cost=payload.transport_cost,
+        registration_plate=payload.registration_plate,
+        registration_cost=payload.registration_cost,
+        sale_price=payload.sale_price,
+        buyer_name=payload.buyer_name,
+        buyer_contact=payload.buyer_contact,
     )
     return DealRead.model_validate(deal)
 

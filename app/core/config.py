@@ -358,11 +358,27 @@ class Settings(BaseSettings):
     """Si True, registra provider autoscout24_es en ProviderRegistry."""
 
     # =========================================================================
+    # Coches.net REAL (scraping HTTP del mercado español)
+    # =========================================================================
+    # TASK 4 (AUD-005): el scraper real de coches.net existía pero nunca se
+    # registraba, así que la búsqueda "España" corría sobre fixtures. Ahora se
+    # registra cuando el perfil de costes es SPAIN/ES (o con este flag), y
+    # entonces NO se auto-registra el fixture equivalente para no mezclar
+    # anuncios reales con simulados en los mismos resultados.
+    # coches.net puede bloquear IPs de datacenter: si eso ocurre, el provider
+    # lanza ProviderParsingError/ProviderConnectionError y el orquestador lo
+    # reporta como ProviderIssue — nunca cae a fixtures en silencio.
+    enable_coches_net: bool = True
+    """Si True, registra el provider REAL coches_net (scraping de coches.net)."""
+
+    # =========================================================================
     # Coches.net offline (fixtures JSON)
     # =========================================================================
     # Si True, registra provider coches_net_fixture en ProviderRegistry.
     # Además, cuando el perfil de costes destino es SPAIN/ES, se auto-registra
-    # sin necesidad de activar este flag. Ignorado si ES_DATA_MODE=live.
+    # sin necesidad de activar este flag SALVO que el provider real esté
+    # activo (enable_coches_net), en cuyo caso el real tiene prioridad.
+    # Ignorado si ES_DATA_MODE=live.
     enable_coches_net_fixture: bool = False
     """Si True, registra provider coches_net_fixture (comparables ES offline)."""
 
@@ -532,6 +548,32 @@ class Settings(BaseSettings):
     # =========================================================================
     upload_dir: str = "uploads/inspection_photos"
     """Directory where uploaded inspection photos are stored."""
+
+    enable_docs: bool | None = None
+    """Expone /docs, /redoc y /openapi.json. TASK 8 / AUD-023.
+
+    ``None`` (por defecto) = automático: habilitado salvo en
+    ``environment=production``. Antes la documentación interactiva y el
+    esquema OpenAPI completo quedaban públicos también en producción, sin
+    ninguna comprobación de entorno. Poner ``true`` fuerza exponerlos (p. ej.
+    una instancia interna) y ``false`` los cierra siempre.
+    """
+
+    @property
+    def docs_enabled(self) -> bool:
+        """Resuelve ``enable_docs`` (None = auto por entorno)."""
+        if self.enable_docs is None:
+            return self.environment != "production"
+        return bool(self.enable_docs)
+
+    max_upload_size_mb: int = 10
+    """Tamaño máximo por foto de inspección (MB). TASK 8 / AUD-024.
+
+    Antes no había ningún límite en servidor: la subida se leía entera en
+    memoria (``await file.read()``), así que un único fichero grande podía
+    agotar la RAM del proceso. La subida se corta en cuanto se supera este
+    límite, sin llegar a materializar el fichero completo.
+    """
 
     model_config = SettingsConfigDict(
         env_file=".env",

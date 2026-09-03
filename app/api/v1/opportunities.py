@@ -8,9 +8,11 @@ from datetime import UTC, date, datetime, time
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.v1.schemas.deal import DealRead
 from app.api.v1.schemas.opportunity import (
     OpportunityCreate,
     OpportunityListResponse,
@@ -24,8 +26,12 @@ from app.dependencies.auth import get_current_user
 from app.models.opportunity import Opportunity
 from app.models.user import User
 from app.models.vehicle import Vehicle
+from app.repositories.deal_repository import DealRepository
 from app.repositories.opportunity_repository import OpportunityRepository
+from app.repositories.vehicle_evaluation_repository import VehicleEvaluationRepository
 from app.schemas.pagination import CursorPage
+from app.services.deal_service import DealService
+from app.services.opportunity_integration_service import OpportunityIntegrationService
 from app.services.opportunity_phase_service import OpportunityPhaseService
 from app.services.recommendation_labels import recommendation_label_es, risk_label_es
 
@@ -116,6 +122,8 @@ def _to_opportunity_read(opp: Opportunity) -> OpportunityRead:
         roi_percentage=opp.roi,
         recommendation=opp.recommendation,
         risk_level=opp.risk,
+        confidence=opp.confidence,
+        status=opp.status,
         recommendation_label_es=recommendation_label_es(opp.recommendation),
         risk_label_es=risk_label_es(opp.risk),
         created_at=opp.created_at,
@@ -130,6 +138,11 @@ async def list_opportunities(
     ),
     min_score: float | None = Query(None, ge=0, description="Score mínimo (0-100)"),
     min_roi: float | None = Query(None, description="ROI mínimo (%)"),
+    opportunity_status: str | None = Query(
+        None,
+        alias="status",
+        description="Filtro por estado de la oportunidad (OPEN, CONVERTED)",
+    ),
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
     current_user: User = Depends(get_current_user),
@@ -139,7 +152,8 @@ async def list_opportunities(
 
     Devuelve oportunidades paginadas con score, profit, ROI, recomendación
     y resumen del vehículo asociado. Filtros opcionales por recomendación,
-    score mínimo y ROI mínimo.
+    score mínimo, ROI mínimo y estado (AUD-010: antes se aceptaba el filtro
+    pero nunca se aplicaba).
     """
     repo = OpportunityRepository(session)
     items, total = await repo.list_filtered(
@@ -147,6 +161,7 @@ async def list_opportunities(
         recommendation=recommendation,
         min_score=min_score,
         min_roi=min_roi,
+        status=opportunity_status,
         limit=limit,
         offset=offset,
     )
@@ -282,6 +297,46 @@ async def create_opportunity(
     return _to_opportunity_read(opportunity)
 
 
+class OpportunityConvertToDealRequest(BaseModel):
+    """Cuerpo opcional para convertir una oportunidad en deal."""
+
+    notes: str | None = Field(
+        default=None, description="Notas iniciales para el deal creado"
+    )
+
+
+@router.post(
+    "/{opportunity_id}/convert-to-deal",
+    response_model=DealRead,
+    status_code=status.HTTP_201_CREATED,
+)
+async def convert_opportunity_to_deal(
+    opportunity_id: str,
+    payload: OpportunityConvertToDealRequest | None = None,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db_session),
+) -> DealRead:
+    """Convierte una oportunidad en un deal (TASK 3 / AUD-011).
+
+    Cierra el flujo listing -> opportunity -> deal: solo funciona sobre
+    oportunidades con recomendación BUY_NOW o NEGOTIATE (422 en otro caso),
+    y solo una vez por oportunidad (409 si ya se convirtió, o si ya hay un
+    deal activo para ella).
+    """
+    integration = OpportunityIntegrationService(
+        opportunity_repository=OpportunityRepository(session),
+        deal_service=DealService(
+            DealRepository(session), VehicleEvaluationRepository(session)
+        ),
+    )
+    deal = await integration.convert_to_deal(
+        opportunity_id=opportunity_id,
+        user_id=current_user.id,
+        notes=payload.notes if payload else None,
+    )
+    return DealRead.model_validate(deal)
+
+
 @router.patch("/{opportunity_id}", response_model=OpportunityRead)
 async def update_opportunity(
     opportunity_id: str,
@@ -340,32 +395,13 @@ async def get_opportunity_detail(
     phase_service = OpportunityPhaseService(session)
     phases = await phase_service.ensure_seeded(opportunity)
 
-    vehicle_summary = None
-    if opportunity.vehicle is not None:
-        vehicle_summary = OpportunityVehicleSummary(
-            id=opportunity.vehicle.id,
-            brand=opportunity.vehicle.brand,
-            model=opportunity.vehicle.model,
-            year=opportunity.vehicle.year,
-            mileage=opportunity.vehicle.mileage,
-            price=opportunity.vehicle.price,
-            source=opportunity.vehicle.source,
-            external_id=opportunity.vehicle.external_id,
-            url=opportunity.vehicle.url,
-        )
-
+    # Se reutiliza el mismo mapper que el listado para que detalle y listado
+    # no diverjan (antes el detalle omitía confidence y status).
+    base = _to_opportunity_read(opportunity)
     return OpportunityReadDetail(
-        id=opportunity.id,
-        vehicle=vehicle_summary,
-        score=opportunity.opportunity_score,
-        estimated_profit=opportunity.profit,
-        roi_percentage=opportunity.roi,
-        recommendation=opportunity.recommendation,
-        risk_level=opportunity.risk,
-        recommendation_label_es=recommendation_label_es(opportunity.recommendation),
-        risk_label_es=risk_label_es(opportunity.risk),
-        created_at=opportunity.created_at,
-        updated_at=opportunity.analyzed_at,
+        # recommendation_label/risk_label son computed_field: no se pueden
+        # pasar al constructor, se recalculan solas.
+        **base.model_dump(exclude={"recommendation_label", "risk_label"}),
         phases=[OpportunityPhaseService.to_read(p) for p in phases],
     )
 
@@ -394,6 +430,59 @@ async def list_opportunity_phases(
         )
     phases = await service.ensure_seeded(opportunity)
     return [OpportunityPhaseService.to_read(p) for p in phases]
+
+
+class OpportunityFeedbackCreate(BaseModel):
+    """Cuerpo para registrar feedback/notas sobre una oportunidad."""
+    feedback: str = Field(..., min_length=1, description="Notas o retroalimentación sobre la oportunidad")
+
+
+@router.post("/{opportunity_id}/feedback", response_model=OpportunityRead)
+async def create_opportunity_feedback(
+    opportunity_id: str,
+    payload: OpportunityFeedbackCreate,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db_session),
+) -> OpportunityRead:
+    """Registra feedback/notas sobre una oportunidad propia.
+
+    Por simplicidad, adjunta el feedback a la fase actual del workflow (la
+    primera no completada, o la última si todas lo están) mediante la
+    acción ``request_changes``, reutilizando la tabla existente.
+
+    Bug corregido en la fusión con origin/main: la versión original llamaba
+    a ``apply_action(phase_id="feedback", ...)`` con el literal "feedback"
+    en vez de un id de fase real — como ``OpportunityPhase.id`` es un UUID,
+    esa búsqueda nunca podía encontrar nada y el endpoint devolvía 404 en
+    el 100% de las llamadas.
+    """
+    await _get_owned_opportunity(session, current_user.id, opportunity_id)
+    opportunity = await OpportunityRepository(session).get(opportunity_id)
+    if opportunity is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Opportunity not found",
+        )
+
+    phase_service = OpportunityPhaseService(session)
+    phases = await phase_service.ensure_seeded(opportunity)
+    target_phase = next((p for p in phases if p.status != "completed"), None)
+    if target_phase is None and phases:
+        target_phase = phases[-1]
+    if target_phase is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Opportunity has no phases to attach feedback to",
+        )
+    await phase_service.apply_action(
+        opportunity=opportunity,
+        phase_id=target_phase.id,
+        action="request_changes",
+        feedback=payload.feedback,
+    )
+    # Devolver la oportunidad actualizada.
+    refreshed = await OpportunityRepository(session).get(opportunity_id)
+    return _to_opportunity_read(refreshed or opportunity)
 
 
 @router.patch("/{opportunity_id}/phases/{phase_id}")

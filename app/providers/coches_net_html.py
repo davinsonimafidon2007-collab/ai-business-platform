@@ -51,6 +51,11 @@ class CochesNetHtmlFixtureProvider(VehicleProvider):
     def source_name(self) -> str:
         return "coches_net_html_fixture"
 
+    @property
+    def is_simulated(self) -> bool:
+        """Datos de fixture, no del sitio real (TASK 4 / AUD-033)."""
+        return True
+
     def _find_listing_nodes(self, soup: BeautifulSoup) -> list[Any]:
         return list(soup.select("article.ad-preview"))
 

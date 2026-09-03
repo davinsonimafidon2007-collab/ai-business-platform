@@ -153,6 +153,7 @@ class OpportunityFinderStub:
         vehicle_score: object,
         profit_analysis: object,
         market_estimation: object,
+        **kwargs: object,
     ) -> OpportunityAnalysis:
         return OpportunityAnalysis(
             overall_score=self.overall_score,

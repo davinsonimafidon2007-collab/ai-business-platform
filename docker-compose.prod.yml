@@ -1,0 +1,67 @@
+# Override de PRODUCCIÓN (TASK 8 / AUD-025).
+#
+# Se aplica encima del compose de desarrollo:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml --profile obs up -d
+#
+# Diferencias frente al de desarrollo:
+#   - Sin bind-mount del código: se ejecuta lo que hay en la imagen construida,
+#     no el working tree del host (antes `.:/app` hacía que la imagen fuese
+#     irrelevante y lo que corría en producción dependiera del `git checkout`
+#     del servidor).
+#   - Postgres y Redis no publican puertos al host: solo son accesibles desde
+#     la red interna de compose.
+#   - Credenciales obligatorias: si faltan, compose falla al arrancar en vez
+#     de caer en un default conocido (postgres/postgres).
+#   - Redis con contraseña.
+
+services:
+  api:
+    # `!override` (no merge): sin `.:/app`, solo persiste el volumen de
+    # subidas. Las listas de compose se FUSIONAN por defecto, así que sin
+    # esta etiqueta el bind-mount del fichero base seguiría activo.
+    volumes: !override
+      - uploads_data:/app/uploads/inspection_photos
+    environment:
+      ENVIRONMENT: production
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:?define POSTGRES_USER}:${POSTGRES_PASSWORD:?define POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-ai_business_platform}
+      REDIS_URL: redis://:${REDIS_PASSWORD:?define REDIS_PASSWORD}@redis:6379/0
+      JWT_SECRET_KEY: "${JWT_SECRET_KEY:?define JWT_SECRET_KEY}"
+
+  db:
+    environment:
+      POSTGRES_DB: "${POSTGRES_DB:-ai_business_platform}"
+      POSTGRES_USER: "${POSTGRES_USER:?define POSTGRES_USER}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?define POSTGRES_PASSWORD}"
+    # `!reset`: la BD no se expone al host en producción.
+    ports: !reset []
+
+  redis:
+    command: >
+      redis-server --appendonly yes --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --requirepass ${REDIS_PASSWORD:?define REDIS_PASSWORD}
+    healthcheck: !override
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    # `!reset`: Redis no se expone al host en producción.
+    ports: !reset []
+
+  postgres_exporter:
+    environment:
+      DATA_SOURCE_NAME: "postgresql://${POSTGRES_USER:?define POSTGRES_USER}:${POSTGRES_PASSWORD:?define POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-ai_business_platform}?sslmode=disable"
+    ports: !reset []
+
+  prometheus:
+    # Métricas solo en la red interna (las consume Grafana).
+    ports: !reset []
+
+  grafana:
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      # AUD-026: obligatoria en producción, sin default.
+      GF_SECURITY_ADMIN_PASSWORD: "${GRAFANA_ADMIN_PASSWORD:?define GRAFANA_ADMIN_PASSWORD}"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"

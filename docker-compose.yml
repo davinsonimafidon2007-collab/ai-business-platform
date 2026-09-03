@@ -1,9 +1,17 @@
 # =============================================================================
-# docker-compose.yml — stack BASE (válido para despliegue/servidor).
+# docker-compose.yml — stack BASE (seguro por defecto, válido para servidor).
 #
-# En desarrollo local se usa junto al overlay dev (bind-mount del repo):
+# Sin overlays, la BD/Redis quedan en loopback (127.0.0.1) y sin bind-mount
+# del código: `docker compose up` por sí solo no expone nada al exterior.
+#
+# En desarrollo local se usa junto al overlay dev (bind-mount + hot-reload):
 #   docker compose -f docker-compose.yml -f docker-compose.dev.yml up
 # (o COMPOSE_FILE=docker-compose.yml:docker-compose.dev.yml en .env)
+#
+# En producción, docker-compose.prod.yml (TASK 8 / AUD-025) endurece más:
+# credenciales obligatorias (sin defaults) y cierra los puertos de datos por
+# completo (ni siquiera en loopback):
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 #
 # Observabilidad opcional:  docker compose --profile obs up -d
 # Logging centralizado:     docker compose -f docker-compose.logging.yml --profile logging up -d
@@ -31,7 +39,7 @@ services:
       - "${API_HOST:-127.0.0.1}:${API_PORT:-8001}:8000"
     environment:
       PYTHONUNBUFFERED: "1"
-      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/ai_business_platform
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-ai_business_platform}
       REDIS_URL: redis://redis:6379/0
       JWT_SECRET_KEY: "${JWT_SECRET_KEY:?JWT_SECRET_KEY es obligatorio (.env)}"
       ENVIRONMENT: "${ENVIRONMENT:-development}"
@@ -106,9 +114,11 @@ services:
   db:
     image: postgres:16-alpine
     environment:
-      POSTGRES_DB: ai_business_platform
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: "${POSTGRES_DB:-ai_business_platform}"
+      POSTGRES_USER: "${POSTGRES_USER:-postgres}"
+      # Default solo para desarrollo local; en producción es obligatorio
+      # definirlo (ver docker-compose.prod.yml).
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-postgres}"
     ports:
       # Bind a loopback por defecto: en un servidor con IP pública la BD no
       # queda expuesta; override con DB_HOST=0.0.0.0 si se necesita externo.
@@ -116,7 +126,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d ai_business_platform"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-ai_business_platform}"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -175,7 +185,10 @@ services:
     container_name: abp_grafana
     environment:
       GF_SECURITY_ADMIN_USER: admin
-      GF_SECURITY_ADMIN_PASSWORD: "${GRAFANA_ADMIN_PASSWORD:-admin}"
+      # AUD-026: el default ya no es "admin". Este valor es explícitamente
+      # de desarrollo; en producción docker-compose.prod.yml lo hace
+      # obligatorio (compose falla si no está definido).
+      GF_SECURITY_ADMIN_PASSWORD: "${GRAFANA_ADMIN_PASSWORD:-devonly-change-me}"
       GF_AUTH_ANONYMOUS_ENABLED: "false"
     volumes:
       - grafana_data:/var/lib/grafana
@@ -211,7 +224,7 @@ services:
     profiles: ["obs"]
     container_name: abp_postgres_exporter
     environment:
-      DATA_SOURCE_NAME: "postgresql://postgres:postgres@db:5432/ai_business_platform?sslmode=disable"
+      DATA_SOURCE_NAME: "postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-ai_business_platform}?sslmode=disable"
     ports:
       - "${POSTGRES_EXPORTER_HOST:-127.0.0.1}:9187:9187"
     restart: unless-stopped

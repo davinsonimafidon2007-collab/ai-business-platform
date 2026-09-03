@@ -140,6 +140,85 @@ async def test_health_exposes_es_data_mode(
 
 
 @pytest.mark.asyncio
+async def test_health_ready_ok_all_checks() -> None:
+    """DB ok + Redis ok → status 'ok', 200 (TASK 7)."""
+    with patch(
+        "app.api.v1.routes.health._check_database",
+        new=AsyncMock(return_value=True),
+    ), patch(
+        "app.api.v1.routes.health._check_redis",
+        new=AsyncMock(return_value="ok"),
+    ):
+        response = client.get("/health/ready")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "ok"
+    assert body["db"] is True
+    assert body["redis"] is True
+
+
+@pytest.mark.asyncio
+async def test_health_ready_redis_disabled_still_ready() -> None:
+    """DB ok + Redis no configurado (opcional) → sigue 'ok', 200 (TASK 7).
+
+    Redis "disabled" es un estado soportado deliberadamente, no un fallo:
+    un despliegue sin Redis configurado no debe quedar en 'degraded' para
+    siempre.
+    """
+    with patch(
+        "app.api.v1.routes.health._check_database",
+        new=AsyncMock(return_value=True),
+    ), patch(
+        "app.api.v1.routes.health._check_redis",
+        new=AsyncMock(return_value="disabled"),
+    ):
+        response = client.get("/health/ready")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "ok"
+    assert body["redis"] is True
+
+
+@pytest.mark.asyncio
+async def test_health_ready_redis_error_not_ready() -> None:
+    """DB ok + Redis configurado pero caído → 'degraded', 500 (TASK 7)."""
+    with patch(
+        "app.api.v1.routes.health._check_database",
+        new=AsyncMock(return_value=True),
+    ), patch(
+        "app.api.v1.routes.health._check_redis",
+        new=AsyncMock(return_value="error"),
+    ):
+        response = client.get("/health/ready")
+
+    assert response.status_code == 500
+    body = response.json()
+    assert body["status"] == "degraded"
+    assert body["db"] is True
+    assert body["redis"] is False
+
+
+@pytest.mark.asyncio
+async def test_health_ready_database_down_not_ready() -> None:
+    """DB down → 'degraded', 500 — el código HTTP refleja el fallo (TASK 7)."""
+    with patch(
+        "app.api.v1.routes.health._check_database",
+        new=AsyncMock(return_value=False),
+    ), patch(
+        "app.api.v1.routes.health._check_redis",
+        new=AsyncMock(return_value="ok"),
+    ):
+        response = client.get("/health/ready")
+
+    assert response.status_code == 500
+    body = response.json()
+    assert body["status"] == "degraded"
+    assert body["db"] is False
+
+
+@pytest.mark.asyncio
 async def test_health_live_always_ok() -> None:
     """Liveness (TASK-004): /health/live responde 200 sin tocar DB/Redis."""
     # No se parchean _check_database/_check_redis a propósito: el liveness no
@@ -163,76 +242,10 @@ async def test_health_live_registered_in_api_prefix() -> None:
 
 
 # ---------------------------------------------------------------------------
-# /health/ready (readiness por TCP probe a DATABASE_URL/REDIS_URL)
+# /health/ready — ver también los tests TASK 7 más abajo (test_health_ready_*):
+# reutilizan _check_database()/_check_redis() (chequeo funcional real, no un
+# TCP probe a DATABASE_URL/REDIS_URL) — decisión tomada al fusionar con
+# origin/main, que sí tenía un TCP probe (_db_host_port/_redis_host_port/
+# _host_port_from_url, ya eliminados junto con sus tests).
 # ---------------------------------------------------------------------------
-
-
-def test_health_ready_ok_when_dependencies_listen(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """DB y Redis aceptan conexiones TCP → status 'ok' con ambos checks true."""
-    import socket
-
-    from app.api.v1.routes import health as health_module
-
-    # Socket real en un puerto efímero: simula un servicio escuchando.
-    # Backlog >= 2: el probe hace dos conexiones sin accept() intermedio y el
-    # kernel debe completar el handshake de ambas.
-    listener = socket.socket()
-    listener.bind(("127.0.0.1", 0))
-    listener.listen(8)
-    port = listener.getsockname()[1]
-    try:
-        monkeypatch.setattr(
-            health_module, "_db_host_port", lambda: ("127.0.0.1", port)
-        )
-        monkeypatch.setattr(
-            health_module, "_redis_host_port", lambda: ("127.0.0.1", port)
-        )
-        response = client.get("/health/ready")
-    finally:
-        listener.close()
-
-    assert response.status_code == 200
-    body = response.json()
-    assert body["status"] == "ok"
-    assert body["db"] is True
-    assert body["redis"] is True
-
-
-def test_health_ready_degraded_when_nothing_listens(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Nada escuchando en los puertos → 'degraded', sin lanzar excepción."""
-    from app.api.v1.routes import health as health_module
-
-    # Puertos efímeros casi seguro libres; si algo escuchara, el test seguiría
-    # siendo válido (ok != degraded solo si AMBOS fallan, improbable).
-    monkeypatch.setattr(health_module, "_db_host_port", lambda: ("127.0.0.1", 1))
-    monkeypatch.setattr(health_module, "_redis_host_port", lambda: ("127.0.0.1", 1))
-
-    response = client.get("/health/ready")
-
-    assert response.status_code == 200
-    body = response.json()
-    assert body["status"] == "degraded"
-    assert body["db"] is False
-    assert body["redis"] is False
-
-
-def test_health_ready_hosts_derived_from_settings_urls() -> None:
-    """_host_port_from_url parsea esquemas con driver (postgresql+asyncpg)."""
-    from app.api.v1.routes.health import _host_port_from_url
-
-    host, port = _host_port_from_url(
-        "postgresql+asyncpg://user:pass@db.internal:5433/appdb", 5432
-    )
-    assert (host, port) == ("db.internal", 5433)
-
-    host, port = _host_port_from_url("redis://cache:6380/2", 6379)
-    assert (host, port) == ("cache", 6380)
-
-    # URL rota → fallback seguro a localhost + puerto por defecto.
-    host, port = _host_port_from_url("", 5432)
-    assert (host, port) == ("localhost", 5432)
 

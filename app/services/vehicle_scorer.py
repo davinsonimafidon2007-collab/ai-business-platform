@@ -170,7 +170,7 @@ class VehicleScorer:
     Uso:
         scorer = VehicleScorer()
         result = scorer.score(vehicle)
-        print(result.category, result.score)
+        logger.debug("vehicle_score: %s %s", result.category, result.score)
     """
 
     def __init__(self) -> None:
@@ -180,11 +180,17 @@ class VehicleScorer:
     # API pública
     # ------------------------------------------------------------------
 
-    def score(self, vehicle: VehicleData) -> VehicleScore:
+    def score(self, vehicle: VehicleData, *, market_price: float | None = None) -> VehicleScore:
         """Evalúa un vehículo y devuelve su puntuación completa.
 
         Args:
             vehicle: Objeto que implementa VehicleData (Vehicle, DTO, etc.).
+            market_price: Precio de mercado estimado (comparables), si está
+                disponible. TASK 2 (AUD-007): sin esto, el componente de
+                "precio competitivo" no puede evaluarse honestamente — antes
+                se otorgaba siempre el bono máximo, independientemente del
+                precio real. Cuando se proporciona, el bono/penalización se
+                calcula por comparación real contra mercado.
 
         Returns:
             VehicleScore con la puntuación, categoría y razones.
@@ -192,7 +198,7 @@ class VehicleScorer:
         reasons: list[ScoreReason] = []
 
         # Evaluar cada categoría
-        reasons.extend(self._evaluate_price(vehicle))
+        reasons.extend(self._evaluate_price(vehicle, market_price=market_price))
         reasons.extend(self._evaluate_mileage(vehicle))
         reasons.extend(self._evaluate_age(vehicle))
         reasons.extend(self._evaluate_fuel_type(vehicle))
@@ -237,6 +243,7 @@ class VehicleScorer:
         images: list[str] | None = None,
         brand: str | None = None,
         model: str | None = None,
+        market_price: float | None = None,
         **kwargs: Any,
     ) -> VehicleScore:
         """Evalúa un vehículo a partir de campos individuales (estilo DTO).
@@ -257,17 +264,27 @@ class VehicleScorer:
                 self.brand = brand
                 self.model = model
 
-        return self.score(_VehicleProxy())
+        return self.score(_VehicleProxy(), market_price=market_price)
 
     # ------------------------------------------------------------------
     # Evaluaciones por categoría
     # ------------------------------------------------------------------
 
-    def _evaluate_price(self, vehicle: VehicleData) -> list[ScoreReason]:
+    def _evaluate_price(
+        self, vehicle: VehicleData, *, market_price: float | None = None
+    ) -> list[ScoreReason]:
         """Evalúa el precio del vehículo.
 
         - Sin precio → penalización fuerte.
-        - Precio competitivo (estimado) → bonificación.
+        - Con ``market_price`` (comparables reales): bono/penalización
+          proporcional a cuánto por debajo/encima de mercado está el precio.
+        - Sin ``market_price``: solo se puntúa que el precio exista (30% del
+          peso). TASK 2 (AUD-007): antes se otorgaba siempre el 70% restante
+          como "precio competitivo" sin comparar contra nada — un vehículo
+          caro y uno barato recibían el mismo bono. No se inventa una
+          competitividad que no se puede verificar; en su lugar se deja
+          constancia explícita de que falta el dato (afecta a `confidence`
+          en capas superiores, no se convierte en una bonificación).
         """
         reasons: list[ScoreReason] = []
         weight = PRICE_WEIGHT
@@ -280,22 +297,43 @@ class VehicleScorer:
                 is_positive=False,
                 category="price",
             ))
-        else:
-            # Puntuación base por tener precio
-            reasons.append(ScoreReason(
-                reason="Precio definido",
-                impact=weight * 0.3,
-                is_positive=True,
-                category="price",
-            ))
+            return reasons
 
-            # Bonificar precios competitivos (por debajo de un umbral relativo)
-            # Usamos una heurística simple: a menor precio relativo, mejor
-            bonus = weight * PRICE_COMPETITIVE_BONUS_RATIO
+        # Puntuación base por tener precio
+        reasons.append(ScoreReason(
+            reason="Precio definido",
+            impact=weight * 0.3,
+            is_positive=True,
+            category="price",
+        ))
+
+        if market_price is not None and market_price > 0:
+            # ratio < 1 → por debajo de mercado (bueno); > 1 → por encima (malo).
+            ratio = vehicle.price / market_price
+            delta_pct = (1.0 - ratio) * 100.0
+            # Escala: 25% por debajo de mercado ya satura el bono máximo;
+            # 25% por encima satura la penalización máxima.
+            scaled = max(-1.0, min(1.0, delta_pct / 25.0))
+            impact = weight * PRICE_COMPETITIVE_BONUS_RATIO * scaled
+            if impact >= 0:
+                reasons.append(ScoreReason(
+                    reason=f"Precio {delta_pct:.0f}% por debajo del mercado estimado",
+                    impact=impact,
+                    is_positive=True,
+                    category="price",
+                ))
+            else:
+                reasons.append(ScoreReason(
+                    reason=f"Precio {-delta_pct:.0f}% por encima del mercado estimado",
+                    impact=impact,
+                    is_positive=False,
+                    category="price",
+                ))
+        else:
             reasons.append(ScoreReason(
-                reason="Precio competitivo",
-                impact=bonus,
-                is_positive=True,
+                reason="Sin comparativa de mercado: no se puede evaluar si el precio es competitivo",
+                impact=0.0,
+                is_positive=False,
                 category="price",
             ))
 

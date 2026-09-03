@@ -15,6 +15,7 @@ from typing import Any
 from app.core.config import settings
 from app.core.logging import get_logger
 from app.jobs.base import Job, JobContext, JobResult
+from app.providers.registry import ProviderRegistry
 from app.repositories.search_order_repository import SearchOrderRepository
 from app.services.metrics_service import record_search_order_duration
 from app.services.search_persistence import SearchPersistenceService
@@ -194,8 +195,14 @@ class ProcessSearchOrdersJob(Job):
         from app.providers.http_client import ProviderHttpClient
         from app.providers.mobile_de import MobileDeProvider
         from app.repositories.cached_market_repository import CachedMarketRepository
+        from app.repositories.inspection_repository import (
+            InspectionObservationRepository,
+            InspectionPhotoRepository,
+            InspectionSessionRepository,
+        )
         from app.repositories.vehicle_repository import VehicleRepository
         from app.services.comparable_market_estimator import ComparableMarketEstimator
+        from app.services.inspection_service import InspectionService
         from app.services.negotiation_engine import NegotiationEngine
         from app.services.opportunity_finder import OpportunityFinder
         from app.services.profit_analyzer import ProfitAnalyzer
@@ -227,6 +234,13 @@ class ProcessSearchOrdersJob(Job):
             vehicle_service=vehicle_service,
             cached_market_repository=CachedMarketRepository(session),
         )
+        # TASK 4/6 (AUD-012): el job de búsqueda también usa los defectos
+        # reales de inspección para la negociación automática.
+        inspection_service = InspectionService(
+            session_repo=InspectionSessionRepository(session),
+            observation_repo=InspectionObservationRepository(session),
+            photo_repo=InspectionPhotoRepository(session),
+        )
         return SearchEngineService(
             vehicle_service=vehicle_service,
             mobile_de_provider=MobileDeProvider(
@@ -247,6 +261,7 @@ class ProcessSearchOrdersJob(Job):
             opportunity_finder=OpportunityFinder(),
             negotiation_engine=NegotiationEngine(),
             import_cost_profile=getattr(settings, "default_import_cost_profile", None),
+            inspection_service=inspection_service,
         )
 
     def _build_request(self, order: Any) -> Any:
@@ -259,13 +274,7 @@ class ProcessSearchOrdersJob(Job):
             query=query,
             max_results=int(filters.get("max_results", 30)),
             providers=filters.get("providers")
-            or [
-                "mobile_de",
-                "autoscout24",
-                "autoscout24_es",
-                "es_market_fixture",
-                "coches_net_fixture",
-            ],
+            or ProviderRegistry.list_providers(),
             country=filters.get("country") or "ES",
             budget_max=order.max_purchase_price,
             brand=filters.get("brand"),

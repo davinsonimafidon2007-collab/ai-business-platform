@@ -117,11 +117,19 @@ async def scheduler_lifespan(app: FastAPI) -> AsyncGenerator[None]:
 # FastAPI application
 # ---------------------------------------------------------------------------
 
+# TASK 8 (AUD-023): la documentación interactiva y el esquema OpenAPI
+# completo describen toda la superficie de la API. Se cierran en producción
+# salvo que se pida explícitamente con ENABLE_DOCS=true.
+_docs_enabled = settings.docs_enabled
+
 app = FastAPI(
     title=settings.app_name,
     description=settings.app_description,
     version=settings.app_version,
     lifespan=scheduler_lifespan,
+    docs_url="/docs" if _docs_enabled else None,
+    redoc_url="/redoc" if _docs_enabled else None,
+    openapi_url="/openapi.json" if _docs_enabled else None,
 )
 
 # Registrar manejadores de excepciones

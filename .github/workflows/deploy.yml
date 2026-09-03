@@ -64,8 +64,10 @@ jobs:
             git fetch --all --tags
             git checkout ${{ github.ref_name }}
             # Health checks docker + stack principal (api, frontend, db, redis)
-            docker compose ${COMPOSE_PROFILE:-} up -d --build
-            docker compose ps
+            # TASK 8 (AUD-025): override de producción — sin bind-mount del
+            # working tree del host y sin publicar Postgres/Redis.
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml ${COMPOSE_PROFILE:-} up -d --build
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml ps
             # Validación post-despliegue
             ./scripts/validate_deployment.sh http://localhost
         env:
@@ -108,8 +110,10 @@ jobs:
             cd /opt/ai-business-platform
             git fetch --all --tags
             git checkout ${{ github.ref_name }}
-            docker compose ${COMPOSE_PROFILE:-} up -d --build
-            docker compose ps
+            # TASK 8 (AUD-025): override de producción — sin bind-mount del
+            # working tree del host y sin publicar Postgres/Redis.
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml ${COMPOSE_PROFILE:-} up -d --build
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml ps
             ./scripts/validate_deployment.sh http://localhost
         env:
           COMPOSE_PROFILE: ${{ vars.COMPOSE_PROFILE }}

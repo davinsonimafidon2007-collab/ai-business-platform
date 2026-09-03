@@ -51,6 +51,12 @@ def _arrange(monkeypatch: pytest.MonkeyPatch, es_mode: str) -> None:
     monkeypatch.setattr(settings, "enable_autoscout24_es", False)
     monkeypatch.setattr(settings, "enable_mobile_de", False)
     monkeypatch.setattr(settings, "es_data_mode", es_mode)
+    # TASK 4 (fusión con origin/main): con el provider real de coches.net
+    # activo (default True), la fixture equivalente no se auto-registra
+    # (anti-mezcla de datos reales/simulados). Este archivo prueba
+    # exclusivamente el gate de ES_DATA_MODE sobre los fixtures, así que
+    # se desactiva el real para no interferir.
+    monkeypatch.setattr(settings, "enable_coches_net", False)
 
 
 def test_fixture_mode_registers_es_fixtures_and_warns(
@@ -147,10 +153,28 @@ def test_invalid_mode_raises_runtime_error(
 
 
 def test_default_providers_registered() -> None:
-    """ensure_default_providers registra las fuentes principales por defecto."""
+    """ensure_default_providers registra las fuentes principales por defecto.
+
+    TASK 4 (AUD-005): con la config por defecto (perfil SPAIN y
+    enable_coches_net=True) la fuente española es el scraper REAL de
+    coches.net, no su fixture.
+    """
     ProviderRegistry.ensure_default_providers()
 
     providers = ProviderRegistry.list_providers()
     assert "autoscout24" in providers
     assert "es_market_fixture" in providers
+    assert "coches_net" in providers
+    assert "coches_net_fixture" not in providers
+
+
+def test_offline_mode_falls_back_to_fixture(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Desactivando el provider real se recupera el modo offline con fixture."""
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "enable_coches_net", False)
+    ProviderRegistry.ensure_default_providers()
+
+    providers = ProviderRegistry.list_providers()
+    assert "coches_net" not in providers
     assert "coches_net_fixture" in providers

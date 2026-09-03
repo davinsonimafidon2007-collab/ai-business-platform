@@ -22,8 +22,25 @@ export type Opportunity = {
   recommendation_label_es?: string | null;
   risk_level?: string | null;
   risk_label_es?: string | null;
+  /**
+   * Confianza 0-100 de los datos usados (TASK 2). Distinta de
+   * estimated_profit/roi_percentage (rentabilidad) y de risk_level
+   * (riesgo): una oportunidad puede tener beneficio alto, riesgo alto y
+   * confianza baja simultáneamente.
+   */
+  confidence?: number | null;
+  /** OPEN o CONVERTED (TASK 3): si ya se convirtió en un deal. */
+  status?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
+};
+
+export type ConvertToDealResponse = {
+  id: string;
+  status: string;
+  opportunity_id?: string | null;
+  vehicle_id?: string | null;
+  [key: string]: unknown;
 };
 
 export type OpportunityListResponse = {
@@ -53,5 +70,22 @@ export async function fetchOpportunities(
       offset: params.offset ?? 0,
     },
   });
+  return data;
+}
+
+/**
+ * Convierte una oportunidad en un deal (TASK 3 / AUD-011): cierra el flujo
+ * listing -> opportunity -> deal. Solo funciona sobre oportunidades con
+ * recomendación BUY_NOW/NEGOTIATE que no se hayan convertido ya (el backend
+ * responde 422/409 en otro caso).
+ */
+export async function convertOpportunityToDeal(
+  opportunityId: string,
+  notes?: string
+): Promise<ConvertToDealResponse> {
+  const { data } = await api.post<ConvertToDealResponse>(
+    `/opportunities/${opportunityId}/convert-to-deal`,
+    notes ? { notes } : {}
+  );
   return data;
 }

@@ -124,6 +124,7 @@ class OpportunityRepository:
             existing.roi = opportunity.roi
             existing.risk = opportunity.risk
             existing.profit = opportunity.profit
+            existing.confidence = opportunity.confidence
             existing.analyzed_at = opportunity.analyzed_at or datetime.now(UTC)
             existing.engine_version = opportunity.engine_version
             await self.session.commit()
@@ -179,6 +180,7 @@ class OpportunityRepository:
         recommendation: str | None = None,
         min_score: float | None = None,
         min_roi: float | None = None,
+        status: str | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> tuple[list[Opportunity], int]:
@@ -214,11 +216,16 @@ class OpportunityRepository:
             base_query = base_query.where(Opportunity.opportunity_score >= min_score)
         if min_roi is not None:
             base_query = base_query.where(Opportunity.roi >= min_roi)
+        if status is not None:
+            base_query = base_query.where(Opportunity.status == status)
 
-        # Count query
-        count_query = select(func.count(Opportunity.id)).select_from(
-            base_query.subquery()
-        )
+        # Count query. func.count() sin columna (no func.count(Opportunity.id)):
+        # referenciar la columna de la entidad ORM hace que SQLAlchemy añada
+        # un FROM implícito adicional a "opportunities", que junto al
+        # select_from(subquery) produce un producto cartesiano (bug
+        # encontrado en TASK 3: el total devuelto se elevaba al cuadrado en
+        # vez de contar filas reales en cuanto había más de 1 resultado).
+        count_query = select(func.count()).select_from(base_query.subquery())
         total_result = await self.session.execute(count_query)
         total = total_result.scalar() or 0
 

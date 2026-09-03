@@ -33,12 +33,19 @@ class RefreshOpportunityJob(Job):
         try:
             async with context.db_manager.get_session() as session:
                 from app.models.opportunity import Opportunity
+                from app.repositories.cached_market_repository import (
+                    CachedMarketRepository,
+                )
                 from app.repositories.opportunity_repository import OpportunityRepository
                 from app.repositories.user_repository import UserRepository
                 from app.repositories.vehicle_repository import VehicleRepository
+                from app.services.comparable_market_estimator import (
+                    ComparableMarketEstimator,
+                )
                 from app.services.evaluation_engine import EvaluationEngine
                 from app.services.opportunity_alert_service import OpportunityAlertService
                 from app.services.telegram_alert_service import TelegramAlertService
+                from app.services.vehicle_service import VehicleService
 
                 opp_repo = OpportunityRepository(session)
                 vehicle_repo = VehicleRepository(session)
@@ -49,6 +56,14 @@ class RefreshOpportunityJob(Job):
                     import_cost_profile=getattr(
                         settings, "default_import_cost_profile", None
                     )
+                )
+                # TASK 2 / AUD-008: estima el precio de venta con comparables
+                # reales en vez de dejar que EvaluationEngine recurra siempre
+                # al multiplicador fijo (×1.4) sin respaldo de mercado. Usa
+                # el mismo estimador (con su caché) que el flujo de búsqueda.
+                market_estimator = ComparableMarketEstimator(
+                    vehicle_service=VehicleService(vehicle_repo),
+                    cached_market_repository=CachedMarketRepository(session),
                 )
 
                 page_size = 200
@@ -71,7 +86,32 @@ class RefreshOpportunityJob(Job):
 
                     for vehicle in vehicles:
                         try:
-                            result = engine.evaluate(vehicle)
+                            # Comparables de mercado reales (AUD-008); si el
+                            # estimador falla (red, timeout, sin comparables)
+                            # se degrada al multiplicador por defecto de
+                            # EvaluationEngine en vez de romper el vehículo.
+                            estimated_sale_price = None
+                            market_confidence = None
+                            try:
+                                market_estimation = await market_estimator.estimate(
+                                    vehicle
+                                )
+                                if market_estimation and market_estimation.market_price > 0:
+                                    estimated_sale_price = market_estimation.market_price
+                                    market_confidence = market_estimation.confidence
+                            except Exception:
+                                logger.warning(
+                                    "market_estimation failed for vehicle %s; "
+                                    "falling back to default multiplier",
+                                    vehicle.id,
+                                    exc_info=True,
+                                )
+
+                            result = engine.evaluate(
+                                vehicle,
+                                estimated_sale_price=estimated_sale_price,
+                                market_confidence=market_confidence,
+                            )
 
                             existing = await opp_repo.get_by_vehicle_id(vehicle.id)
                             risk = _CLASSIFICATION_TO_RISK.get(
@@ -85,6 +125,7 @@ class RefreshOpportunityJob(Job):
                                 opp.roi = round(result.profit_margin_percent, 2)
                                 opp.risk = risk
                                 opp.profit = round(result.gross_profit, 2)
+                                opp.confidence = result.confidence
                                 opp.analyzed_at = datetime.now(UTC)
                             else:
                                 opp = Opportunity(
@@ -94,6 +135,7 @@ class RefreshOpportunityJob(Job):
                                     roi=round(result.profit_margin_percent, 2),
                                     risk=risk,
                                     profit=round(result.gross_profit, 2),
+                                    confidence=result.confidence,
                                     analyzed_at=datetime.now(UTC),
                                 )
 

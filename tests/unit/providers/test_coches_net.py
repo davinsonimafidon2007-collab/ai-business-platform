@@ -254,17 +254,29 @@ def test_registry_live_mode_registers_coches_net(
         assert fixture not in names
 
 
-def test_registry_fixture_mode_does_not_register_coches_net(
+def test_registry_fixture_mode_does_not_register_coches_net_when_disabled(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """En modo fixture, si el provider real está desactivado
+    (``enable_coches_net=False``), no se registra — cae a fixtures.
+
+    Nota (fusión con origin/main, TASK 4 / AUD-005): ``ES_DATA_MODE`` no es
+    el único interruptor de coches_net real. ``enable_coches_net`` es
+    independiente y con su default (True) el scraper real se usa también
+    en modo fixture — ver ``test_default_providers_registered`` en
+    test_registry_es_mode.py. Este test cubre el caso en que se desactiva
+    explícitamente.
+    """
     monkeypatch.setattr(settings, "es_data_mode", "fixture")
     monkeypatch.setattr(settings, "default_import_cost_profile", "SPAIN")
     monkeypatch.setattr(settings, "enable_mobile_de", False)
     monkeypatch.setattr(settings, "enable_autoscout24_es", False)
     monkeypatch.setattr(settings, "enable_es_market_fixture", True)
+    monkeypatch.setattr(settings, "enable_coches_net", False)
 
     ProviderRegistry.ensure_default_providers()
     assert "coches_net" not in ProviderRegistry.list_providers()
+    assert "es_market_fixture" in ProviderRegistry.list_providers()
 
 
 def test_registry_live_mode_idempotent(monkeypatch: pytest.MonkeyPatch) -> None:

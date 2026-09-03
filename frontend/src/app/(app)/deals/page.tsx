@@ -28,6 +28,10 @@ const STATUS_LABELS: Record<DealStatus, string> = {
   ANALYZING: "Analizando",
   NEGOTIATING: "Negociando",
   WON: "Ganado",
+  BOUGHT: "Comprado",
+  IN_TRANSIT: "En transporte",
+  REGISTERED: "Matriculado",
+  SOLD: "Vendido",
   LOST: "Perdido",
   CANCELLED: "Cancelado",
 };
@@ -39,25 +43,100 @@ const STATUS_COLORS: Record<DealStatus, string> = {
   NEGOTIATING:
     "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400",
   WON: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
+  BOUGHT:
+    "bg-teal-100 text-teal-800 dark:bg-teal-900/30 dark:text-teal-400",
+  IN_TRANSIT:
+    "bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-400",
+  REGISTERED:
+    "bg-cyan-100 text-cyan-800 dark:bg-cyan-900/30 dark:text-cyan-400",
+  SOLD: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400",
   LOST: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
   CANCELLED:
     "bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400",
 };
 
-// Transiciones válidas (mismo mapa que el backend v2: DealService._TRANSITIONS).
-// Estados que aceptan offer_price en la transición (fase de negociación/cierre).
-const OFFER_PRICE_TARGETS: ReadonlySet<DealStatus> = new Set([
-  "NEGOTIATING",
-  "WON",
-]);
-
+// Transiciones válidas (mismo mapa que el backend v2 + TASK 3: ver
+// DealService._TRANSITIONS).
 const TRANSITIONS: Record<DealStatus, DealStatus[]> = {
   NEW: ["ANALYZING", "CANCELLED"],
   ANALYZING: ["NEGOTIATING", "LOST", "CANCELLED"],
   NEGOTIATING: ["WON", "LOST", "CANCELLED"],
-  WON: [],
+  WON: ["BOUGHT", "CANCELLED"],
+  BOUGHT: ["IN_TRANSIT", "CANCELLED"],
+  IN_TRANSIT: ["REGISTERED", "CANCELLED"],
+  REGISTERED: ["SOLD", "CANCELLED"],
+  SOLD: [],
   LOST: [],
   CANCELLED: [],
+};
+
+// Estados que requieren un pequeño formulario antes de confirmar la
+// transición (igual que NEGOTIATING ya hacía para offer_price). SOLD exige
+// sale_price; el resto de campos son opcionales en todas las etapas.
+const STAGES_WITH_FORM: DealStatus[] = [
+  "NEGOTIATING",
+  "WON",
+  "BOUGHT",
+  "IN_TRANSIT",
+  "REGISTERED",
+  "SOLD",
+];
+
+type StageField = {
+  key: string;
+  label: string;
+  type: "number" | "text";
+  required?: boolean;
+  placeholder?: string;
+};
+
+// Campos capturados al confirmar la transición a cada etapa (ver
+// DealService.transition en el backend — mismos nombres de campo).
+const STAGE_FIELDS: Partial<Record<DealStatus, StageField[]>> = {
+  NEGOTIATING: [
+    {
+      key: "offer_price",
+      label: "Precio de oferta (EUR)",
+      type: "number",
+      required: true,
+      placeholder: "ej. 15000",
+    },
+  ],
+  WON: [
+    {
+      key: "offer_price",
+      label: "Precio de oferta (EUR)",
+      type: "number",
+      placeholder: "ej. 15000",
+    },
+  ],
+  BOUGHT: [
+    {
+      key: "actual_purchase_price",
+      label: "Precio de compra real (EUR)",
+      type: "number",
+      placeholder: "ej. 14800",
+    },
+  ],
+  IN_TRANSIT: [
+    { key: "transport_carrier", label: "Transportista", type: "text", placeholder: "ej. Acme Transportes" },
+    { key: "transport_cost", label: "Coste de transporte (EUR)", type: "number", placeholder: "ej. 900" },
+  ],
+  REGISTERED: [
+    { key: "registration_plate", label: "Matrícula", type: "text", placeholder: "ej. 1234ABC" },
+    { key: "registration_cost", label: "Coste de matriculación (EUR)", type: "number", placeholder: "ej. 450" },
+  ],
+  SOLD: [
+    {
+      key: "sale_price",
+      label: "Precio de venta (EUR)",
+      type: "number",
+      required: true,
+      placeholder: "ej. 19000",
+    },
+    { key: "buyer_name", label: "Nombre del comprador", type: "text" },
+    { key: "buyer_contact", label: "Contacto del comprador", type: "text" },
+  ],
 };
 
 const ALL_STATUSES: DealStatus[] = [
@@ -65,6 +144,10 @@ const ALL_STATUSES: DealStatus[] = [
   "ANALYZING",
   "NEGOTIATING",
   "WON",
+  "BOUGHT",
+  "IN_TRANSIT",
+  "REGISTERED",
+  "SOLD",
   "LOST",
   "CANCELLED",
 ];
@@ -82,22 +165,24 @@ function StatusBadge({ status }: { status: DealStatus }) {
 function DealRow({ deal }: { deal: Deal }) {
   const queryClient = useQueryClient();
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [offerPriceInput, setOfferPriceInput] = useState<string>("");
+  const [formValues, setFormValues] = useState<Record<string, string>>({});
   const [pendingTarget, setPendingTarget] = useState<DealStatus | null>(null);
 
   const transition = useMutation({
-    mutationFn: (target: DealStatus) =>
-      updateDealStatus(deal.id, {
-        status: target,
-        offer_price:
-          OFFER_PRICE_TARGETS.has(target) && offerPriceInput
-            ? Number(offerPriceInput)
-            : undefined,
-      }),
+    mutationFn: (target: DealStatus) => {
+      const fields = STAGE_FIELDS[target] ?? [];
+      const body: Record<string, string | number> = { status: target };
+      for (const field of fields) {
+        const raw = formValues[field.key];
+        if (raw === undefined || raw === "") continue;
+        body[field.key] = field.type === "number" ? Number(raw) : raw;
+      }
+      return updateDealStatus(deal.id, body as never);
+    },
     onSuccess: () => {
       setErrorMsg(null);
       setPendingTarget(null);
-      setOfferPriceInput("");
+      setFormValues({});
       queryClient.invalidateQueries({ queryKey: ["deals"] });
     },
     onError: (err: Error) => {
@@ -106,10 +191,22 @@ function DealRow({ deal }: { deal: Deal }) {
   });
 
   const nextActions = TRANSITIONS[deal.status] ?? [];
+  const pendingFields = pendingTarget ? STAGE_FIELDS[pendingTarget] ?? [] : [];
+  const canConfirmPending =
+    pendingTarget != null &&
+    pendingFields
+      .filter((f) => f.required)
+      .every((f) => (formValues[f.key] ?? "") !== "");
 
   const handleAction = (target: DealStatus) => {
-    if (OFFER_PRICE_TARGETS.has(target)) {
-      setOfferPriceInput(offerPricePrefill(deal));
+    if (STAGES_WITH_FORM.includes(target)) {
+      const prefill: Record<string, string> = {};
+      if (target === "NEGOTIATING" || target === "WON") {
+        prefill.offer_price = offerPricePrefill(deal);
+      } else if (target === "BOUGHT" && deal.offer_price != null) {
+        prefill.actual_purchase_price = String(deal.offer_price);
+      }
+      setFormValues(prefill);
       setPendingTarget(target);
       setErrorMsg(null);
       return;
@@ -201,6 +298,75 @@ function DealRow({ deal }: { deal: Deal }) {
         </div>
       )}
 
+      {(deal.actual_purchase_price != null ||
+        deal.transport_cost != null ||
+        deal.registration_cost != null ||
+        deal.sale_price != null) && (
+        <div className="mt-4 rounded-lg border border-secondary-200 bg-secondary-50 p-4 dark:border-secondary-700 dark:bg-secondary-900/40">
+          <p className="text-xs font-medium text-secondary-500 dark:text-secondary-400">
+            Cumplimiento del trato
+          </p>
+          <div className="mt-2 flex flex-wrap gap-x-6 gap-y-2">
+            {deal.actual_purchase_price != null && (
+              <div>
+                <p className="text-xs text-secondary-500 dark:text-secondary-400">
+                  Compra real{deal.bought_at && ` (${formatDate(deal.bought_at)})`}
+                </p>
+                <p className="font-semibold text-secondary-900 dark:text-secondary-100">
+                  {eur(deal.actual_purchase_price)}
+                </p>
+              </div>
+            )}
+            {(deal.transport_carrier != null || deal.transport_cost != null) && (
+              <div>
+                <p className="text-xs text-secondary-500 dark:text-secondary-400">
+                  Transporte{deal.transport_carrier ? ` · ${deal.transport_carrier}` : ""}
+                </p>
+                <p className="font-semibold text-secondary-900 dark:text-secondary-100">
+                  {eur(deal.transport_cost)}
+                </p>
+              </div>
+            )}
+            {(deal.registration_plate != null || deal.registration_cost != null) && (
+              <div>
+                <p className="text-xs text-secondary-500 dark:text-secondary-400">
+                  Matriculación{deal.registration_plate ? ` · ${deal.registration_plate}` : ""}
+                </p>
+                <p className="font-semibold text-secondary-900 dark:text-secondary-100">
+                  {eur(deal.registration_cost)}
+                </p>
+              </div>
+            )}
+            {deal.sale_price != null && (
+              <div>
+                <p className="text-xs text-secondary-500 dark:text-secondary-400">
+                  Venta real{deal.sold_at && ` (${formatDate(deal.sold_at)})`}
+                </p>
+                <p className="font-semibold text-secondary-900 dark:text-secondary-100">
+                  {eur(deal.sale_price)}
+                </p>
+              </div>
+            )}
+            {deal.actual_profit != null && (
+              <div>
+                <p className="text-xs text-secondary-500 dark:text-secondary-400">
+                  Beneficio real
+                </p>
+                <p
+                  className={`font-semibold ${
+                    deal.actual_profit >= 0
+                      ? "text-green-600 dark:text-green-400"
+                      : "text-red-600 dark:text-red-400"
+                  }`}
+                >
+                  {eur(deal.actual_profit)}
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
 <p className="text-xs text-secondary-500 dark:text-secondary-400">
           Creado: {formatDate(deal.created_at)} · Actualizado:{" "}
@@ -213,7 +379,7 @@ function DealRow({ deal }: { deal: Deal }) {
               <Button
                 key={target}
                 variant={
-                  target === "WON"
+                  target === "WON" || target === "SOLD"
                     ? "primary"
                     : target === "LOST" || target === "CANCELLED"
                       ? "danger"
@@ -236,42 +402,45 @@ function DealRow({ deal }: { deal: Deal }) {
         )}
       </div>
 
-      {pendingTarget != null && OFFER_PRICE_TARGETS.has(pendingTarget) && (
+      {pendingTarget && pendingFields.length > 0 && (
         <div className="mt-3 flex flex-wrap items-end gap-3 rounded-md bg-secondary-50 p-3 dark:bg-secondary-900/40">
-          <div className="flex flex-col gap-1">
-            <label
-              htmlFor={`offer-price-${deal.id}`}
-              className="text-xs font-medium text-secondary-600 dark:text-secondary-300"
-            >
-              Precio de oferta (EUR) — opcional
-            </label>
-            <input
-              id={`offer-price-${deal.id}`}
-              type="number"
-              min={0}
-              step="0.01"
-              value={offerPriceInput}
-              onChange={(e) => setOfferPriceInput(e.target.value)}
-              placeholder="ej. 15000"
-className="block w-40 rounded-md border border-secondary-300 bg-white px-3 py-1.5 text-sm text-secondary-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-secondary-600 dark:bg-secondary-900 dark:text-secondary-100"
-            />
-            {deal.last_sim_purchase_price != null && (
+          {pendingFields.map((field) => (
+            <div key={field.key} className="flex flex-col gap-1">
+              <label
+                htmlFor={`${field.key}-${deal.id}`}
+                className="text-xs font-medium text-secondary-600 dark:text-secondary-300"
+              >
+                {field.label}
+                {field.required ? " *" : ""}
+              </label>
+              <input
+                id={`${field.key}-${deal.id}`}
+                type={field.type}
+                min={field.type === "number" ? 0 : undefined}
+                step={field.type === "number" ? "0.01" : undefined}
+                value={formValues[field.key] ?? ""}
+                onChange={(e) =>
+                  setFormValues((prev) => ({ ...prev, [field.key]: e.target.value }))
+                }
+                placeholder={field.placeholder}
+                className="block w-44 rounded-md border border-secondary-300 bg-white px-3 py-1.5 text-sm text-secondary-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-secondary-600 dark:bg-secondary-900 dark:text-secondary-100"
+              />
+            </div>
+          ))}
+          {(pendingTarget === "NEGOTIATING" || pendingTarget === "WON") &&
+            deal.last_sim_purchase_price != null && (
               <p className="text-xs text-secondary-500 dark:text-secondary-400">
-                Prefill desde simulación (compra{" "}
-                {eur(deal.last_sim_purchase_price)}
+                Prefill desde simulación (compra {eur(deal.last_sim_purchase_price)}
                 {deal.last_sim_profile ? ` · ${deal.last_sim_profile}` : ""})
               </p>
             )}
-          </div>
           <Button
             variant="primary"
             size="sm"
-            disabled={transition.isPending}
+            disabled={transition.isPending || !canConfirmPending}
             onClick={() => transition.mutate(pendingTarget)}
           >
-            {transition.isPending
-              ? "Guardando..."
-              : `Confirmar → ${STATUS_LABELS[pendingTarget]}`}
+            {transition.isPending ? "Guardando..." : `Confirmar ${STATUS_LABELS[pendingTarget].toLowerCase()}`}
           </Button>
           <Button
             variant="outline"
@@ -279,7 +448,7 @@ className="block w-40 rounded-md border border-secondary-300 bg-white px-3 py-1.
             disabled={transition.isPending}
             onClick={() => {
               setPendingTarget(null);
-              setOfferPriceInput("");
+              setFormValues({});
             }}
           >
             Cancelar

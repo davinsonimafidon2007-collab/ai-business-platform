@@ -68,7 +68,18 @@ async def test_scoring_agent_rescore_computes_delta():
         {
             "vehicle_id": "veh-1",
             "new_price": 8000,
-            "vehicle": {"price": 10000, "mileage": 50000, "year": 2019},
+            "vehicle": {
+                "price": 10000,
+                "mileage": 50000,
+                "year": 2019,
+                "brand": "BMW",
+                "model": "320d",
+                "fuel_type": "diesel",
+                "transmission": "automatic",
+                "power_hp": 150,
+                "description": "Buen estado, mantenimiento al día",
+                "images": ["a.jpg", "b.jpg"],
+            },
         }
     )
 

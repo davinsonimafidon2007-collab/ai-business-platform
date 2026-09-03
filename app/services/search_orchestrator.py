@@ -88,6 +88,7 @@ class SearchOrchestrator:
         negotiation_engine: NegotiationEngine | None = None,
         provider_registry: type[ProviderRegistry] = ProviderRegistry,
         import_cost_profile: str | None = None,
+        inspection_service: Any = None,
     ) -> None:
         """Inicializa el orquestador con todas las dependencias.
 
@@ -100,6 +101,10 @@ class SearchOrchestrator:
             negotiation_engine: Motor de estrategia de negociación (opcional).
             provider_registry: Registro de providers (clase, no instancia).
             import_cost_profile: Perfil de costes de importación (default SPAIN).
+            inspection_service: InspectionService opcional (TASK 4/6 / AUD-012).
+                Cuando se inyecta, la negociación automática usa los defectos
+                reales de la última inspección del vehículo en vez de una
+                heurística vacía.
         """
         self._vehicle_service = vehicle_service
         self._vehicle_scorer = vehicle_scorer
@@ -122,6 +127,7 @@ class SearchOrchestrator:
             or getattr(settings, "default_import_cost_profile", None)
             or "SPAIN"
         )
+        self._inspection_service = inspection_service
         self._analyzer = SearchResultAnalyzer(
             vehicle_scorer=vehicle_scorer,
             market_estimator=market_estimator,
@@ -129,6 +135,7 @@ class SearchOrchestrator:
             opportunity_finder=opportunity_finder,
             negotiation_engine=self._negotiation_engine,
             import_cost_profile=self._import_cost_profile,
+            inspection_service=inspection_service,
         )
 
     # ------------------------------------------------------------------
@@ -317,7 +324,19 @@ class SearchOrchestrator:
                 )
             )
             return provider_name, exc
-        return provider_name, list(dtos or [])
+        dtos = list(dtos or [])
+        # TASK 4: dejar rastro cuando los resultados NO vienen del sitio
+        # real (fixtures). Sin esto, unos resultados simulados eran
+        # indistinguibles de anuncios reales en el log.
+        if dtos and getattr(provider, "is_simulated", False):
+            logger.warning(
+                "Provider '%s' devolvió %d resultado(s) SIMULADO(s) "
+                "(fixture, no del sitio real): no usar para decisiones "
+                "de compra reales",
+                provider_name,
+                len(dtos),
+            )
+        return provider_name, dtos
 
     async def _analyze_safe(
         self,

@@ -77,14 +77,12 @@ class SearchResultAnalyzer:
         Returns:
             SearchResult con todos los análisis.
         """
-        # 1. Scoring
-        vehicle_score = self._vehicle_scorer.score(vehicle)
-
-        # 2. Mercado — prefiere estimate_async si existe y es corutina real,
+        # 1. Mercado — prefiere estimate_async si existe y es corutina real,
         #    fallback a estimate. Solo se propaga comparable_providers cuando
         #    no es None, para mantener compatibilidad total con los
         #    callers/mocks existentes (default = registry o COMPARABLE_PROVIDERS
-        #    de settings).
+        #    de settings). Se calcula antes que el scoring (TASK 2 / AUD-007)
+        #    para poder comparar el precio del vehículo contra el mercado.
         estimate_async = getattr(self._market_estimator, "estimate_async", None)
         has_async_estimate = estimate_async is not None and inspect.iscoroutinefunction(
             estimate_async
@@ -112,18 +110,30 @@ class SearchResultAnalyzer:
                 else:
                     market_estimation = result
 
-        # 3. Rentabilidad (usando el precio de reventa real estimado por el
-        #    motor de mercado, en vez del multiplicador fijo por defecto)
-        estimated_sale_price = (
+        # 2. Scoring — con el precio de mercado ya disponible, el componente
+        #    de "precio competitivo" compara contra un dato real en vez de
+        #    otorgar siempre el bono máximo (AUD-007).
+        market_price_for_scoring = (
             market_estimation.market_price
             if market_estimation and market_estimation.market_price > 0
             else None
         )
+        vehicle_score = self._vehicle_scorer.score(
+            vehicle, market_price=market_price_for_scoring
+        )
+
+        # 3. Rentabilidad (usando el precio de reventa real estimado por el
+        #    motor de mercado, en vez del multiplicador fijo por defecto, y
+        #    el tipo de vendedor real del anuncio para el régimen fiscal
+        #    correcto — AUD-008/AUD-009)
+        estimated_sale_price = market_price_for_scoring
+        market_grounded = estimated_sale_price is not None
         try:
             profit_analysis = self._profit_analyzer.analyze(
                 vehicle,
                 profile_name=self._import_cost_profile,
                 estimated_sale_price=estimated_sale_price,
+                seller_type=getattr(vehicle, "seller_type", None),
             )
         except ValueError as exc:
             # Null-safety (AUDIT.PARALLEL.1): vehículo sin precio/0 no debe
@@ -141,6 +151,7 @@ class SearchResultAnalyzer:
             vehicle_score,
             profit_analysis,
             market_estimation,
+            market_grounded=market_grounded,
         )
 
         # 5. Estrategia de negociación — conecta datos de inspección reales si
@@ -256,7 +267,7 @@ class SearchResultAnalyzer:
         from app.services.profit_analyzer import (
             CostBreakdown,
             ProfitAnalysis,
-            Recommendation,
+            ProfitRecommendation,
             RiskLevel,
         )
 
@@ -276,7 +287,7 @@ class SearchResultAnalyzer:
             roi_percentage=0.0,
             profit_margin_percentage=0.0,
             risk_level=RiskLevel.HIGH,
-            recommendation=Recommendation.REJECT,
+            recommendation=ProfitRecommendation.REJECT,
             cost_breakdown=CostBreakdown(
                 purchase_price=0.0,
                 transport_cost=0.0,

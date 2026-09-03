@@ -28,38 +28,64 @@ if TYPE_CHECKING:
 
 
 class DealStatus(str, Enum):
-    """Estados del pipeline de gestión de un trato.
+    """Estados del pipeline de gestión de un trato (v2, extendido TASK 3).
 
-    Máquina de estados (v2):
+    Negociación (v2 — renombrado, con historial de auditoría y bloqueo
+    optimista, ver ``DealStatusHistory``/``Deal.version``):
 
         NEW         -> ANALYZING | CANCELLED
         ANALYZING   -> NEGOTIATING | LOST | CANCELLED
         NEGOTIATING -> WON | LOST | CANCELLED
-        WON / LOST / CANCELLED -> terminal (sin salida)
+
+    Cumplimiento físico (TASK 3 — WON ya NO es terminal, continúa):
+
+        WON -> BOUGHT -> IN_TRANSIT -> REGISTERED -> SOLD
+                      \\-> CANCELLED (en cualquier punto tras WON)
+
+    SOLD / LOST / CANCELLED -> terminales (sin transiciones de salida).
+    LOST solo es alcanzable ANTES de WON (fallo de negociación); una vez
+    comprado el vehículo, un trato que no llega a buen fin es CANCELLED, no
+    LOST (ya no se "pierde" una negociación por algo que ya se compró).
     """
 
     NEW = "NEW"
     ANALYZING = "ANALYZING"
     NEGOTIATING = "NEGOTIATING"
     WON = "WON"
+    BOUGHT = "BOUGHT"
+    IN_TRANSIT = "IN_TRANSIT"
+    REGISTERED = "REGISTERED"
+    SOLD = "SOLD"
     LOST = "LOST"
     CANCELLED = "CANCELLED"
 
     @property
     def is_terminal(self) -> bool:
-        """True si el estado es final (WON, LOST o CANCELLED)."""
+        """True si el estado es final (SOLD, LOST o CANCELLED)."""
         return self in TERMINAL_STATUSES
 
 
 #: Estados activos: un deal activo bloquea la creación de otro para la misma
-#: oportunidad (único deal activo por opportunity/user).
+#: oportunidad (único deal activo por opportunity/user). Incluye todo el
+#: recorrido de cumplimiento físico (WON..REGISTERED): mientras un trato no
+#: ha llegado a SOLD/LOST/CANCELLED, la oportunidad sigue "comprometida" con
+#: él y no debe poder abrirse un segundo trato en paralelo.
 ACTIVE_STATUSES: frozenset[DealStatus] = frozenset(
-    {DealStatus.NEW, DealStatus.ANALYZING, DealStatus.NEGOTIATING}
+    {
+        DealStatus.NEW,
+        DealStatus.ANALYZING,
+        DealStatus.NEGOTIATING,
+        DealStatus.WON,
+        DealStatus.BOUGHT,
+        DealStatus.IN_TRANSIT,
+        DealStatus.REGISTERED,
+    }
 )
 
-#: Estados terminales: sin transiciones de salida.
+#: Estados terminales: sin transiciones de salida. SOLD es el cierre real
+#: del cumplimiento físico (antes de TASK 3 era WON).
 TERMINAL_STATUSES: frozenset[DealStatus] = frozenset(
-    {DealStatus.WON, DealStatus.LOST, DealStatus.CANCELLED}
+    {DealStatus.SOLD, DealStatus.LOST, DealStatus.CANCELLED}
 )
 
 
@@ -176,6 +202,103 @@ class Deal(Base):
         DateTime(timezone=True), nullable=True
     )
     """Fecha/hora en que se guardó la última simulación."""
+
+    # ------------------------------------------------------------------
+    # Negociación (TASK 3): snapshot del resultado de NegotiationEngine en
+    # el momento de crear el deal, para no perderlo tras la sesión de
+    # búsqueda que lo calculó (antes solo vivía en VehicleEvaluation).
+    # ------------------------------------------------------------------
+    negotiation_initial_offer: Mapped[float | None] = mapped_column(
+        Numeric(12, 2), nullable=True
+    )
+    """Primera oferta recomendada por el motor de negociación (EUR)."""
+
+    negotiation_max_price: Mapped[float | None] = mapped_column(
+        Numeric(12, 2), nullable=True
+    )
+    """Precio máximo recomendado por el motor de negociación (EUR)."""
+
+    negotiation_walk_away_price: Mapped[float | None] = mapped_column(
+        Numeric(12, 2), nullable=True
+    )
+    """Precio a partir del cual abandonar la negociación (EUR)."""
+
+    negotiation_recommendation: Mapped[str | None] = mapped_column(
+        String(20), nullable=True
+    )
+    """Recomendación del motor de negociación (BUY/NEGOTIATE/WALK_AWAY)."""
+
+    negotiation_snapshot_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    """Cuándo se tomó el snapshot de negociación."""
+
+    # ------------------------------------------------------------------
+    # Cumplimiento físico del trato (TASK 3): comprado -> transporte ->
+    # matriculación -> venta. Cada bloque se rellena al transicionar el
+    # deal al estado correspondiente (ver DealService.transition).
+    # ------------------------------------------------------------------
+    actual_purchase_price: Mapped[float | None] = mapped_column(
+        Numeric(12, 2), nullable=True
+    )
+    """Precio de compra realmente pagado (puede diferir de offer_price)."""
+
+    bought_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    """Cuándo se completó la compra (transición a BOUGHT)."""
+
+    transport_carrier: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    """Transportista/empresa de logística usada."""
+
+    transport_cost: Mapped[float | None] = mapped_column(
+        Numeric(12, 2), nullable=True
+    )
+    """Coste real del transporte (EUR)."""
+
+    transport_started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    """Cuándo se inició el transporte (transición a IN_TRANSIT)."""
+
+    transport_completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    """Cuándo llegó el vehículo a destino."""
+
+    registration_plate: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    """Matrícula asignada tras la matriculación."""
+
+    registration_cost: Mapped[float | None] = mapped_column(
+        Numeric(12, 2), nullable=True
+    )
+    """Coste real de matriculación (EUR)."""
+
+    registered_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    """Cuándo se completó la matriculación (transición a REGISTERED)."""
+
+    sale_price: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True)
+    """Precio real de venta al cliente final (EUR)."""
+
+    buyer_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    """Nombre del comprador final."""
+
+    buyer_contact: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    """Contacto del comprador final (teléfono/email)."""
+
+    sold_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    """Cuándo se vendió el vehículo (transición a SOLD)."""
+
+    actual_profit: Mapped[float | None] = mapped_column(
+        Numeric(12, 2), nullable=True
+    )
+    """Beneficio REAL (sale_price - actual_purchase_price - transport_cost -
+    registration_cost), calculado al transicionar a SOLD. Distinto de
+    last_sim_net_profit, que es solo una estimación previa a la venta."""
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

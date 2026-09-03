@@ -59,6 +59,31 @@ class SimulateProfitRequest(BaseModel):
         default=None,
         description="Precio de venta estimado en destino; si null el analyzer usa su default",
     )
+    seller_type: str | None = Field(
+        default=None,
+        description=(
+            "Tipo de vendedor (dealer/private/...); si null usa "
+            "vehicle.seller_type. Un vendedor profesional tributa IVA pleno "
+            "(21%) en vez del régimen de margen (TASK 2 / AUD-009)."
+        ),
+    )
+    min_margin_percentage: float = Field(
+        default=15.0,
+        ge=0.0,
+        lt=100.0,
+        description="Margen mínimo requerido (%) para calcular max_purchase_price",
+    )
+    min_roi_percentage: float = Field(
+        default=15.0,
+        ge=0.0,
+        description="ROI mínimo requerido (%) para calcular max_purchase_price",
+    )
+    risk_buffer_percentage: float = Field(
+        default=0.0,
+        ge=0.0,
+        lt=100.0,
+        description="Buffer de riesgo (%) sobre el precio de venta para max_purchase_price",
+    )
 
 
 class SimulateProfitResponse(BaseModel):
@@ -89,5 +114,18 @@ class SimulateProfitResponse(BaseModel):
     risk_label_es: str = Field(
         default="",
         description="Etiqueta legible en español del nivel de riesgo (REC.1)",
+    )
+    # --- TASK 2 ---
+    max_purchase_price: float | None = Field(
+        default=None,
+        description=(
+            "Precio de compra máximo (EUR) que sigue cumpliendo "
+            "min_margin_percentage y min_roi_percentage sobre "
+            "estimated_sale_price. Null si no se pudo calcular."
+        ),
+    )
+    max_purchase_price_binding_constraint: str | None = Field(
+        default=None,
+        description="Cuál restricción determina max_purchase_price: 'margin' o 'roi'",
     )
 

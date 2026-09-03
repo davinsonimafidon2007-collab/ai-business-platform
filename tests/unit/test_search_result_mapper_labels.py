@@ -5,8 +5,12 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from app.api.v1.routes.search import _build_search_result_item
-from app.services.profit_analyzer import CostBreakdown, ProfitAnalysis, RiskLevel
-from app.services.profit_analyzer import ProfitRecommendation as Recommendation
+from app.services.profit_analyzer import (
+    CostBreakdown,
+    ProfitAnalysis,
+    ProfitRecommendation,
+    RiskLevel,
+)
 from app.services.vehicle_scorer import VehicleScore
 
 
@@ -58,7 +62,7 @@ def _make_profit(
     net: float = 6_000.0,
     roi: float = 50.0,
     risk: RiskLevel = RiskLevel.LOW,
-    rec: Recommendation = Recommendation.BUY,
+    rec: ProfitRecommendation = ProfitRecommendation.BUY,
 ) -> ProfitAnalysis:
     breakdown = CostBreakdown(
         purchase_price=purchase,
@@ -141,7 +145,7 @@ def test_mapper_score_fallback_from_legacy_category_only() -> None:
 
 def test_mapper_emits_profit_labels_es() -> None:
     item = _build_search_result_item(
-        _make_result(profit=_make_profit(risk=RiskLevel.MEDIUM, rec=Recommendation.CONSIDER))
+        _make_result(profit=_make_profit(risk=RiskLevel.MEDIUM, rec=ProfitRecommendation.CONSIDER))
     )
     pa = item.profit_analysis
     assert pa is not None

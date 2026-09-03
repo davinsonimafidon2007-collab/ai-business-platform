@@ -16,9 +16,8 @@ import pytest_asyncio
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.exceptions.base import AppError
-
 from app.database.manager import DatabaseManager
+from app.exceptions.base import AppError
 from app.models.base import Base
 from app.models.opportunity import Opportunity
 from app.models.user import User

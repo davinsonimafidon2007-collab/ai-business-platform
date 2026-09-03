@@ -40,7 +40,7 @@ class _MarketStub:
 
 @dataclass
 class _ScorerStub:
-    def score(self, vehicle: object) -> Any:
+    def score(self, vehicle: object, *, market_price: float | None = None) -> Any:
         return MagicMock(score=75, category="Muy bueno")
 
 

@@ -342,7 +342,7 @@ async def search_vehicles(
     request: SearchAPIRequest,
     search_engine: SearchEngineService = Depends(get_search_engine_service),
     current_user: User = Depends(require_search),
-    db: AsyncSession = Depends(get_db_session),
+    session: AsyncSession = Depends(get_db_session),
 ) -> SearchAPIResponse:
     """Ejecuta una búsqueda completa de vehículos.
 
@@ -371,6 +371,20 @@ async def search_vehicles(
 
     # Ejecutar búsqueda (pipeline completo, providers en paralelo)
     engine_result = await search_engine.search(domain_request)
+
+    # Persistir resultados de la búsqueda síncrona para que el dashboard/radar
+    # los refleje sin depender solo de jobs en segundo plano.
+    try:
+        from app.services.search_persistence import SearchPersistenceService
+        persistence = SearchPersistenceService(session)
+        await persistence.persist_engine_result(current_user.id, engine_result)
+        await session.commit()
+    except Exception:  # noqa: BLE001 — persistence is best-effort here
+        import logging
+        logging.getLogger("app.api.search_persistence").exception(
+            "sync_search_persistence_failed"
+        )
+        await session.rollback()
 
     # Convertir resultados internos → API responses
     items = [_build_search_result_item(r) for r in engine_result.results]
@@ -440,7 +454,7 @@ async def search_vehicles(
 
     # Historial fail-soft (SEARCH.HIST.1): auditoría de búsquedas ejecutadas.
     try:
-        await SearchHistoryRepository(db).save(
+        await SearchHistoryRepository(session).save(
             SearchHistory(
                 user_id=getattr(current_user, "id", None),
                 query=domain_request.query[:500],

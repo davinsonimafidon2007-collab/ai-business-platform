@@ -234,3 +234,68 @@ class TestOpportunityRepository:
         await opportunity_repo.save(opp)
         assert await opportunity_repo.count() == 1
 
+    @pytest.mark.asyncio
+    async def test_list_filtered_by_status(
+        self,
+        opportunity_repo: OpportunityRepository,
+        sample_vehicle: object,
+    ) -> None:
+        """list_filtered(status=...) filtra de verdad (AUD-010: antes la
+        columna no existía y este filtro habría lanzado AttributeError)."""
+        from app.models.opportunity import OpportunityStatus
+
+        open_opp = Opportunity(
+            vehicle_id=sample_vehicle.id,
+            opportunity_score=90.0,
+            recommendation="BUY_NOW",
+            roi=20.0,
+            risk="LOW",
+            profit=4000.0,
+        )
+        converted_opp = Opportunity(
+            vehicle_id=sample_vehicle.id,
+            opportunity_score=80.0,
+            recommendation="NEGOTIATE",
+            roi=15.0,
+            risk="MEDIUM",
+            profit=2000.0,
+            status=OpportunityStatus.CONVERTED.value,
+        )
+        await opportunity_repo.save(open_opp)
+        await opportunity_repo.save(converted_opp)
+
+        # Sin filtro: las dos.
+        all_items, all_total = await opportunity_repo.list_filtered(
+            user_id=sample_vehicle.user_id
+        )
+        assert all_total == 2
+
+        open_items, open_total = await opportunity_repo.list_filtered(
+            user_id=sample_vehicle.user_id, status=OpportunityStatus.OPEN.value
+        )
+        assert open_total == 1
+        assert open_items[0].id == open_opp.id
+
+        converted_items, converted_total = await opportunity_repo.list_filtered(
+            user_id=sample_vehicle.user_id, status=OpportunityStatus.CONVERTED.value
+        )
+        assert converted_total == 1
+        assert converted_items[0].id == converted_opp.id
+
+    @pytest.mark.asyncio
+    async def test_new_opportunity_defaults_to_open_status(
+        self,
+        opportunity_repo: OpportunityRepository,
+        sample_vehicle: object,
+    ) -> None:
+        """Una oportunidad nueva nace OPEN si no se especifica status."""
+        from app.models.opportunity import OpportunityStatus
+
+        opp = Opportunity(
+            vehicle_id=sample_vehicle.id,
+            opportunity_score=60.0,
+            recommendation="WATCH",
+        )
+        saved = await opportunity_repo.save(opp)
+        assert saved.status == OpportunityStatus.OPEN.value
+

@@ -67,6 +67,9 @@ def test_ensure_default_providers_spain_profile_auto_registers_es_fixtures(
     monkeypatch.setattr(settings, "enable_coches_net_fixture", False)
     monkeypatch.setattr(settings, "enable_autoscout24_es", False)
     monkeypatch.setattr(settings, "enable_mobile_de", True)
+    # Sin el provider real de coches.net, el fixture equivalente sigue
+    # auto-registrándose por perfil SPAIN (TASK 4 / AUD-005).
+    monkeypatch.setattr(settings, "enable_coches_net", False)
 
     ProviderRegistry.ensure_default_providers()
     names = ProviderRegistry.list_providers()

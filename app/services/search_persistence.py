@@ -265,6 +265,7 @@ class SearchPersistenceService:
             roi=getattr(opportunity, "roi", None),
             risk=risk_level.value if hasattr(risk_level, "value") else _stringify(risk_level),
             profit=getattr(opportunity, "estimated_profit", None),
+            confidence=getattr(opportunity, "confidence", None),
             analyzed_at=datetime.now(UTC),
             engine_version=getattr(opportunity, "engine_version", None),
         )

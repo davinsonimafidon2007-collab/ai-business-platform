@@ -13,6 +13,8 @@ class PasswordResetToken(Base):
     __tablename__ = "password_reset_tokens"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    # user_id: FK real a users.id (Uuid nativo) — antes era String(36) sin
+    # FK, una referencia lógica no forzada por la BD.
     user_id: Mapped[str] = mapped_column(
         Uuid(as_uuid=False),
         ForeignKey("users.id", ondelete="CASCADE"),

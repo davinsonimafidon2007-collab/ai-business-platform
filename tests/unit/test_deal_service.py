@@ -64,6 +64,24 @@ VALID_TRANSITIONS = {
         DealStatus.LOST,
         DealStatus.CANCELLED,
     },
+    # TASK 3 (cumplimiento físico, fusionado con origin/main v2): WON ya NO
+    # es terminal, continúa hasta SOLD.
+    DealStatus.WON: {
+        DealStatus.BOUGHT,
+        DealStatus.CANCELLED,
+    },
+    DealStatus.BOUGHT: {
+        DealStatus.IN_TRANSIT,
+        DealStatus.CANCELLED,
+    },
+    DealStatus.IN_TRANSIT: {
+        DealStatus.REGISTERED,
+        DealStatus.CANCELLED,
+    },
+    DealStatus.REGISTERED: {
+        DealStatus.SOLD,
+        DealStatus.CANCELLED,
+    },
 }
 
 
@@ -76,8 +94,9 @@ class TestTransitionMatrix:
                 deal = _make_deal(status=current)
                 service, _ = _make_service(deal)
                 before = deal.updated_at
+                extra_kwargs = {"sale_price": 15000.0} if target == DealStatus.SOLD else {}
                 result = await service.transition(
-                    deal_id="deal-1", user_id="user-1", new_status=target
+                    deal_id="deal-1", user_id="user-1", new_status=target, **extra_kwargs
                 )
                 assert result.status == target, f"{current} -> {target}"
                 assert result.status_changed_at >= before
@@ -104,9 +123,13 @@ class TestTransitionMatrix:
 
     @pytest.mark.asyncio
     async def test_terminal_states_have_no_exits(self) -> None:
-        """WON/LOST/CANCELLED no transicionan a nada (422)."""
+        """SOLD/LOST/CANCELLED no transicionan a nada (422).
+
+        WON ya NO es terminal desde TASK 3 (fusionado con origin/main v2):
+        continúa hasta BOUGHT -> IN_TRANSIT -> REGISTERED -> SOLD.
+        """
         for terminal in (
-            DealStatus.WON,
+            DealStatus.SOLD,
             DealStatus.LOST,
             DealStatus.CANCELLED,
         ):
@@ -295,7 +318,7 @@ class TestCreate:
                 deal_id = details.get("deal_id")
         if deal_id is None and hasattr(exc.value, "detail"):
             try:
-                detail = getattr(exc.value, "detail")  # type: ignore[union-attr]
+                detail = exc.value.detail  # type: ignore[union-attr]
                 if isinstance(detail, dict):
                     deal_id = detail.get("deal_id")
             except Exception:
@@ -467,13 +490,17 @@ async def test_save_simulation_ownership_rejected() -> None:
 class TestTimestamps:
     @pytest.mark.asyncio
     async def test_closed_at_set_on_terminal_cleared_on_reopen(self) -> None:
-        """closed_at se rellena al llegar a terminal y se limpia si vuelve."""
+        """closed_at se rellena al llegar a terminal y se limpia si vuelve.
+
+        WON ya NO es terminal (TASK 3): se prueba con SOLD, el terminal real
+        del cumplimiento físico.
+        """
         # Un deal nunca puede salir de terminal, así que solo probamos el alta.
-        deal = _make_deal(status=DealStatus.NEGOTIATING)
+        deal = _make_deal(status=DealStatus.REGISTERED)
         deal.closed_at = None
         service, _ = _make_service(deal)
         result = await service.transition(
-            deal_id="deal-1", user_id="user-1", new_status=DealStatus.WON
+            deal_id="deal-1", user_id="user-1", new_status=DealStatus.SOLD, sale_price=15000.0
         )
         assert result.closed_at is not None
         assert result.status_changed_at <= datetime.now(UTC)
