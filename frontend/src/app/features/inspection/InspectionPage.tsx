@@ -323,8 +323,8 @@ export function InspectionPage({
 
   if (pageState === "error") {
     return (
-      <div className="rounded-lg bg-red-50 p-6 text-center">
-        <p className="text-red-800">{error || "Error desconocido"}</p>
+      <div className="rounded-lg bg-red-50 p-6 text-center dark:bg-red-950/40">
+        <p className="text-red-800 dark:text-red-300">{error || "Error desconocido"}</p>
         {onBack && (
           <button
             onClick={onBack}
@@ -348,8 +348,8 @@ export function InspectionPage({
 
   if (!currentCategory || !session) {
     return (
-      <div className="rounded-lg bg-yellow-50 p-6 text-center">
-        <p className="text-yellow-800">No hay categorías de inspección disponibles.</p>
+      <div className="rounded-lg bg-yellow-50 p-6 text-center dark:bg-yellow-950/40">
+        <p className="text-yellow-800 dark:text-yellow-300">No hay categorías de inspección disponibles.</p>
       </div>
     );
   }
@@ -358,17 +358,17 @@ export function InspectionPage({
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">
+          <h1 className="text-2xl font-bold text-secondary-900 dark:text-secondary-100">
             Inspección de vehículo
           </h1>
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-secondary-500 dark:text-secondary-400">
             Sesión: {session.id.slice(0, 8)}...
           </p>
         </div>
         {onBack && (
           <button
             onClick={onBack}
-            className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-secondary-600 dark:bg-secondary-800 dark:text-secondary-200 dark:hover:bg-secondary-700"
           >
             Cancelar
           </button>
@@ -389,7 +389,7 @@ export function InspectionPage({
         />
       )}
 
-      <div className="rounded-lg border border-gray-200 p-4">
+      <div className="rounded-lg border border-gray-200 p-4 dark:border-secondary-700">
         <button
           onClick={handleAnalyzePhotos}
           disabled={isAnalyzing}
@@ -398,7 +398,7 @@ export function InspectionPage({
           {isAnalyzing ? "Analizando fotografías..." : "Analizar fotografías"}
         </button>
         {visionSimulated && (
-          <div className="mt-3 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
+          <div className="mt-3 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-700/50 dark:bg-amber-950/40 dark:text-amber-300">
             <p className="font-medium">Análisis simulado (Mock)</p>
             <p className="mt-1">
               No hay <code>GEMINI_API_KEY</code> ni <code>OPENAI_API_KEY</code> configuradas.
@@ -409,14 +409,14 @@ export function InspectionPage({
         )}
         {visionSuggestions.length > 0 && (
           <div className="mt-4 space-y-3">
-            <p className="text-sm font-medium text-gray-800">Sugerencias (no aplicadas)</p>
+            <p className="text-sm font-medium text-secondary-800 dark:text-secondary-200">Sugerencias (no aplicadas)</p>
             {visionSuggestions.map((suggestion) => (
-              <div key={suggestion.photo_id} className="rounded-md bg-violet-50 p-3 text-sm text-gray-700">
+              <div key={suggestion.photo_id} className="rounded-md bg-violet-50 p-3 text-sm text-secondary-700 dark:bg-violet-950/30 dark:text-secondary-300">
                 <p>{suggestion.notes}</p>
                 <p className="mt-1">Estado sugerido: {suggestion.status} · Confianza: {suggestion.confidence}</p>
                 <div className="mt-2 flex gap-2">
                   <button onClick={() => handleSuggestion(suggestion, true)} className="rounded bg-green-600 px-3 py-1 text-white">Aceptar</button>
-                  <button onClick={() => handleSuggestion(suggestion, false)} className="rounded border border-gray-300 bg-white px-3 py-1">Rechazar</button>
+                  <button onClick={() => handleSuggestion(suggestion, false)} className="rounded border border-gray-300 bg-white px-3 py-1 dark:border-secondary-600 dark:bg-secondary-800 dark:text-secondary-200">Rechazar</button>
                 </div>
               </div>
             ))}
@@ -432,12 +432,12 @@ export function InspectionPage({
         onItemPhotoCapture={handleItemPhotoCapture}
       />
 
-      <div className="flex items-center justify-between border-t pt-4">
+      <div className="flex items-center justify-between border-t pt-4 dark:border-secondary-700">
         <div>
           {currentCategoryIndex > 0 && (
             <button
               onClick={handlePrevCategory}
-              className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-secondary-600 dark:bg-secondary-800 dark:text-secondary-200 dark:hover:bg-secondary-700"
             >
               Anterior
             </button>
