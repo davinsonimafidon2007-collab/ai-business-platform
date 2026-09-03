@@ -302,9 +302,26 @@ class ProviderHttpClient:
                     # TASK-010: leer el cuerpo en streaming con un tope de bytes
                     # para no materializar descargas gigantes en memoria.
                     body = await self._read_capped_body(response, full_url)
+                    # Bug real encontrado probando búsqueda en vivo contra
+                    # AutoScout24: aread()/aiter_bytes() ya devuelven el
+                    # cuerpo DESCOMPRIMIDO (httpx decodifica gzip/br en
+                    # streaming). Si reutilizamos response.headers tal cual,
+                    # el Response reconstruido sigue anunciando
+                    # Content-Encoding: gzip sobre un body que ya es HTML
+                    # plano — cualquier acceso a .text/.content más adelante
+                    # intenta des-gzipear de nuevo y falla con
+                    # "httpx.DecodingError: incorrect header check". Content-
+                    # Length también queda obsoleto (medía el tamaño
+                    # comprimido). Se quitan ambos: el body ya es el final.
+                    headers = httpx.Headers(response.headers)
+                    for stale_header in ("content-encoding", "content-length"):
+                        try:
+                            del headers[stale_header]
+                        except KeyError:
+                            pass
                     return httpx.Response(
                         status_code=response.status_code,
-                        headers=response.headers,
+                        headers=headers,
                         content=body,
                         request=response.request,
                     )

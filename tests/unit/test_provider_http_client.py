@@ -510,3 +510,37 @@ async def test_http_client_max_bytes_zero_means_no_limit():
     with stack:
         response = await client.get("/test")
         assert len(response.content) == 500
+
+
+# --- Bug real: doble descompresión gzip en el Response reconstruido ---
+# aread()/aiter_bytes() sobre la respuesta original YA devuelven el cuerpo
+# descomprimido; _mock_response() simula exactamente ese contrato (igual
+# que el httpx real). Si el cliente reconstruye el Response final
+# reutilizando headers con "Content-Encoding: gzip" tal cual, cualquier
+# acceso a .text/.content sobre ESE response intenta des-gzipear de nuevo
+# un cuerpo que ya es texto plano y falla con httpx.DecodingError.
+
+
+@pytest.mark.asyncio
+async def test_http_client_strips_stale_content_encoding_header(http_client):
+    """El Response final no debe reventar al acceder a .text/.content.
+
+    Regresión: encontrado probando una búsqueda real contra AutoScout24
+    (que sirve HTML real con Content-Encoding: gzip) — ver commit
+    "fix(providers): doble descompresión gzip rompía toda búsqueda real".
+    """
+    decoded_html = "<html><body>anuncio real</body></html>"
+    mock_response = _mock_response(
+        status_code=200,
+        body=decoded_html.encode("utf-8"),
+        headers={"content-encoding": "gzip", "content-length": "9999"},
+    )
+    stack, _, _ = _patch_transport(mock_response)
+    with stack:
+        response = await http_client.get("/test")
+        assert "content-encoding" not in response.headers
+        assert response.text == decoded_html
+        assert response.content == decoded_html.encode("utf-8")
+        # httpx recalcula Content-Length a partir del body real al
+        # construir el Response; ya no debe quedar el valor stale (9999).
+        assert response.headers["content-length"] == str(len(decoded_html))

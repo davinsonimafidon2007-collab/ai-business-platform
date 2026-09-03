@@ -12,6 +12,7 @@ Mantiene compatibilidad completa con el protocolo ``MarketEstimator``
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import math
@@ -436,6 +437,17 @@ class ComparableMarketEstimator:
         self._confidence = confidence_calculator or ConfidenceCalculator()
         self._cache_ttl = timedelta(seconds=cache_ttl_seconds)
         self._local_cache: dict[str, MarketEstimation] = {}
+        # Bug real encontrado probando búsquedas en vivo: hasta
+        # search_max_concurrent_analyses (4) tareas de análisis corren en
+        # paralelo bajo _analysis_semaphore y comparten esta MISMA
+        # AsyncSession vía self._cached_market_repo — SQLAlchemy prohíbe
+        # usar una AsyncSession concurrentemente desde varias corutinas.
+        # Sin este lock, el uso concurrente corrompía el estado interno de
+        # la sesión y producía errores fantasma (p. ej. duplicate key en
+        # cached_market_data_pkey con un id recién generado al azar) que
+        # además dejaban la sesión "poisoned" (PendingRollbackError) para
+        # el resto de vehículos de la misma búsqueda.
+        self._db_lock = asyncio.Lock()
 
     async def estimate(
         self,
@@ -473,9 +485,10 @@ class ComparableMarketEstimator:
         vehicle_id = self._get_external_id(vehicle)
         vehicle_source = self._get_source(vehicle)
         if vehicle_id and vehicle_source:
-            cached = await self._cached_market_repo.get_valid(
-                external_id=vehicle_id, provider=vehicle_source, market_hash=market_hash,
-            )
+            async with self._db_lock:
+                cached = await self._cached_market_repo.get_valid(
+                    external_id=vehicle_id, provider=vehicle_source, market_hash=market_hash,
+                )
             if cached is not None:
                 estimation = self._from_cached(cached)
                 self._local_cache[market_hash] = estimation
@@ -644,14 +657,22 @@ class ComparableMarketEstimator:
             explanation=estimation.explanation or None,
             expires_at=now + self._cache_ttl,
         )
-        try:
-            await self._cached_market_repo.save(cached)
-        except Exception:
-            logger.warning(
-                "No se pudo guardar la estimación de mercado en caché "
-                "(external_id=%s, provider=%s)",
-                vehicle_id, vehicle_source, exc_info=True,
-            )
+        async with self._db_lock:
+            try:
+                await self._cached_market_repo.save(cached)
+            except Exception:
+                logger.warning(
+                    "No se pudo guardar la estimación de mercado en caché "
+                    "(external_id=%s, provider=%s)",
+                    vehicle_id, vehicle_source, exc_info=True,
+                )
+                # Una sesión de SQLAlchemy queda "poisoned" tras un commit
+                # fallido: sin este rollback, TODAS las llamadas siguientes
+                # de get_valid()/save() sobre esta misma sesión (compartida
+                # por el resto de vehículos de esta búsqueda) fallarían en
+                # cascada con PendingRollbackError, aunque no tengan nada
+                # que ver con el fallo original.
+                await self._cached_market_repo.session.rollback()
 
     # ------------------------------------------------------------------
     # Utilidades
