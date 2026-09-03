@@ -1,17 +1,8 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
 
-from app.core.config import settings
 from app.providers.base import VehicleProvider
-
-if TYPE_CHECKING:
-    from app.providers.autoscout24_es import AutoScout24EsProvider
-    from app.providers.coches_net import CochesNetProvider
-    from app.providers.es_market_fixture import EsMarketFixtureProvider
-    from app.providers.coches_net_fixture import CochesNetFixtureProvider
-    from app.providers.coches_net_html_fixture import CochesNetHtmlFixtureProvider
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +14,13 @@ def _is_spain_import_profile() -> bool:
     raw = getattr(settings, "default_import_cost_profile", None) or "SPAIN"
     key = str(raw).strip().upper()
     return key in {"SPAIN", "ES", "ESP", "ESPAÑA", "ESPANA"}
+
+
+def _coches_net_real_enabled() -> bool:
+    """True si el provider REAL de coches.net debe registrarse (TASK 4)."""
+    from app.core.config import settings
+
+    return bool(getattr(settings, "enable_coches_net", False))
 
 
 class ProviderRegistry:
@@ -112,22 +110,62 @@ class ProviderRegistry:
         cls.register(EsMarketFixtureProvider())
 
     @classmethod
+    def ensure_coches_net(cls, enabled: bool | None = None) -> None:
+        """Registra el provider REAL de coches.net si enabled y aún no está.
+
+        TASK 4 (AUD-005): antes este scraper existía pero no se registraba
+        nunca (solo import bajo TYPE_CHECKING), así que era inalcanzable en
+        runtime y la búsqueda "España" se servía de fixtures.
+
+        Idempotente. No hace HTTP al construir la instancia. Si coches.net
+        bloquea la petición, el provider lanza la excepción correspondiente
+        y el orquestador la reporta como ProviderIssue: nunca hay fallback
+        silencioso a datos simulados.
+        """
+        if enabled is None:
+            enabled = _coches_net_real_enabled()
+        if not enabled:
+            return
+        if "coches_net" in cls._providers:
+            return
+        from app.core.config import settings
+        from app.providers.coches_net import BASE_URL as COCHES_NET_BASE_URL
+        from app.providers.coches_net import CochesNetProvider
+        from app.providers.http_client import ProviderHttpClient
+
+        client = ProviderHttpClient(
+            provider_name="coches_net",
+            base_url=COCHES_NET_BASE_URL,
+            timeout=settings.provider_http_timeout,
+            max_retries=settings.provider_http_max_retries,
+        )
+        cls.register(
+            CochesNetProvider(http_client=client, base_url=COCHES_NET_BASE_URL)
+        )
+
+    @classmethod
     def ensure_coches_net_fixture(cls, enabled: bool | None = None) -> None:
         """Registra coches_net_fixture si enabled y aún no está.
 
         Idempotente. ``enabled=None`` → lee settings.enable_coches_net_fixture
         y/o activa auto-registro cuando el perfil de costes es SPAIN/ES
         (salvo ``settings.disable_es_market_auto``).
+
+        TASK 4: el auto-registro por perfil SPAIN/ES se desactiva cuando el
+        provider REAL de coches.net está activo, para no mezclar anuncios
+        reales y simulados de la misma fuente en los mismos resultados. El
+        flag explícito ``enable_coches_net_fixture`` sigue teniendo
+        prioridad (útil para desarrollo offline).
         """
         if enabled is None:
             from app.core.config import settings
 
-            enabled = (
-                bool(getattr(settings, "enable_coches_net_fixture", False))
-                or (
-                    _is_spain_import_profile()
-                    and not getattr(settings, "disable_es_market_auto", False)
-                )
+            enabled = bool(
+                getattr(settings, "enable_coches_net_fixture", False)
+            ) or (
+                _is_spain_import_profile()
+                and not getattr(settings, "disable_es_market_auto", False)
+                and not _coches_net_real_enabled()
             )
         if not enabled:
             return
@@ -166,8 +204,11 @@ class ProviderRegistry:
           requiere proxy residencial anti-bot)
         - autoscout24: siempre (fuente primaria, AS24-first)
         - autoscout24_es: solo si settings.enable_autoscout24_es
+        - coches_net (REAL): si settings.enable_coches_net (TASK 4 / AUD-005)
         - es_market_fixture: flag o auto-registro si perfil SPAIN/ES
-        - coches_net_fixture: flag o auto-registro si perfil SPAIN/ES
+        - coches_net_fixture: flag, o auto-registro si perfil SPAIN/ES y el
+          provider real de coches.net NO está activo (no se mezclan datos
+          reales y simulados de la misma fuente)
 
         Reutiliza settings-provider_http_* para el cliente anti-bot, igual
         que las dependencias de API (get_mobile_de_provider /
@@ -228,6 +269,10 @@ class ProviderRegistry:
                         base_url="https://www.autoscout24.es",
                     )
                 )
+
+        # Provider REAL de coches.net antes que su fixture: si está activo,
+        # el fixture equivalente no se auto-registra (TASK 4 / AUD-005).
+        cls.ensure_coches_net()
 
         # Auto-registra fixtures ES offline según flag o perfil SPAIN/ES.
         cls.ensure_es_market_fixture()

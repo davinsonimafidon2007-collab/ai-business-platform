@@ -56,6 +56,11 @@ class CochesNetFixtureProvider(VehicleProvider):
     def source_name(self) -> str:
         return "coches_net_fixture"
 
+    @property
+    def is_simulated(self) -> bool:
+        """Datos de fixture, no del sitio real (TASK 4 / AUD-033)."""
+        return True
+
     def _find_listing_nodes(self, soup: Any) -> list[Any]:
         # No HTML real: la API search/get_vehicle está sobreescrita.
         return []

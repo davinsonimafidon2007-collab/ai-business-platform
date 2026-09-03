@@ -169,6 +169,17 @@ class SearchOrchestrator:
                 vehicle_dtos = await self._vehicle_service.search_from_provider(
                     provider, request.query, **kwargs
                 )
+                # TASK 4: dejar rastro cuando los resultados NO vienen del
+                # sitio real (fixtures). Sin esto, unos resultados simulados
+                # eran indistinguibles de anuncios reales en el log.
+                if vehicle_dtos and getattr(provider, "is_simulated", False):
+                    logger.warning(
+                        "Provider '%s' devolvió %d resultado(s) SIMULADO(s) "
+                        "(fixture, no del sitio real): no usar para decisiones "
+                        "de compra reales",
+                        provider_name,
+                        len(vehicle_dtos),
+                    )
             except Exception as exc:  # noqa: BLE001 — multi-provider: must continue
                 logger.exception("Error al buscar en provider %s", provider_name)
                 self._last_provider_issues.append(

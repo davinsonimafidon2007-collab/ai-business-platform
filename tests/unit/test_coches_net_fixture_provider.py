@@ -67,9 +67,28 @@ def test_registry_flag_on(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_registry_spain_profile_auto_enables(monkeypatch: pytest.MonkeyPatch) -> None:
+    """En perfil SPAIN el fixture se auto-registra SOLO si el provider real
+    de coches.net está desactivado (TASK 4 / AUD-005): con el real activo no
+    se mezclan anuncios reales y simulados de la misma fuente."""
     monkeypatch.setattr(settings, "default_import_cost_profile", "SPAIN")
+    monkeypatch.setattr(settings, "enable_coches_net", False)
     monkeypatch.setattr(settings, "enable_coches_net_fixture", False)
     monkeypatch.setattr(settings, "enable_es_market_fixture", False)
     monkeypatch.setattr(settings, "enable_autoscout24_es", False)
     ProviderRegistry.ensure_default_providers()
     assert "coches_net_fixture" in ProviderRegistry.list_providers()
+
+
+def test_registry_spain_profile_prefers_real_provider(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Con el provider real activo, el fixture equivalente no se auto-registra."""
+    monkeypatch.setattr(settings, "default_import_cost_profile", "SPAIN")
+    monkeypatch.setattr(settings, "enable_coches_net", True)
+    monkeypatch.setattr(settings, "enable_coches_net_fixture", False)
+    monkeypatch.setattr(settings, "enable_es_market_fixture", False)
+    monkeypatch.setattr(settings, "enable_autoscout24_es", False)
+    ProviderRegistry.ensure_default_providers()
+    names = ProviderRegistry.list_providers()
+    assert "coches_net" in names
+    assert "coches_net_fixture" not in names

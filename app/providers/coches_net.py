@@ -16,7 +16,7 @@ from urllib.parse import quote
 from bs4 import BeautifulSoup
 
 from app.providers.base import VehicleProvider
-from app.providers.exceptions import ProviderConnectionError, ProviderParsingError
+from app.providers.exceptions import ProviderParsingError
 
 BASE_URL = "https://www.coches.net"
 

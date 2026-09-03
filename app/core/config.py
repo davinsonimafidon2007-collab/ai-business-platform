@@ -310,11 +310,26 @@ class Settings(BaseSettings):
     """Si True, registra provider autoscout24_es en ProviderRegistry."""
 
     # =========================================================================
+    # Coches.net REAL (scraping HTTP del mercado español)
+    # =========================================================================
+    # TASK 4 (AUD-005): el scraper real de coches.net existía pero nunca se
+    # registraba, así que la búsqueda "España" corría sobre fixtures. Ahora se
+    # registra cuando el perfil de costes es SPAIN/ES (o con este flag), y
+    # entonces NO se auto-registra el fixture equivalente para no mezclar
+    # anuncios reales con simulados en los mismos resultados.
+    # coches.net puede bloquear IPs de datacenter: si eso ocurre, el provider
+    # lanza ProviderParsingError/ProviderConnectionError y el orquestador lo
+    # reporta como ProviderIssue — nunca cae a fixtures en silencio.
+    enable_coches_net: bool = True
+    """Si True, registra el provider REAL coches_net (scraping de coches.net)."""
+
+    # =========================================================================
     # Coches.net offline (fixtures JSON)
     # =========================================================================
     # Si True, registra provider coches_net_fixture en ProviderRegistry.
     # Además, cuando el perfil de costes destino es SPAIN/ES, se auto-registra
-    # sin necesidad de activar este flag.
+    # sin necesidad de activar este flag SALVO que el provider real esté
+    # activo (enable_coches_net), en cuyo caso el real tiene prioridad.
     enable_coches_net_fixture: bool = False
     """Si True, registra provider coches_net_fixture (comparables ES offline)."""
 

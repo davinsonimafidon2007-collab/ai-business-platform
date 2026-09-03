@@ -136,6 +136,28 @@ class VehicleProvider(ABC):
         """Nombre único del provider (ej: 'mobile_de', 'autoscout24')."""
         ...
 
+    @property
+    def default_currency(self) -> str:
+        """Moneda de los precios de este provider (TASK 4 / AUD-031).
+
+        Todos los mercados soportados hoy (DE/ES) cotizan en EUR. Antes solo
+        AutoScout24 etiquetaba la moneda explícitamente, así que el resto de
+        providers producían precios sin moneda que el motor económico
+        asumía EUR sin comprobarlo. Un provider de otro mercado debe
+        sobreescribir esta property.
+        """
+        return "EUR"
+
+    @property
+    def is_simulated(self) -> bool:
+        """True si los resultados NO provienen de la web real (fixtures).
+
+        Mismo patrón que ``VisionProvider.simulated``: permite distinguir
+        datos reales de datos de desarrollo antes de tomar decisiones de
+        compra con ellos. Los providers de fixtures lo sobreescriben a True.
+        """
+        return False
+
     # --------------------------------------------------------------
     # Métodos abstractos de búsqueda de nodos
     # --------------------------------------------------------------
@@ -311,6 +333,9 @@ class VehicleProvider(ABC):
             location=location,
             images=images,
             price=price,
+            # AUD-031: etiquetar siempre la moneda; sin esto el motor
+            # económico asumía EUR sin comprobarlo.
+            currency=self.default_currency if price is not None else None,
         )
 
     # --------------------------------------------------------------
@@ -370,6 +395,7 @@ class VehicleProvider(ABC):
             images=images,
             description=description,
             price=price,
+            currency=self.default_currency if price is not None else None,
         )
 
     # --------------------------------------------------------------
@@ -534,13 +560,46 @@ class VehicleProvider(ABC):
                 if price is not None:
                     return price
 
-        # Estrategia 3: buscar texto con € o EUR en todo el HTML
-        text = soup.get_text()
+        # Estrategia 3: escanear texto libre. Acotado al contenido principal
+        # cuando `soup` es una página completa (AUD-030): sin esto, el primer
+        # importe de la página podía venir de un widget de "anuncios
+        # similares" o de una oferta de financiación y acababa como precio
+        # del vehículo sin lanzar ningún error.
+        text = self._main_content_scope(soup).get_text()
         price = self._parse_price_text(text)
         if price is not None:
             return price
 
         return None
+
+    @staticmethod
+    def _main_content_scope(soup: Any) -> Any:
+        """Acota un documento completo a su contenido principal (AUD-030).
+
+        Si ``soup`` ya es un nodo de anuncio (el caso de los listados), se
+        devuelve tal cual: no hay nada que acotar. Solo cuando parece una
+        página entera (tiene ``<body>``) se intenta reducir el ámbito a un
+        contenedor principal, y si no se encuentra ninguno se mantiene el
+        documento completo (comportamiento anterior).
+        """
+        find = getattr(soup, "find", None)
+        select_one = getattr(soup, "select_one", None)
+        if find is None or select_one is None:
+            return soup
+        if find("body") is None:
+            return soup
+        for selector in (
+            "main",
+            "[role='main']",
+            "#main",
+            "#content",
+            ".vehicle-detail",
+            "article",
+        ):
+            scoped = select_one(selector)
+            if scoped is not None:
+                return scoped
+        return soup
 
     def _parse_price_text(self, text: str) -> float | None:
         """Parsea precio DE/EU. Rechaza valores absurdos para coches."""
@@ -574,8 +633,13 @@ class VehicleProvider(ABC):
         return value
 
     def _extract_mileage(self, soup: Any) -> int | None:
-        """Extrae el kilometraje del vehículo."""
-        text = soup.get_text()
+        """Extrae el kilometraje del vehículo.
+
+        Igual que el precio (AUD-030): el escaneo de texto se acota al
+        contenido principal cuando ``soup`` es una página completa, para no
+        capturar los km de un anuncio relacionado.
+        """
+        text = self._main_content_scope(soup).get_text()
         # Patrón: "123.456 km" o "123.456 Km" o "123456 km"
         match = re.search(r"(?<!\d)(\d{1,3}(?:\.\d{3})*|\d{4,})\s*km", text, re.IGNORECASE)
         if match:
