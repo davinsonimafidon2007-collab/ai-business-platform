@@ -12,6 +12,7 @@ en ``InspectionService.upload_photo``:
 
 from __future__ import annotations
 
+import os
 import re
 from pathlib import Path
 
@@ -58,10 +59,20 @@ def validate_photo_file_path(file_path: str, upload_dir: str | Path) -> str:
         except UnsafeURLError as exc:
             raise UnsafePhotoPathError(str(exc)) from exc
 
+    # Rutas de Windows (C:\...) y UNC (\\servidor\share) son absolutas en
+    # Windows (pathlib.WindowsPath.is_absolute() ya las bloquea más abajo si
+    # escapan de upload_dir) pero pathlib.PosixPath NO las reconoce como
+    # is_absolute() en Linux (el runner de CI) — ahí se tratarían como
+    # relativas y se "colarían" dentro de upload_dir sin lanzar el error.
+    if os.name != "nt" and (_WINDOWS_DRIVE_RE.match(file_path) or file_path.startswith("\\\\")):
+        raise UnsafePhotoPathError(
+            f"file_path escapa del directorio de uploads: {file_path!r}"
+        )
+
     base = Path(upload_dir).resolve()
     candidate = Path(file_path)
-    # Las rutas absolutas (/etc/passwd, C:\Windows\win.ini, UNC) nunca están
-    # dentro de upload_dir; las relativas se resuelven contra él.
+    # Las rutas absolutas (/etc/passwd, UNC) nunca están dentro de
+    # upload_dir; las relativas se resuelven contra él.
     resolved = candidate.resolve() if candidate.is_absolute() else (base / candidate).resolve()
     try:
         resolved.relative_to(base)
