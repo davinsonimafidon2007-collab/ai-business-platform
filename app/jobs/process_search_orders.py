@@ -15,6 +15,7 @@ from typing import Any
 from app.core.config import settings
 from app.core.logging import get_logger
 from app.jobs.base import Job, JobContext, JobResult
+from app.providers.registry import ProviderRegistry
 from app.repositories.search_order_repository import SearchOrderRepository
 from app.services.metrics_service import record_search_order_duration
 from app.services.search_persistence import SearchPersistenceService

@@ -4,8 +4,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
-from sqlalchemy import DateTime, Enum, ForeignKey, String, Text
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import DateTime, Enum, ForeignKey, String, Text, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
@@ -27,12 +26,12 @@ class OpportunityPhase(Base):
     __tablename__ = "opportunity_phases"
 
     id: Mapped[str] = mapped_column(
-        String(36),
+        Uuid(as_uuid=False),
         primary_key=True,
         default=lambda: str(uuid4()),
     )
     opportunity_id: Mapped[str] = mapped_column(
-        String(36),
+        Uuid(as_uuid=False),
         ForeignKey("opportunities.id", ondelete="CASCADE"),
         nullable=False,
     )
