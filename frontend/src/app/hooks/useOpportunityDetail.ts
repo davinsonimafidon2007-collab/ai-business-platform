@@ -3,58 +3,69 @@ import { apiGet, apiPatch, apiPost } from "@/app/services/api";
 import { toastLoading, updateToast, dismissToast } from "@/app/store/toast";
 import { handleApiError } from "./useApiError";
 
+/**
+ * Contrato real de GET /opportunities/{id} (OpportunityReadDetail en el
+ * backend). TASK 4/6 (AUD-014): antes este hook declaraba campos que el
+ * backend nunca ha devuelto (title, brand, market_price, margin,
+ * current_phase, agent_result, files, activity_log), por lo que la página
+ * de detalle renderizaba `undefined` en casi todo. Ahora los tipos
+ * reflejan exactamente lo que la API sirve.
+ */
+
+export type PhaseStatus =
+  | "completed"
+  | "pending_approval"
+  | "pending"
+  | "aborted"
+  | "in_progress";
+
 export interface Phase {
   id: string;
-  number: number;
+  opportunity_id: string;
   title: string;
-  agent: string;
-  agent_id: string;
-  status: "completed" | "pending_approval" | "pending" | "aborted" | "in_progress";
-  time?: string;
-  started_at?: string;
-  completed_at?: string;
+  description?: string | null;
+  status: PhaseStatus;
+  agent?: string | null;
+  /** Orden dentro del workflow (el backend lo llama `order`, no `number`). */
+  order: number;
+  started_at?: string | null;
+  completed_at?: string | null;
+  feedback?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
 }
 
-export interface AgentResult {
-  confidence: "Alta" | "Media" | "Baja";
-  suggestion: string;
-  explanation: string;
-  key_data: { label: string; value: string }[];
-}
-
-export interface GeneratedFile {
+export interface OpportunityVehicleSummary {
   id: string;
-  name: string;
-  type: "pdf" | "xlsx" | "csv" | "doc";
-  size: string;
-  url: string;
-  created_at: string;
-}
-
-export interface ActivityItem {
-  id: string;
-  type: "completed" | "file" | "search" | "user" | "car" | "alert" | "agent" | "workflow";
-  title: string;
-  description: string;
-  created_at: string;
-  metadata?: string;
+  brand?: string | null;
+  model?: string | null;
+  year?: number | null;
+  mileage?: number | null;
+  price?: number | null;
+  source?: string | null;
+  external_id?: string | null;
+  url?: string | null;
 }
 
 export interface OpportunityDetail {
   id: string;
-  title: string;
-  brand: string;
-  model: string;
-  year: number;
-  status: "active" | "pending" | "completed" | "aborted";
-  price: number;
-  market_price: number;
-  margin: number;
+  vehicle?: OpportunityVehicleSummary | null;
+  score?: number | null;
+  estimated_profit?: number | null;
+  roi_percentage?: number | null;
+  recommendation?: string | null;
+  recommendation_label_es?: string | null;
+  recommendation_label?: string | null;
+  risk_level?: string | null;
+  risk_label_es?: string | null;
+  risk_label?: string | null;
+  /** Confianza 0-100 de los datos (TASK 2). */
+  confidence?: number | null;
+  /** OPEN | CONVERTED (TASK 3). */
+  status?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
   phases: Phase[];
-  current_phase: number;
-  agent_result?: AgentResult;
-  files: GeneratedFile[];
-  activity_log: ActivityItem[];
 }
 
 export function useOpportunityDetail(id: string) {

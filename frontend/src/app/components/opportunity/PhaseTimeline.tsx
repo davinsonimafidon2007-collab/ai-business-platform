@@ -4,21 +4,29 @@ import { cn } from "@/app/utils/cn";
 import { Check, Clock, AlertCircle, Loader2 } from "lucide-react";
 import { useApprovePhase } from "@/app/hooks/useOpportunityDetail";
 
-export type PhaseStatus = "completed" | "pending_approval" | "pending" | "aborted" | "in_progress";
+import type { Phase, PhaseStatus } from "@/app/hooks/useOpportunityDetail";
 
-interface Phase {
-  id: string;
-  number: number;
-  title: string;
-  agent: string;
-  status: PhaseStatus;
-  time?: string;
-}
+export type { PhaseStatus };
 
 interface PhaseTimelineProps {
   phases: Phase[];
   opportunityId: string;
   onPhaseAction?: () => void;
+}
+
+/** Fecha legible de la fase: completada > iniciada > nada. */
+function phaseTimestamp(phase: Phase): string | null {
+  const raw = phase.completed_at ?? phase.started_at;
+  if (!raw) return null;
+  const date = new Date(raw);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleString("es-ES", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 const statusConfig: Record<PhaseStatus, { icon: typeof Check; color: string; bg: string; label: string }> = {
@@ -61,7 +69,7 @@ export function PhaseTimeline({ phases, opportunityId, onPhaseAction }: PhaseTim
                     : "bg-[#16161f] border-[#2a2a3d] text-secondary-500"
                 )}
               >
-                {phase.status === "completed" ? <Check className="w-4 h-4" /> : phase.number}
+                {phase.status === "completed" ? <Check className="w-4 h-4" /> : phase.order + 1}
               </div>
               {!isLast && (
                 <div
@@ -100,10 +108,22 @@ export function PhaseTimeline({ phases, opportunityId, onPhaseAction }: PhaseTim
                   {config.label}
                 </span>
               </div>
-              <p className="text-xs text-secondary-500">
-                Agente: <span className="text-secondary-300">{phase.agent}</span>
-              </p>
-              {phase.time && <p className="text-[11px] text-secondary-600 mt-0.5">{phase.time}</p>}
+              {phase.agent && (
+                <p className="text-xs text-secondary-500">
+                  Agente: <span className="text-secondary-300">{phase.agent}</span>
+                </p>
+              )}
+              {phase.description && (
+                <p className="text-xs text-secondary-500 mt-0.5">{phase.description}</p>
+              )}
+              {phaseTimestamp(phase) && (
+                <p className="text-[11px] text-secondary-600 mt-0.5">{phaseTimestamp(phase)}</p>
+              )}
+              {phase.feedback && (
+                <p className="text-[11px] text-yellow-400/80 mt-1">
+                  Feedback: {phase.feedback}
+                </p>
+              )}
 
               {/* Action buttons for pending_approval */}
               {isActionable && (

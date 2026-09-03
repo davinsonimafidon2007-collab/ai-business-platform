@@ -396,32 +396,13 @@ async def get_opportunity_detail(
     phase_service = OpportunityPhaseService(session)
     phases = await phase_service.ensure_seeded(opportunity)
 
-    vehicle_summary = None
-    if opportunity.vehicle is not None:
-        vehicle_summary = OpportunityVehicleSummary(
-            id=opportunity.vehicle.id,
-            brand=opportunity.vehicle.brand,
-            model=opportunity.vehicle.model,
-            year=opportunity.vehicle.year,
-            mileage=opportunity.vehicle.mileage,
-            price=opportunity.vehicle.price,
-            source=opportunity.vehicle.source,
-            external_id=opportunity.vehicle.external_id,
-            url=opportunity.vehicle.url,
-        )
-
+    # Se reutiliza el mismo mapper que el listado para que detalle y listado
+    # no diverjan (antes el detalle omitía confidence y status).
+    base = _to_opportunity_read(opportunity)
     return OpportunityReadDetail(
-        id=opportunity.id,
-        vehicle=vehicle_summary,
-        score=opportunity.opportunity_score,
-        estimated_profit=opportunity.profit,
-        roi_percentage=opportunity.roi,
-        recommendation=opportunity.recommendation,
-        risk_level=opportunity.risk,
-        recommendation_label_es=recommendation_label_es(opportunity.recommendation),
-        risk_label_es=risk_label_es(opportunity.risk),
-        created_at=opportunity.created_at,
-        updated_at=opportunity.analyzed_at,
+        # recommendation_label/risk_label son computed_field: no se pueden
+        # pasar al constructor, se recalculan solas.
+        **base.model_dump(exclude={"recommendation_label", "risk_label"}),
         phases=[OpportunityPhaseService.to_read(p) for p in phases],
     )
 

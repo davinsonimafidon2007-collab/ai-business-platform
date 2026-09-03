@@ -75,6 +75,7 @@ class SearchEngineService:
         provider_registry: type[ProviderRegistry] = ProviderRegistry,
         import_cost_profile: str | None = None,
         autoscout24_es_provider: AutoScout24EsProvider | None = None,
+        inspection_service: object | None = None,
     ) -> None:
         """Inicializa el SearchEngineService con todas las dependencias.
 
@@ -90,6 +91,9 @@ class SearchEngineService:
             orchestrator: Orquestador de búsqueda (opcional, se crea uno por defecto).
             provider_registry: Registro de providers (clase, no instancia).
             autoscout24_es_provider: Provider de AutoScout24 España (opcional).
+            inspection_service: InspectionService opcional (TASK 4/6 / AUD-012);
+                conecta los defectos reales de inspección con la negociación
+                automática del pipeline de búsqueda.
         """
         self._vehicle_service = vehicle_service
         self._mobile_de_provider = mobile_de_provider
@@ -101,6 +105,7 @@ class SearchEngineService:
         self._opportunity_finder = opportunity_finder
         self._negotiation_engine = negotiation_engine
         self._provider_registry = provider_registry
+        self._inspection_service = inspection_service
         self._import_cost_profile = (
             import_cost_profile
             or getattr(settings, "default_import_cost_profile", None)
@@ -123,6 +128,7 @@ class SearchEngineService:
                 negotiation_engine=self._negotiation_engine,
                 provider_registry=self._provider_registry,
                 import_cost_profile=self._import_cost_profile,
+                inspection_service=self._inspection_service,
             )
 
     # ------------------------------------------------------------------
