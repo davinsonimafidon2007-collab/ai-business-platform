@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { cn } from "@/app/utils/cn";
-import { useOpportunityDetail, useApprovePhase } from "@/app/hooks/useOpportunityDetail";
+import { useOpportunityDetail, useApprovePhase, type Phase } from "@/app/hooks/useOpportunityDetail";
 import { PhaseTimeline } from "@/app/components/opportunity/PhaseTimeline";
 import { ApprovalActions } from "@/app/components/opportunity/ApprovalActions";
 import { HumanSupervision } from "@/app/components/opportunity/HumanSupervision";
@@ -59,8 +59,8 @@ export function OpportunityDetailClient() {
     activity_log: raw.activity_log ?? [],
   } : null;
 
-  const phases = opportunity?.phases ?? [];
-  const currentPhase = phases.find((p) => p.status === "pending_approval");
+  const phases: Phase[] = opportunity?.phases ?? [];
+  const currentPhase = phases.find((p: Phase) => p.status === "pending_approval");
   const currentPhaseId = currentPhase?.id;
 
   const handleApprove = async () => {
