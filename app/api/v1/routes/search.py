@@ -8,6 +8,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter, Depends, status
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.dependencies import get_search_engine_service
 from app.api.v1.schemas.common import (
@@ -29,6 +30,7 @@ from app.api.v1.schemas.search import (
     SearchResultItem,
     SearchSummarySchema,
 )
+from app.database import get_db_session
 from app.dependencies.auth import require_search
 from app.models.user import User
 from app.services.cost_breakdown_labels import build_cost_lines
@@ -37,7 +39,6 @@ from app.services.profit_coherence import build_coherence_warnings
 from app.services.provider_issue_labels import build_provider_issue_payloads
 from app.services.recommendation_labels import recommendation_label_es, risk_label_es
 from app.services.search_engine import SearchEngineService
-from app.models.user import User
 
 router = APIRouter(tags=["Search"])
 
@@ -317,6 +318,7 @@ async def search_vehicles(
     request: SearchAPIRequest,
     search_engine: SearchEngineService = Depends(get_search_engine_service),
     current_user: User = Depends(require_search),
+    session: AsyncSession = Depends(get_db_session),
 ) -> SearchAPIResponse:
     """Ejecuta una búsqueda completa de vehículos.
 

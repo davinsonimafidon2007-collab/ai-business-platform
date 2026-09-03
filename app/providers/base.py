@@ -10,10 +10,15 @@ from urllib.parse import urljoin
 import httpx
 from bs4 import BeautifulSoup
 
-from app.providers.dto import VehicleDetail, VehicleSearchResult
-from app.providers.exceptions import ProviderConnectionError, ProviderParsingError, ProviderTimeoutError, ProviderUnavailableError
-from app.providers.http_client import ProviderHttpClient
 from app.providers.circuit_breaker import circuit_breaker
+from app.providers.dto import VehicleDetail, VehicleSearchResult
+from app.providers.exceptions import (
+    ProviderConnectionError,
+    ProviderParsingError,
+    ProviderTimeoutError,
+    ProviderUnavailableError,
+)
+from app.providers.http_client import ProviderHttpClient
 
 logger = logging.getLogger(__name__)
 

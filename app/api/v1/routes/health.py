@@ -144,22 +144,19 @@ async def get_health(response: Response) -> HealthResponse:
     },
 )
 async def get_health_ready() -> ReadyResponse:
-    db_ok = False
-    redis_ok = False
+    """Readiness: DB y Redis realmente configurados en esta instancia.
 
-    try:
-        with socket.create_connection(("db", 5432), timeout=1):
-            pass
-        db_ok = True
-    except Exception:
-        db_ok = False
-
-    try:
-        with socket.create_connection(("redis", 6379), timeout=1):
-            pass
-        redis_ok = True
-    except Exception:
-        redis_ok = False
+    TASK 7: antes usaba `socket` sin importarlo (NameError garantizado en
+    cada llamada — sin tests que lo ejercitaran) y además abría un socket
+    en crudo a hostnames hardcodeados ("db", "redis"), que solo resuelven
+    dentro de la red de docker-compose; en cualquier otro despliegue el
+    check habría fallado siempre aunque `socket` estuviera importado.
+    Reutiliza los mismos checks reales que ``/health`` (DB vía el engine
+    configurado, Redis vía el cliente compartido).
+    """
+    db_ok = await _check_database()
+    redis_state = await _check_redis()
+    redis_ok = redis_state == "ok"
 
     ready = db_ok and redis_ok
     status_value = "ok" if ready else "degraded"
