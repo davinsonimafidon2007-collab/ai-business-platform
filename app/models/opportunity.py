@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from enum import Enum
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
@@ -12,6 +13,19 @@ from app.models.base import Base
 if TYPE_CHECKING:
     from app.models.deal import Deal
     from app.models.vehicle import Vehicle
+
+
+class OpportunityStatus(str, Enum):
+    """Estado del ciclo de vida de la oportunidad en sí (TASK 3 / AUD-010).
+
+    Distinto de ``recommendation`` (BUY_NOW/WATCH/NEGOTIATE/REJECT, la señal
+    económica) y de un ``Deal.status`` (el pipeline de negociación/compra):
+    ``status`` solo dice si la oportunidad sigue "abierta" para actuar sobre
+    ella o si ya se convirtió en un deal.
+    """
+
+    OPEN = "OPEN"
+    CONVERTED = "CONVERTED"
 
 
 class Opportunity(Base):
@@ -72,6 +86,11 @@ class Opportunity(Base):
     )
     """Versión del motor de análisis que generó esta oportunidad (opcional)."""
 
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default=OpportunityStatus.OPEN.value
+    )
+    """Estado del ciclo de vida (OPEN/CONVERTED). Ver OpportunityStatus."""
+
     vehicle: Mapped[Vehicle] = relationship("Vehicle", back_populates="opportunities")
     deals: Mapped[list[Deal]] = relationship(
         "Deal",
@@ -90,4 +109,6 @@ class Opportunity(Base):
             self.id = str(uuid4())
         if getattr(self, "created_at", None) is None:
             self.created_at = datetime.now(UTC)
+        if getattr(self, "status", None) is None:
+            self.status = OpportunityStatus.OPEN.value
 

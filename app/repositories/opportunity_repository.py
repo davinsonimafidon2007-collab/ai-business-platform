@@ -171,10 +171,13 @@ class OpportunityRepository:
         if status is not None:
             base_query = base_query.where(Opportunity.status == status)
 
-        # Count query
-        count_query = select(func.count(Opportunity.id)).select_from(
-            base_query.subquery()
-        )
+        # Count query. func.count() sin columna (no func.count(Opportunity.id)):
+        # referenciar la columna de la entidad ORM hace que SQLAlchemy añada
+        # un FROM implícito adicional a "opportunities", que junto al
+        # select_from(subquery) produce un producto cartesiano (bug
+        # encontrado en TASK 3: el total devuelto se elevaba al cuadrado en
+        # vez de contar filas reales en cuanto había más de 1 resultado).
+        count_query = select(func.count()).select_from(base_query.subquery())
         total_result = await self.session.execute(count_query)
         total = total_result.scalar() or 0
 

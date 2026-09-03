@@ -54,7 +54,12 @@ class DealRepository:
         user_id: str | UUID,
         opportunity_id: str | UUID,
     ) -> Deal | None:
-        """Returns an active deal (NEW|CONTACTED|OFFER) for an opportunity.
+        """Returns an active (non-terminal) deal for an opportunity.
+
+        "Active" is any status before SOLD/LOST/DROPPED (TASK 3): a deal
+        that already reached WON/BOUGHT/IN_TRANSIT/REGISTERED still blocks
+        a duplicate deal for the same opportunity, not just NEW/CONTACTED/
+        OFFER as before the fulfillment stages existed.
 
         Args:
             user_id: The owner of the deal.
@@ -67,6 +72,10 @@ class DealRepository:
             DealStatus.NEW.value,
             DealStatus.CONTACTED.value,
             DealStatus.OFFER.value,
+            DealStatus.WON.value,
+            DealStatus.BOUGHT.value,
+            DealStatus.IN_TRANSIT.value,
+            DealStatus.REGISTERED.value,
         ]
         result = await self.session.execute(
             select(Deal).where(
@@ -112,7 +121,10 @@ class DealRepository:
             )
             base_query = base_query.where(Deal.status == status_value)
 
-        count_query = select(func.count(Deal.id)).select_from(base_query.subquery())
+        # func.count() sin columna: ver comentario equivalente en
+        # OpportunityRepository.list_filtered (mismo bug de producto
+        # cartesiano al contar sobre un subquery, encontrado en TASK 3).
+        count_query = select(func.count()).select_from(base_query.subquery())
         total_result = await self.session.execute(count_query)
         total = total_result.scalar() or 0
 

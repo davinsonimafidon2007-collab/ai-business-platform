@@ -14,12 +14,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database.manager import DatabaseManager
 from app.models.base import Base
 from app.models.cached_market import CachedMarketData  # noqa: F401
+from app.models.deal import Deal  # noqa: F401
 from app.models.opportunity import Opportunity  # noqa: F401
+from app.models.opportunity_phase import OpportunityPhase  # noqa: F401
 from app.models.search_history import SearchHistory  # noqa: F401
 from app.models.vehicle import Vehicle  # noqa: F401
+from app.models.vehicle_evaluation import VehicleEvaluation  # noqa: F401
 from app.repositories.cached_market_repository import CachedMarketRepository
+from app.repositories.deal_repository import DealRepository
 from app.repositories.opportunity_repository import OpportunityRepository
 from app.repositories.search_history_repository import SearchHistoryRepository
+from app.repositories.vehicle_evaluation_repository import VehicleEvaluationRepository
 
 
 @pytest_asyncio.fixture
@@ -72,6 +77,22 @@ async def cached_market_repo(
 ) -> CachedMarketRepository:
     """Provides a CachedMarketRepository with a clean session."""
     return CachedMarketRepository(session)
+
+
+@pytest_asyncio.fixture
+async def deal_repo(
+    session: AsyncSession,
+) -> DealRepository:
+    """Provides a DealRepository with a clean session."""
+    return DealRepository(session)
+
+
+@pytest_asyncio.fixture
+async def vehicle_evaluation_repo(
+    session: AsyncSession,
+) -> VehicleEvaluationRepository:
+    """Provides a VehicleEvaluationRepository with a clean session."""
+    return VehicleEvaluationRepository(session)
 
 
 @pytest_asyncio.fixture

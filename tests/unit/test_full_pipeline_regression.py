@@ -5,6 +5,8 @@ pueden instanciar y exponen la API que espera el resto del sistema. Es un
 smoke de cableado: detecta imports rotos o firmas cambiadas.
 """
 
+from unittest.mock import MagicMock
+
 import pytest
 
 from app.agents.alert_agent import AlertAgent
@@ -62,14 +64,22 @@ async def test_alert_agent_returns_alerts_when_rules_met():
 
 
 def test_integration_services_are_wired():
-    """Los services de integración se construyen sin dependencias obligatorias."""
-    opportunity_integration = OpportunityIntegrationService()
+    """Los services de integración se construyen y exponen su entrypoint.
+
+    TASK 3 (AUD-011): OpportunityIntegrationService ya no es una fachada de
+    "modo análisis" sin dependencias — opera sobre una Opportunity real
+    persistida, así que exige un repository y un deal_service reales
+    (mockeados aquí; el comportamiento real se cubre en
+    test_opportunity_integration_service.py).
+    """
+    opportunity_integration = OpportunityIntegrationService(
+        opportunity_repository=MagicMock(),
+        deal_service=MagicMock(),
+    )
     deal_integration = DealPipelineIntegrationService()
 
-    # Sin deal_service inyectado siguen siendo utilizables (modo análisis).
-    assert opportunity_integration.opportunity_finder is not None
     assert deal_integration.negotiation_engine is not None
-    assert callable(opportunity_integration.analyze_and_create_deal)
+    assert callable(opportunity_integration.convert_to_deal)
     assert callable(deal_integration.process_deal_pipeline)
 
 

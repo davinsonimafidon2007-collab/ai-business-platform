@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.v1.schemas.deal import DealRead
 from app.api.v1.schemas.opportunity import (
     OpportunityCreate,
     OpportunityListResponse,
@@ -25,8 +26,12 @@ from app.dependencies.auth import get_current_user
 from app.models.opportunity import Opportunity
 from app.models.user import User
 from app.models.vehicle import Vehicle
+from app.repositories.deal_repository import DealRepository
 from app.repositories.opportunity_repository import OpportunityRepository
+from app.repositories.vehicle_evaluation_repository import VehicleEvaluationRepository
 from app.schemas.pagination import CursorPage
+from app.services.deal_service import DealService
+from app.services.opportunity_integration_service import OpportunityIntegrationService
 from app.services.opportunity_phase_service import OpportunityPhaseService
 from app.services.recommendation_labels import recommendation_label_es, risk_label_es
 
@@ -118,6 +123,7 @@ def _to_opportunity_read(opp: Opportunity) -> OpportunityRead:
         recommendation=opp.recommendation,
         risk_level=opp.risk,
         confidence=opp.confidence,
+        status=opp.status,
         recommendation_label_es=recommendation_label_es(opp.recommendation),
         risk_label_es=risk_label_es(opp.risk),
         created_at=opp.created_at,
@@ -132,7 +138,11 @@ async def list_opportunities(
     ),
     min_score: float | None = Query(None, ge=0, description="Score mínimo (0-100)"),
     min_roi: float | None = Query(None, description="ROI mínimo (%)"),
-    status: str | None = Query(None, description="Filtro por estado de la oportunidad"),
+    opportunity_status: str | None = Query(
+        None,
+        alias="status",
+        description="Filtro por estado de la oportunidad (OPEN, CONVERTED)",
+    ),
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
     current_user: User = Depends(get_current_user),
@@ -142,7 +152,8 @@ async def list_opportunities(
 
     Devuelve oportunidades paginadas con score, profit, ROI, recomendación
     y resumen del vehículo asociado. Filtros opcionales por recomendación,
-    score mínimo y ROI mínimo.
+    score mínimo, ROI mínimo y estado (AUD-010: antes se aceptaba el filtro
+    pero nunca se aplicaba).
     """
     repo = OpportunityRepository(session)
     items, total = await repo.list_filtered(
@@ -150,6 +161,7 @@ async def list_opportunities(
         recommendation=recommendation,
         min_score=min_score,
         min_roi=min_roi,
+        status=opportunity_status,
         limit=limit,
         offset=offset,
     )
@@ -283,6 +295,46 @@ async def create_opportunity(
     )
     opportunity = await OpportunityRepository(session).save(opportunity)
     return _to_opportunity_read(opportunity)
+
+
+class OpportunityConvertToDealRequest(BaseModel):
+    """Cuerpo opcional para convertir una oportunidad en deal."""
+
+    notes: str | None = Field(
+        default=None, description="Notas iniciales para el deal creado"
+    )
+
+
+@router.post(
+    "/{opportunity_id}/convert-to-deal",
+    response_model=DealRead,
+    status_code=status.HTTP_201_CREATED,
+)
+async def convert_opportunity_to_deal(
+    opportunity_id: str,
+    payload: OpportunityConvertToDealRequest | None = None,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db_session),
+) -> DealRead:
+    """Convierte una oportunidad en un deal (TASK 3 / AUD-011).
+
+    Cierra el flujo listing -> opportunity -> deal: solo funciona sobre
+    oportunidades con recomendación BUY_NOW o NEGOTIATE (422 en otro caso),
+    y solo una vez por oportunidad (409 si ya se convirtió, o si ya hay un
+    deal activo para ella).
+    """
+    integration = OpportunityIntegrationService(
+        opportunity_repository=OpportunityRepository(session),
+        deal_service=DealService(
+            DealRepository(session), VehicleEvaluationRepository(session)
+        ),
+    )
+    deal = await integration.convert_to_deal(
+        opportunity_id=opportunity_id,
+        user_id=current_user.id,
+        notes=payload.notes if payload else None,
+    )
+    return DealRead.model_validate(deal)
 
 
 @router.patch("/{opportunity_id}", response_model=OpportunityRead)

@@ -48,11 +48,26 @@ class DealCreate(BaseModel):
 
 
 class DealUpdateStatus(BaseModel):
-    """Body de transición de estado de un deal."""
+    """Body de transición de estado de un deal.
+
+    Los campos de cumplimiento (TASK 3) solo se usan al transicionar al
+    estado correspondiente: ``actual_purchase_price`` en BOUGHT,
+    ``transport_carrier``/``transport_cost`` en IN_TRANSIT,
+    ``registration_plate``/``registration_cost`` en REGISTERED, y
+    ``sale_price`` (obligatorio)/``buyer_name``/``buyer_contact`` en SOLD.
+    """
 
     status: DealStatus
     notes: str | None = None
     offer_price: float | None = None
+    actual_purchase_price: float | None = None
+    transport_carrier: str | None = None
+    transport_cost: float | None = None
+    registration_plate: str | None = None
+    registration_cost: float | None = None
+    sale_price: float | None = None
+    buyer_name: str | None = None
+    buyer_contact: str | None = None
 
 
 class DealSimulationUpdate(BaseModel):
@@ -88,6 +103,27 @@ class DealRead(BaseModel):
     last_sim_roi: float | None = None
     last_sim_profile: str | None = None
     last_sim_at: datetime | None = None
+    # --- TASK 3: snapshot de negociación ---
+    negotiation_initial_offer: float | None = None
+    negotiation_max_price: float | None = None
+    negotiation_walk_away_price: float | None = None
+    negotiation_recommendation: str | None = None
+    negotiation_snapshot_at: datetime | None = None
+    # --- TASK 3: cumplimiento físico ---
+    actual_purchase_price: float | None = None
+    bought_at: datetime | None = None
+    transport_carrier: str | None = None
+    transport_cost: float | None = None
+    transport_started_at: datetime | None = None
+    transport_completed_at: datetime | None = None
+    registration_plate: str | None = None
+    registration_cost: float | None = None
+    registered_at: datetime | None = None
+    sale_price: float | None = None
+    buyer_name: str | None = None
+    buyer_contact: str | None = None
+    sold_at: datetime | None = None
+    actual_profit: float | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
 

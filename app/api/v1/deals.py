@@ -16,6 +16,7 @@ from app.database import get_db_session
 from app.dependencies.auth import get_current_user
 from app.models.user import User
 from app.repositories.deal_repository import DealRepository
+from app.repositories.vehicle_evaluation_repository import VehicleEvaluationRepository
 from app.repositories.vehicle_repository import VehicleRepository
 from app.services.deal_service import DealService
 
@@ -26,7 +27,9 @@ async def get_deal_service(
     session: AsyncSession = Depends(get_db_session),
 ) -> DealService:
     """Obtiene el servicio de deals con su repositorio."""
-    return DealService(DealRepository(session))
+    return DealService(
+        DealRepository(session), VehicleEvaluationRepository(session)
+    )
 
 
 @router.post("", response_model=DealRead, status_code=status.HTTP_201_CREATED)
@@ -109,13 +112,26 @@ async def update_deal_status(
     service: DealService = Depends(get_deal_service),
     current_user: User = Depends(get_current_user),
 ) -> DealRead:
-    """Transiciona un deal a un nuevo estado del pipeline."""
+    """Transiciona un deal a un nuevo estado del pipeline.
+
+    Los campos de cumplimiento (TASK 3) solo se aplican cuando ``status``
+    es la etapa correspondiente (BOUGHT/IN_TRANSIT/REGISTERED/SOLD); se
+    ignoran en cualquier otra transición.
+    """
     deal = await service.transition(
         deal_id=deal_id,
         user_id=current_user.id,
         new_status=payload.status,
         notes=payload.notes,
         offer_price=payload.offer_price,
+        actual_purchase_price=payload.actual_purchase_price,
+        transport_carrier=payload.transport_carrier,
+        transport_cost=payload.transport_cost,
+        registration_plate=payload.registration_plate,
+        registration_cost=payload.registration_cost,
+        sale_price=payload.sale_price,
+        buyer_name=payload.buyer_name,
+        buyer_contact=payload.buyer_contact,
     )
     return DealRead.model_validate(deal)
 

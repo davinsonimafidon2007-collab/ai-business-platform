@@ -39,6 +39,10 @@ class OpportunityRead(BaseModel):
             "Ver app/services/confidence.py."
         ),
     )
+    status: str | None = Field(
+        default=None,
+        description="Estado del ciclo de vida de la oportunidad: OPEN o CONVERTED (TASK 3).",
+    )
     recommendation_label_es: str = ""
     risk_label_es: str = ""
     created_at: datetime | None = None

@@ -1,11 +1,18 @@
-"""Servicio de gestión de deals (pipeline de ventas) — Task D.1.
+"""Servicio de gestión de deals (pipeline de ventas) — Task D.1, extendido TASK 3.
 
 Valida las transiciones de estado del pipeline:
 
     NEW       -> CONTACTED, DROPPED
     CONTACTED -> OFFER, LOST, DROPPED
     OFFER     -> WON, LOST, DROPPED
-    WON / LOST / DROPPED -> terminal (sin salida)
+    WON       -> BOUGHT, DROPPED
+    BOUGHT    -> IN_TRANSIT, DROPPED
+    IN_TRANSIT -> REGISTERED, DROPPED
+    REGISTERED -> SOLD, DROPPED
+    SOLD / LOST / DROPPED -> terminal (sin salida)
+
+LOST solo es alcanzable antes de WON (fallo de negociación); tras comprar
+el vehículo, un trato que no llega a buen fin es DROPPED.
 
 La propiedad de cada deal se restringe a su ``user_id``: cualquier intento
 de acceder o transicionar un deal ajeno se trata como 404 (no se filtra la
@@ -20,6 +27,7 @@ from fastapi import HTTPException, status
 
 from app.models.deal import Deal, DealStatus
 from app.repositories.deal_repository import DealRepository
+from app.repositories.vehicle_evaluation_repository import VehicleEvaluationRepository
 
 
 class DealService:
@@ -34,14 +42,23 @@ class DealService:
             DealStatus.DROPPED,
         },
         DealStatus.OFFER: {DealStatus.WON, DealStatus.LOST, DealStatus.DROPPED},
-        # Terminales: WON, LOST, DROPPED no tienen salida
-        DealStatus.WON: set(),
+        DealStatus.WON: {DealStatus.BOUGHT, DealStatus.DROPPED},
+        DealStatus.BOUGHT: {DealStatus.IN_TRANSIT, DealStatus.DROPPED},
+        DealStatus.IN_TRANSIT: {DealStatus.REGISTERED, DealStatus.DROPPED},
+        DealStatus.REGISTERED: {DealStatus.SOLD, DealStatus.DROPPED},
+        # Terminales: SOLD, LOST, DROPPED no tienen salida
+        DealStatus.SOLD: set(),
         DealStatus.LOST: set(),
         DealStatus.DROPPED: set(),
     }
 
-    def __init__(self, repository: DealRepository) -> None:
+    def __init__(
+        self,
+        repository: DealRepository,
+        evaluation_repository: VehicleEvaluationRepository | None = None,
+    ) -> None:
         self.repository = repository
+        self.evaluation_repository = evaluation_repository
 
     @staticmethod
     def _now() -> datetime:
@@ -112,6 +129,32 @@ class DealService:
             notes=notes,
             contact_channel=contact_channel,
         )
+
+        # TASK 3: snapshot del resultado de NegotiationEngine si ya existe
+        # una VehicleEvaluation con negociación calculada para este
+        # vehículo (se pierde en cuanto termina la sesión de búsqueda si
+        # no se copia aquí). Best-effort: nunca bloquea la creación del deal.
+        if vehicle_id and self.evaluation_repository is not None:
+            evaluation = await self.evaluation_repository.get_by_vehicle_id(vehicle_id)
+            negotiation = getattr(evaluation, "negotiation", None) if evaluation else None
+            if negotiation is not None:
+                deal.negotiation_initial_offer = getattr(
+                    negotiation, "recommended_initial_offer", None
+                )
+                deal.negotiation_max_price = getattr(
+                    negotiation, "maximum_purchase_price", None
+                )
+                deal.negotiation_walk_away_price = getattr(
+                    negotiation, "walk_away_price", None
+                )
+                recommendation = getattr(negotiation, "recommendation", None)
+                deal.negotiation_recommendation = (
+                    recommendation.value
+                    if hasattr(recommendation, "value")
+                    else recommendation
+                )
+                deal.negotiation_snapshot_at = self._now()
+
         return await self.repository.create(deal)
 
     async def list(
@@ -154,8 +197,27 @@ class DealService:
         new_status: DealStatus,
         notes: str | None = None,
         offer_price: float | None = None,
+        actual_purchase_price: float | None = None,
+        transport_carrier: str | None = None,
+        transport_cost: float | None = None,
+        registration_plate: str | None = None,
+        registration_cost: float | None = None,
+        sale_price: float | None = None,
+        buyer_name: str | None = None,
+        buyer_contact: str | None = None,
     ) -> Deal:
         """Transiciona un deal a un nuevo estado, validando la transición.
+
+        Cada estado de cumplimiento (TASK 3) acepta datos específicos de esa
+        etapa, capturados en el momento de la transición:
+
+        - BOUGHT: ``actual_purchase_price`` (si se omite, usa ``offer_price``).
+        - IN_TRANSIT: ``transport_carrier``, ``transport_cost`` (opcionales).
+        - REGISTERED: ``registration_plate``, ``registration_cost`` (opcionales).
+        - SOLD: ``sale_price`` (obligatorio), ``buyer_name``/``buyer_contact``
+          (opcionales). Al llegar a SOLD se calcula ``actual_profit`` real
+          (no una estimación) a partir de los costes efectivamente
+          registrados en el propio deal.
 
         Args:
             deal_id: Id del deal a transicionar.
@@ -169,7 +231,8 @@ class DealService:
 
         Raises:
             HTTPException 404: Si el deal no existe o no pertenece al usuario.
-            HTTPException 422: Si la transición no es válida.
+            HTTPException 422: Si la transición no es válida, o si falta un
+                dato obligatorio para la etapa destino (p.ej. sale_price en SOLD).
         """
         deal = await self.get(deal_id, user_id)
 
@@ -183,14 +246,75 @@ class DealService:
                 ),
             )
 
+        now = self._now()
         deal.status = new_status
         if notes is not None:
             deal.notes = notes
         if offer_price is not None:
             deal.offer_price = offer_price
-        deal.updated_at = self._now()
+
+        if new_status == DealStatus.BOUGHT:
+            deal.actual_purchase_price = (
+                actual_purchase_price
+                if actual_purchase_price is not None
+                else deal.offer_price
+            )
+            deal.bought_at = now
+
+        elif new_status == DealStatus.IN_TRANSIT:
+            if transport_carrier is not None:
+                deal.transport_carrier = transport_carrier
+            if transport_cost is not None:
+                deal.transport_cost = transport_cost
+            deal.transport_started_at = now
+
+        elif new_status == DealStatus.REGISTERED:
+            if registration_plate is not None:
+                deal.registration_plate = registration_plate
+            if registration_cost is not None:
+                deal.registration_cost = registration_cost
+            deal.transport_completed_at = deal.transport_completed_at or now
+            deal.registered_at = now
+
+        elif new_status == DealStatus.SOLD:
+            if sale_price is None or sale_price <= 0:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                    detail="sale_price is required (and must be positive) to mark a deal as SOLD",
+                )
+            deal.sale_price = sale_price
+            if buyer_name is not None:
+                deal.buyer_name = buyer_name
+            if buyer_contact is not None:
+                deal.buyer_contact = buyer_contact
+            deal.sold_at = now
+            deal.actual_profit = self._compute_actual_profit(deal)
+
+        deal.updated_at = now
 
         return await self.repository.update(deal)
+
+    @staticmethod
+    def _compute_actual_profit(deal: Deal) -> float | None:
+        """Beneficio REAL: sale_price - (compra + transporte + matriculación).
+
+        Distinto de ``last_sim_net_profit`` (una estimación previa a la
+        venta): este cálculo usa únicamente costes efectivamente registrados
+        en el propio deal durante su cumplimiento.
+        """
+        purchase = (
+            deal.actual_purchase_price
+            if deal.actual_purchase_price is not None
+            else deal.offer_price
+        )
+        if purchase is None or deal.sale_price is None:
+            return None
+        total_cost = (
+            float(purchase)
+            + float(deal.transport_cost or 0)
+            + float(deal.registration_cost or 0)
+        )
+        return round(float(deal.sale_price) - total_cost, 2)
 
     async def save_simulation(
         self,
