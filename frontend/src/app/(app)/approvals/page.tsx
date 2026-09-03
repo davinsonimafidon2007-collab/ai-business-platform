@@ -2,12 +2,13 @@
 
 import { useState, useMemo } from "react";
 import { useApprovals } from "@/app/hooks/useApprovals";
+import { useApprovePhase } from "@/app/hooks/useOpportunityDetail";
 import { ApprovalReviewCard } from "@/app/components/approvals/ApprovalReviewCard";
 import { ApprovalDetailDrawer } from "@/app/components/approvals/ApprovalDetailDrawer";
+import { timeAgoEs } from "@/app/features/home/ApprovalTaskCard";
 import { Skeleton } from "@/app/components/ui/Skeleton";
 import { ErrorDisplay } from "@/app/components/ui/ErrorDisplay";
 import { EmptyState } from "@/app/components/ui/EmptyState";
-import { SlidersHorizontal } from "lucide-react";
 
 const FILTERS = ["Todas", "Negociación", "Documentación", "Análisis", "Revisión"];
 
@@ -15,6 +16,7 @@ export default function ApprovalsPage() {
   const [activeFilter, setActiveFilter] = useState("Todas");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const { data, isLoading, isError, refetch } = useApprovals();
+  const approveMutation = useApprovePhase();
 
   const filtered = useMemo(() => {
     const approvalsData = data ?? [];
@@ -27,31 +29,39 @@ export default function ApprovalsPage() {
   const detailData = selectedApproval
     ? {
         title: selectedApproval.title,
-        subtitle: `${selectedApproval.description} · ${selectedApproval.status === "pending" ? "Pendiente de aprobación" : selectedApproval.status}`,
+        subtitle: `${selectedApproval.category} · ${selectedApproval.status === "pending" ? "Pendiente de aprobación" : selectedApproval.status}`,
         status: selectedApproval.status === "pending" ? "Pendiente de aprobación" : selectedApproval.status,
-        confidence: selectedApproval.priority === "ALTO" ? "Alta" : selectedApproval.priority === "MEDIO" ? "Media" : "Baja",
-        suggestion: "WAIT_FOR_APPROVAL",
-        explanation: `El agente ha completado el análisis para ${selectedApproval.title}. Revisa los archivos generados y toma una decisión.`,
-        files: [
-          { name: `analisis_${selectedApproval.id}.pdf`, type: "pdf" as const, size: "245 KB" },
-          { name: `comparativa_${selectedApproval.id}.xlsx`, type: "xlsx" as const, size: "32 KB" },
-        ],
+        explanation: selectedApproval.description || "Sin descripción disponible.",
       }
     : undefined;
 
+  const handleApprove = async () => {
+    if (!selectedApproval) return;
+    await approveMutation.mutateAsync({
+      opportunityId: selectedApproval.opportunity_id,
+      phaseId: selectedApproval.id,
+      action: "approve",
+    });
+    setSelectedId(null);
+  };
+
+  const handleReject = async () => {
+    if (!selectedApproval) return;
+    await approveMutation.mutateAsync({
+      opportunityId: selectedApproval.opportunity_id,
+      phaseId: selectedApproval.id,
+      action: "reject",
+    });
+    setSelectedId(null);
+  };
+
   return (
     <div className="max-w-3xl mx-auto space-y-5">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold text-white">Aprobaciones pendientes</h1>
-          <p className="text-sm text-secondary-500 mt-0.5">
-            {isLoading ? "Cargando..." : `${filtered.length} tareas requieren tu decisión`}
-          </p>
-        </div>
-        <button className="flex items-center gap-2 px-3 py-2 rounded-xl bg-[#16161f] border border-[#1e1e2d] text-secondary-300 hover:text-white text-xs font-medium transition-colors">
-          <SlidersHorizontal className="w-3.5 h-3.5" />
-          Filtrar
-        </button>
+      <div>
+        <h1 className="text-xl font-bold text-white">Aprobaciones pendientes</h1>
+        <p className="text-sm text-secondary-500 mt-0.5">
+          {isLoading ? "Cargando..." : `${filtered.length} tareas requieren tu decisión`}
+        </p>
       </div>
 
       <div className="flex gap-2 overflow-x-auto pb-1 -mx-4 px-4 lg:mx-0 lg:px-0 scrollbar-hide">
@@ -96,14 +106,14 @@ export default function ApprovalsPage() {
         />
       ) : (
         <div className="space-y-3">
-          {filtered.map((item: any, idx: number) => (
+          {filtered.map((item: any) => (
             <ApprovalReviewCard
               key={item.id}
               title={item.title}
               category={item.category}
               description={item.description}
               detail={item.detail}
-              time={item.created_at ? `Hace ${((idx * 7) % 50) + 5} min` : "Hace 15 min"}
+              time={timeAgoEs(item.created_at) ?? "—"}
               image={item.image}
               onReview={() => setSelectedId(item.id)}
             />
@@ -114,6 +124,9 @@ export default function ApprovalsPage() {
       <ApprovalDetailDrawer
         open={selectedId !== null}
         onClose={() => setSelectedId(null)}
+        onApprove={handleApprove}
+        onReject={handleReject}
+        isSubmitting={approveMutation.isPending}
         data={detailData}
       />
     </div>
