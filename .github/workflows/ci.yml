@@ -133,6 +133,7 @@ jobs:
           NEXT_PUBLIC_AUTH_DISABLED: "false"
           CI: "true"
 
-      # Lint pendiente de CI.LINT.1 (aún no verificado en limpio):
-      # - name: Lint
-      #   run: npm run lint
+      # TASK 8 (AUD-028): CI.LINT.1 verificado en limpio (exit 0, solo
+      # warnings) — el lint del frontend vuelve a bloquear el CI.
+      - name: Lint (ESLint)
+        run: npm run lint

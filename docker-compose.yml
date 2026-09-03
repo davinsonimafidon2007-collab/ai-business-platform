@@ -1,3 +1,14 @@
+# Stack de DESARROLLO local.
+#
+# TASK 8 (AUD-025): este fichero monta el código del host (`.:/app`) y publica
+# los puertos de Postgres/Redis para poder depurar. NO es apto para un host
+# expuesto a internet: para eso está `docker-compose.prod.yml`, que se aplica
+# encima y quita el bind-mount, cierra los puertos de datos y exige
+# credenciales reales:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# Las credenciales de Postgres son parametrizables (defaults solo de dev).
 services:
   api:
     build:
@@ -13,7 +24,7 @@ services:
       - uploads_data:/app/uploads/inspection_photos
     environment:
       PYTHONUNBUFFERED: "1"
-      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/ai_business_platform
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-ai_business_platform}
       REDIS_URL: redis://redis:6379/0
       JWT_SECRET_KEY: "${JWT_SECRET_KEY}"
       ENVIRONMENT: "${ENVIRONMENT:-development}"
@@ -69,15 +80,18 @@ services:
   db:
     image: postgres:16-alpine
     environment:
-      POSTGRES_DB: ai_business_platform
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: "${POSTGRES_DB:-ai_business_platform}"
+      POSTGRES_USER: "${POSTGRES_USER:-postgres}"
+      # Default solo para desarrollo local; en producción es obligatorio
+      # definirlo (ver docker-compose.prod.yml).
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-postgres}"
     ports:
-      - "5433:5432"
+      # Publicado solo en dev para poder conectar con un cliente SQL.
+      - "${POSTGRES_PORT:-5433}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d ai_business_platform"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-ai_business_platform}"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -126,7 +140,10 @@ services:
     container_name: abp_grafana
     environment:
       GF_SECURITY_ADMIN_USER: admin
-      GF_SECURITY_ADMIN_PASSWORD: "${GRAFANA_ADMIN_PASSWORD:-admin}"
+      # AUD-026: el default ya no es "admin". Este valor es explícitamente
+      # de desarrollo; en producción docker-compose.prod.yml lo hace
+      # obligatorio (compose falla si no está definido).
+      GF_SECURITY_ADMIN_PASSWORD: "${GRAFANA_ADMIN_PASSWORD:-devonly-change-me}"
       GF_AUTH_ANONYMOUS_ENABLED: "false"
     volumes:
       - grafana_data:/var/lib/grafana
@@ -162,7 +179,7 @@ services:
     profiles: ["obs"]
     container_name: abp_postgres_exporter
     environment:
-      DATA_SOURCE_NAME: "postgresql://postgres:postgres@db:5432/ai_business_platform?sslmode=disable"
+      DATA_SOURCE_NAME: "postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-ai_business_platform}?sslmode=disable"
     ports:
       - "9187:9187"
     restart: unless-stopped

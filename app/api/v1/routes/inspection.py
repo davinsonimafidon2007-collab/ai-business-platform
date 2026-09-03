@@ -237,6 +237,67 @@ async def get_summary(
 
 UPLOAD_DIR = Path(settings.upload_dir)
 
+# Firmas de fichero (magic bytes) de los formatos de imagen aceptados.
+# TASK 8 (AUD-024): el `content_type` y la extensión los controla el cliente;
+# lo único no falsificable es el contenido.
+_IMAGE_SIGNATURES: tuple[tuple[bytes, str], ...] = (
+    (b"\xff\xd8\xff", ".jpg"),          # JPEG
+    (b"\x89PNG\r\n\x1a\n", ".png"),     # PNG
+    (b"GIF87a", ".gif"),                # GIF
+    (b"GIF89a", ".gif"),                # GIF
+)
+_UPLOAD_CHUNK_SIZE = 64 * 1024
+
+
+def _detect_image_extension(content: bytes) -> str | None:
+    """Extensión segura deducida del contenido real, o None si no es imagen."""
+    for signature, extension in _IMAGE_SIGNATURES:
+        if content.startswith(signature):
+            return extension
+    # Formatos basados en contenedor RIFF/ISO-BMFF: la marca está desplazada.
+    if len(content) >= 12:
+        if content[:4] == b"RIFF" and content[8:12] == b"WEBP":
+            return ".webp"
+        if content[4:8] == b"ftyp" and content[8:12] in (
+            b"heic",
+            b"heix",
+            b"hevc",
+            b"mif1",
+        ):
+            return ".heic"
+    return None
+
+
+async def _read_upload_within_limit(file: UploadFile) -> bytes:
+    """Lee la subida en trozos, abortando si supera el tamaño máximo.
+
+    Devuelve el contenido completo si cabe en el límite; si no, lanza 413 sin
+    haber materializado el fichero entero en memoria.
+    """
+    max_bytes = max(1, int(settings.max_upload_size_mb)) * 1024 * 1024
+    chunks: list[bytes] = []
+    total = 0
+    while True:
+        chunk = await file.read(_UPLOAD_CHUNK_SIZE)
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > max_bytes:
+            raise HTTPException(
+                status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+                detail=(
+                    f"El fichero supera el máximo permitido de "
+                    f"{settings.max_upload_size_mb} MB."
+                ),
+            )
+        chunks.append(chunk)
+    if total == 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="El fichero está vacío.",
+        )
+    return b"".join(chunks)
+
 
 @router.post(
     "/{session_id}/photos/upload",
@@ -259,24 +320,40 @@ async def upload_photo_file(
     # Validate session exists and belongs to the current user
     await _get_owned_session(session_id, current_user, service)
 
-    # Validate file is an image
+    # Validate declared content type (barato, pero falsificable por el
+    # cliente: la comprobación real es la de magic bytes de más abajo).
     if file.content_type and not file.content_type.startswith("image/"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"File must be an image, got {file.content_type}",
         )
 
+    # TASK 8 (AUD-024): lectura en trozos con tope de tamaño. Antes se hacía
+    # `await file.read()` sin límite: un solo fichero grande podía agotar la
+    # memoria del proceso.
+    content = await _read_upload_within_limit(file)
+
+    # TASK 8 (AUD-024): validación real por magic bytes. El content_type y la
+    # extensión los elige el cliente; esto comprueba el contenido de verdad.
+    detected_ext = _detect_image_extension(content)
+    if detected_ext is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "El contenido del fichero no es una imagen reconocible "
+                "(se aceptan JPEG, PNG, WebP, GIF y HEIC)."
+            ),
+        )
+
     # Create upload directory
     session_dir = UPLOAD_DIR / session_id
     session_dir.mkdir(parents=True, exist_ok=True)
 
-    # Generate unique filename
-    ext = Path(file.filename or "photo.jpg").suffix or ".jpg"
-    unique_name = f"{uuid.uuid4()}{ext}"
+    # Nombre generado + extensión DETECTADA (no la que envía el cliente).
+    unique_name = f"{uuid.uuid4()}{detected_ext}"
     file_path = session_dir / unique_name
 
     # Save file
-    content = await file.read()
     file_path.write_bytes(content)
 
     # Register in database

@@ -482,6 +482,32 @@ class Settings(BaseSettings):
     upload_dir: str = "uploads/inspection_photos"
     """Directory where uploaded inspection photos are stored."""
 
+    enable_docs: bool | None = None
+    """Expone /docs, /redoc y /openapi.json. TASK 8 / AUD-023.
+
+    ``None`` (por defecto) = automático: habilitado salvo en
+    ``environment=production``. Antes la documentación interactiva y el
+    esquema OpenAPI completo quedaban públicos también en producción, sin
+    ninguna comprobación de entorno. Poner ``true`` fuerza exponerlos (p. ej.
+    una instancia interna) y ``false`` los cierra siempre.
+    """
+
+    @property
+    def docs_enabled(self) -> bool:
+        """Resuelve ``enable_docs`` (None = auto por entorno)."""
+        if self.enable_docs is None:
+            return self.environment != "production"
+        return bool(self.enable_docs)
+
+    max_upload_size_mb: int = 10
+    """Tamaño máximo por foto de inspección (MB). TASK 8 / AUD-024.
+
+    Antes no había ningún límite en servidor: la subida se leía entera en
+    memoria (``await file.read()``), así que un único fichero grande podía
+    agotar la RAM del proceso. La subida se corta en cuanto se supera este
+    límite, sin llegar a materializar el fichero completo.
+    """
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
