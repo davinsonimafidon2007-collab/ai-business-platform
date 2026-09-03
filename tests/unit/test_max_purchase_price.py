@@ -53,6 +53,31 @@ class TestBasicCalculation:
         # Redondeado hacia abajo (conservador): el margen real debe ser >= el mínimo.
         assert analysis.profit_margin_percentage >= 15.0 - 0.5
 
+    def test_forward_calculation_meets_minimum_margin_with_iedmt(
+        self, analyzer: ProfitAnalyzer
+    ) -> None:
+        """Verificación cruzada con IEDMT (vendedor particular, España, CO2
+        real): sin sumar IEDMT en el cálculo inverso, el precio máximo
+        resultante superaba el que realmente cumple min_margin/min_roi al
+        pasar por analyze() (que sí aplica IEDMT también a particulares:
+        es un impuesto de matriculación, no de la transacción)."""
+        sale_price = 30000.0
+        co2_gkm = 150.0  # por encima del umbral: IEDMT > 0
+        result = analyzer.calculate_max_purchase_price(
+            sale_price,
+            "SPAIN",
+            min_margin_percentage=15.0,
+            min_roi_percentage=10.0,
+            co2_gkm=co2_gkm,
+        )
+
+        class _V:
+            price = result.max_purchase_price
+            emissions = "150 g/km"
+
+        analysis = analyzer.analyze(_V(), profile_name="SPAIN", estimated_sale_price=sale_price)
+        assert analysis.profit_margin_percentage >= 15.0 - 0.5
+
     def test_binding_constraint_is_margin_or_roi(self, analyzer: ProfitAnalyzer) -> None:
         result = analyzer.calculate_max_purchase_price(30000.0, "SPAIN")
         assert result.binding_constraint in ("margin", "roi")

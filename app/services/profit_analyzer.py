@@ -860,6 +860,16 @@ class ProfitAnalyzer:
             tax_rate = Decimal(str(iedmt_rate(co2_gkm))) + Decimal(str(VAT_RATE_SPAIN))
         else:
             tax_rate = Decimal(str(profile.tax_rate))
+            # IEDMT también aplica a vendedores particulares en España (es un
+            # impuesto de matriculación del vehículo, no de la transacción):
+            # _compute_cost_breakdown ya lo suma en su rama no-dealer. Sin
+            # esto, este cálculo inverso devolvía un precio máximo más alto
+            # del que realmente cumple min_margin/min_roi una vez que
+            # analyze() aplica el IEDMT real.
+            if profile.applies_iedmt and co2_gkm:
+                from app.services.iedmt import iedmt_rate
+
+                tax_rate += Decimal(str(iedmt_rate(co2_gkm)))
 
         variable_rate = (
             tax_rate + Decimal(str(profile.commission_rate)) + Decimal(str(profile.repair_estimate_rate))
