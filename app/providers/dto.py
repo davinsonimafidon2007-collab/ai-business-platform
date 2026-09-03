@@ -37,6 +37,9 @@ class VehicleSearchResult:
     images: list[str] = field(default_factory=list)
     equipment: list[str] = field(default_factory=list)
     raw_data: dict[str, Any] = field(default_factory=dict)
+    available_in_sources: list[str] | None = None
+    """Solo tras dedup cross-source: todos los sources donde apareció el
+    mismo ``external_id`` (trazabilidad). None = aparece solo en su source."""
 
 
 @dataclass

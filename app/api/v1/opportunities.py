@@ -360,8 +360,7 @@ async def update_opportunity(
         if value is not None:
             setattr(opportunity, attr, value)
 
-    await session.commit()
-    await session.refresh(opportunity)
+    opportunity = await OpportunityRepository(session).update(opportunity)
     return _to_opportunity_read(opportunity)
 
 
@@ -447,8 +446,15 @@ async def create_opportunity_feedback(
 ) -> OpportunityRead:
     """Registra feedback/notas sobre una oportunidad propia.
 
-    Por simplicidad, almacena el feedback creando una fase de workflow
-    especial con el texto recibido, reutilizando la tabla existente.
+    Por simplicidad, adjunta el feedback a la fase actual del workflow (la
+    primera no completada, o la última si todas lo están) mediante la
+    acción ``request_changes``, reutilizando la tabla existente.
+
+    Bug corregido en la fusión con origin/main: la versión original llamaba
+    a ``apply_action(phase_id="feedback", ...)`` con el literal "feedback"
+    en vez de un id de fase real — como ``OpportunityPhase.id`` es un UUID,
+    esa búsqueda nunca podía encontrar nada y el endpoint devolvía 404 en
+    el 100% de las llamadas.
     """
     await _get_owned_opportunity(session, current_user.id, opportunity_id)
     opportunity = await OpportunityRepository(session).get(opportunity_id)
@@ -459,12 +465,19 @@ async def create_opportunity_feedback(
         )
 
     phase_service = OpportunityPhaseService(session)
-    await phase_service.ensure_seeded(opportunity)
-    # Crear una fase de feedback con el texto recibido.
+    phases = await phase_service.ensure_seeded(opportunity)
+    target_phase = next((p for p in phases if p.status != "completed"), None)
+    if target_phase is None and phases:
+        target_phase = phases[-1]
+    if target_phase is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Opportunity has no phases to attach feedback to",
+        )
     await phase_service.apply_action(
         opportunity=opportunity,
-        phase_id="feedback",
-        action="start",
+        phase_id=target_phase.id,
+        action="request_changes",
         feedback=payload.feedback,
     )
     # Devolver la oportunidad actualizada.

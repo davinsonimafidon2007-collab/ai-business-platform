@@ -14,6 +14,7 @@ class FeatureFlagRead(BaseModel):
     key: str
     value: bool
     description: str | None
+    created_at: datetime
     updated_at: datetime
 
 

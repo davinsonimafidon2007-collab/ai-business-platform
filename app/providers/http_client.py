@@ -30,6 +30,7 @@ from tenacity import (
 
 from app.core.config import settings
 from app.core.logging import get_logger
+from app.core.url_guard import UnsafeURLError, ensure_public_http_url
 from app.providers.exceptions import (
     ProviderConnectionError,
     ProviderMaxRetriesExceededError,
@@ -186,7 +187,6 @@ class ProviderHttpClient:
             if code == 429 or 500 <= code < 600:
                 return True
             return False
-        from app.providers.exceptions import ProviderRateLimitError
         if isinstance(exception, ProviderRateLimitError):
             return True
         return False
@@ -219,6 +219,22 @@ class ProviderHttpClient:
         **kwargs: Any,
     ) -> httpx.Response:
         full_url = url
+        # SEC.SSRF.1: cualquier URL absoluta con esquema pasa por el guard
+        # antes de tocar la red (bloquea file://, data:, IPs internas, ...).
+        # Las rutas relativas se resuelven contra base_url (de confianza).
+        if "://" in url:
+            try:
+                full_url = ensure_public_http_url(url)
+            except UnsafeURLError as exc:
+                logger.error(
+                    "provider_http_client: SSRF bloqueado en %s — %s",
+                    self.provider_name,
+                    exc,
+                )
+                raise ProviderConnectionError(
+                    f"URL bloqueada por el guard SSRF: {exc}",
+                    provider=self.provider_name,
+                ) from exc
         if self.base_url and not url.startswith("http"):
             full_url = urljoin(self.base_url.rstrip("/") + "/", url.lstrip("/"))
 
@@ -270,6 +286,17 @@ class ProviderHttpClient:
                             provider=self.provider_name,
                         )
 
+                    # Pre-check Content-Length si está presente (evitar streaming innecesario)
+                    if self.max_bytes > 0:
+                        clen = response.headers.get("content-length")
+                        if clen and clen.isdigit() and int(clen) > self.max_bytes:
+                            await response.aclose()
+                            raise ProviderResponseTooLargeError(
+                                f"Respuesta de {self.provider_name} Content-Length {clen} supera límite {self.max_bytes} (url={full_url})",
+                                provider=self.provider_name,
+                                max_bytes=self.max_bytes,
+                            )
+
                     response.raise_for_status()
 
                     # TASK-010: leer el cuerpo en streaming con un tope de bytes
@@ -287,18 +314,12 @@ class ProviderHttpClient:
         except ProviderConnectionError:
             raise
         except httpx.TimeoutException as e:
-            from app.providers.circuit_breaker import circuit_breaker
-
-            circuit_breaker.record_failure(self.provider_name)
             raise ProviderTimeoutError(
                 f"Timeout al conectar con {self.provider_name}",
                 provider=self.provider_name,
                 timeout=self.timeout,
             ) from e
         except httpx.NetworkError as e:
-            from app.providers.circuit_breaker import circuit_breaker
-
-            circuit_breaker.record_failure(self.provider_name)
             raise ProviderConnectionError(
                 f"Error de conexión con {self.provider_name}",
                 provider=self.provider_name,

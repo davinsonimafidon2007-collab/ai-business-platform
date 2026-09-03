@@ -121,31 +121,31 @@ describe("deals service", () => {
       const mockDeal = {
         id: "deal-1",
         user_id: "user-1",
-        status: "CONTACTED",
+        status: "ANALYZING",
       };
       vi.mocked(api.patch).mockResolvedValue({ data: mockDeal } as any);
 
-      const result = await updateDealStatus("deal-1", { status: "CONTACTED" });
+      const result = await updateDealStatus("deal-1", { status: "ANALYZING" });
 
       expect(api.patch).toHaveBeenCalledWith("/deals/deal-1/status", {
-        status: "CONTACTED",
+        status: "ANALYZING",
       });
       expect(result).toEqual(mockDeal);
     });
 
     it("patches with notes and offer_price", async () => {
       vi.mocked(api.patch).mockResolvedValue({
-        data: { id: "deal-1", status: "OFFER" },
+        data: { id: "deal-1", status: "NEGOTIATING" },
       } as any);
 
       await updateDealStatus("deal-1", {
-        status: "OFFER",
+        status: "NEGOTIATING",
         notes: "oferta enviada",
         offer_price: 15000,
       });
 
-expect(api.patch).toHaveBeenCalledWith("/deals/deal-1/status", {
-        status: "OFFER",
+      expect(api.patch).toHaveBeenCalledWith("/deals/deal-1/status", {
+        status: "NEGOTIATING",
         notes: "oferta enviada",
         offer_price: 15000,
       });

@@ -31,7 +31,9 @@ class VehicleEvaluationRepository:
         return result.scalar_one_or_none()
 
     async def list_all(self, skip: int = 0, limit: int = 100) -> list[VehicleEvaluation]:
-        result = await self.session.execute(select(VehicleEvaluation).offset(skip).limit(limit))
+        result = await self.session.execute(
+            select(VehicleEvaluation).order_by(VehicleEvaluation.created_at.desc(), VehicleEvaluation.id.desc()).offset(skip).limit(limit)
+        )
         return list(result.scalars().all())
 
     async def update(self, evaluation: VehicleEvaluation) -> VehicleEvaluation:

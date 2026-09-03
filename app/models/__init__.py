@@ -1,7 +1,7 @@
 from app.models.api_key import ApiKey
 from app.models.base import Base
 from app.models.cached_market import CachedMarketData
-from app.models.deal import Deal, DealStatus
+from app.models.deal import Deal, DealStatus, DealStatusHistory
 from app.models.feature_flag import FeatureFlag
 from app.models.inspection import (
     InspectionObservation,
@@ -19,6 +19,7 @@ from app.models.negotiation import (
     RepairEstimate,
 )
 from app.models.opportunity import Opportunity
+from app.models.opportunity_phase import OpportunityPhase
 from app.models.password_reset_token import PasswordResetToken
 from app.models.push_token import PushToken
 from app.models.refresh_token import RefreshToken
@@ -44,6 +45,7 @@ __all__ = [
     "CachedMarketData",
     "Deal",
     "DealStatus",
+    "DealStatusHistory",
     "DefectItem",
     "FeatureFlag",
     "InspectionObservation",
@@ -56,6 +58,7 @@ __all__ = [
     "NegotiationResult",
     "NegotiationScript",
     "Opportunity",
+    "OpportunityPhase",
     "PasswordResetToken",
     "PushToken",
     "RefreshToken",

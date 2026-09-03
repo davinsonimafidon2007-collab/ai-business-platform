@@ -1,50 +1,69 @@
-# Stack de DESARROLLO local.
+# =============================================================================
+# docker-compose.yml — stack BASE (seguro por defecto, válido para servidor).
 #
-# TASK 8 (AUD-025): este fichero monta el código del host (`.:/app`) y publica
-# los puertos de Postgres/Redis para poder depurar. NO es apto para un host
-# expuesto a internet: para eso está `docker-compose.prod.yml`, que se aplica
-# encima y quita el bind-mount, cierra los puertos de datos y exige
-# credenciales reales:
+# Sin overlays, la BD/Redis quedan en loopback (127.0.0.1) y sin bind-mount
+# del código: `docker compose up` por sí solo no expone nada al exterior.
 #
+# En desarrollo local se usa junto al overlay dev (bind-mount + hot-reload):
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+# (o COMPOSE_FILE=docker-compose.yml:docker-compose.dev.yml en .env)
+#
+# En producción, docker-compose.prod.yml (TASK 8 / AUD-025) endurece más:
+# credenciales obligatorias (sin defaults) y cierra los puertos de datos por
+# completo (ni siquiera en loopback):
 #   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 #
-# Las credenciales de Postgres son parametrizables (defaults solo de dev).
+# Observabilidad opcional:  docker compose --profile obs up -d
+# Logging centralizado:     docker compose -f docker-compose.logging.yml --profile logging up -d
+# =============================================================================
 services:
   api:
     build:
       context: .
       dockerfile: Dockerfile
     working_dir: /app
-    command: >
-      sh -c "for i in 1 2 3 4 5; do uv run --no-sync alembic upgrade head && break || echo 'Waiting for DB...' && sleep 3; done && uv run --no-sync uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    # Migraciones ANTES de arrancar uvicorn. Si tras N reintentos la BD no
+    # acepta migraciones, el contenedor MUERE (exit 1): nunca servir tráfico
+    # sobre un esquema sin migrar.
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        i=0; until alembic upgrade head; do
+          i=$$((i+1))
+          if [ "$$i" -ge 10 ]; then echo "ERROR: migraciones no aplicadas tras $$i reintentos"; exit 1; fi
+          echo "Esperando DB para migrar... (intento $$i)"; sleep 3
+        done
+        exec python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
     ports:
-      - "${API_PORT:-8001}:8000"
-    volumes:
-      - .:/app
-      - uploads_data:/app/uploads/inspection_photos
+      - "${API_HOST:-127.0.0.1}:${API_PORT:-8001}:8000"
     environment:
       PYTHONUNBUFFERED: "1"
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-ai_business_platform}
       REDIS_URL: redis://redis:6379/0
-      JWT_SECRET_KEY: "${JWT_SECRET_KEY}"
+      JWT_SECRET_KEY: "${JWT_SECRET_KEY:?JWT_SECRET_KEY es obligatorio (.env)}"
       ENVIRONMENT: "${ENVIRONMENT:-development}"
       APP_URL: "${APP_URL:-http://localhost:3001}"
       ENABLE_SCHEDULER: "${ENABLE_SCHEDULER:-true}"
       ENABLE_MOBILE_DE: "${ENABLE_MOBILE_DE:-false}"
       PROVIDER_HTTP_PROXY: "${PROVIDER_HTTP_PROXY:-}"
-      FIREBASE_CREDENTIALS_JSON: "${FIREBASE_CREDENTIALS_JSON}"
+      FIREBASE_CREDENTIALS_JSON: "${FIREBASE_CREDENTIALS_JSON:-}"
       # Uso personal (PERS.CLOSE.1): sin este passthrough el contenedor arranca
       # con AUTH_DISABLED vacío (=false) y la API responde 401 aunque el .env
       # del host diga true.
       AUTH_DISABLED: "${AUTH_DISABLED:-false}"
       ALLOW_AUTH_DISABLED_IN_PROD: "${ALLOW_AUTH_DISABLED_IN_PROD:-false}"
       APP_MODE: "${APP_MODE:-personal}"
+    volumes:
+      - uploads_data:/app/uploads/inspection_photos
     depends_on:
       db:
         condition: service_healthy
       redis:
         condition: service_healthy
     restart: unless-stopped
+    # El scheduler puede tener jobs en vuelo al recibir SIGTERM: darle tiempo.
+    stop_grace_period: 30s
     healthcheck:
       # TASK-004: liveness puro (proceso vivo) para que Docker no reinicie la
       # API mientras las dependencias (DB/Redis) aún arrancan.
@@ -53,13 +72,23 @@ services:
       timeout: 10s
       retries: 10
       start_period: 40s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        # NEXT_PUBLIC_* se inlinean en el bundle en BUILD time.
+        NEXT_PUBLIC_API_URL: "${NEXT_PUBLIC_API_URL:-http://localhost:8001}"
+        NEXT_PUBLIC_AUTH_DISABLED: "${NEXT_PUBLIC_AUTH_DISABLED:-false}"
+        NEXT_PUBLIC_APP_VERSION: "${NEXT_PUBLIC_APP_VERSION:-}"
     ports:
-      - "${FRONTEND_PORT:-3001}:3000"
+      - "${FRONTEND_HOST:-127.0.0.1}:${FRONTEND_PORT:-3001}:3000"
     environment:
       # GRAVE.004: el frontend se sirve desde el HOST (puerto 3001), así que
       # el navegador no puede resolver 'api'; apuntamos a localhost:8001.
@@ -71,11 +100,16 @@ services:
     restart: unless-stopped
     healthcheck:
       # Bloque 6: healthcheck del frontend (GET / en el puerto interno 3000).
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)}).on('error', () => process.exit(1))"]
+      test: ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:3000', (r) => {process.exit(r.statusCode < 500 ? 0 : 1)}).on('error', () => process.exit(1))"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   db:
     image: postgres:16-alpine
@@ -86,8 +120,9 @@ services:
       # definirlo (ver docker-compose.prod.yml).
       POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-postgres}"
     ports:
-      # Publicado solo en dev para poder conectar con un cliente SQL.
-      - "${POSTGRES_PORT:-5433}:5432"
+      # Bind a loopback por defecto: en un servidor con IP pública la BD no
+      # queda expuesta; override con DB_HOST=0.0.0.0 si se necesita externo.
+      - "${DB_HOST:-127.0.0.1}:${DB_PORT:-5433}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -96,11 +131,16 @@ services:
       timeout: 5s
       retries: 10
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   redis:
     image: redis:7-alpine
     ports:
-      - "${REDIS_PORT:-6380}:6379"
+      - "${REDIS_HOST:-127.0.0.1}:${REDIS_PORT:-6380}:6379"
     volumes:
       - redis_data:/data
     command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
@@ -110,6 +150,11 @@ services:
       timeout: 3s
       retries: 10
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   prometheus:
     # Bloque 6 / DEVOPS: observabilidad opcional. Solo se arranca con
@@ -124,7 +169,7 @@ services:
       - --config.file=/etc/prometheus/prometheus.yml
       - --storage.tsdb.retention.time=15d
     ports:
-      - "9090:9090"
+      - "${PROMETHEUS_HOST:-127.0.0.1}:9090:9090"
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O - http://localhost:9090/-/healthy || exit 1"]
@@ -151,7 +196,7 @@ services:
       - ./monitoring/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
       - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
     ports:
-      - "3002:3000"
+      - "${GRAFANA_HOST:-127.0.0.1}:3002:3000"
     restart: unless-stopped
     depends_on:
       - prometheus
@@ -169,7 +214,7 @@ services:
     command:
       - --path.rootfs=/host
     ports:
-      - "9100:9100"
+      - "${NODE_EXPORTER_HOST:-127.0.0.1}:9100:9100"
     restart: unless-stopped
 
   postgres_exporter:
@@ -181,7 +226,7 @@ services:
     environment:
       DATA_SOURCE_NAME: "postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-ai_business_platform}?sslmode=disable"
     ports:
-      - "9187:9187"
+      - "${POSTGRES_EXPORTER_HOST:-127.0.0.1}:9187:9187"
     restart: unless-stopped
     depends_on:
       db:
@@ -195,4 +240,3 @@ volumes:
     name: abp_prometheus_data
   grafana_data:
     name: abp_grafana_data
-

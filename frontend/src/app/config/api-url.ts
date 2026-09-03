@@ -32,7 +32,7 @@ export const getApiBaseUrl = (): string => {
   // el emulador expone el host en 10.0.2.2. El network_security_config ya
   // permite cleartext a ese host en desarrollo.
   if (Capacitor.isNativePlatform() && Capacitor.getPlatform() === "android") {
-    return "http://10.0.2.2:8000";
+    return "http://10.0.2.2:8001";
   }
 
   // En desarrollo, usar el mismo protocolo que la página actual
@@ -40,15 +40,15 @@ export const getApiBaseUrl = (): string => {
   if (typeof window !== "undefined") {
     const protocol = window.location.protocol;
     const host = window.location.hostname;
-    const port = window.location.port;
 
     if (host === "localhost" || host === "127.0.0.1") {
-      return `${protocol}//${host}:8000`;
+      // Puerto externo configurado en docker-compose (API_PORT, default 8001)
+      return `${protocol}//${host}:8001`;
     }
   }
 
   // Fallback para desarrollo local
-  return "http://localhost:8000";
+  return "http://localhost:8001";
 };
 
 export const setApiBaseUrl = (url: string): void => {

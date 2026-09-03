@@ -128,14 +128,13 @@ class SearchHistoryRepository:
         Returns:
             Number of deleted records.
         """
+        from sqlalchemy import delete
+
         result = await self.session.execute(
-            select(SearchHistory).where(SearchHistory.timestamp < cutoff)
+            delete(SearchHistory).where(SearchHistory.timestamp < cutoff)
         )
-        records = list(result.scalars().all())
-        for record in records:
-            await self.session.delete(record)
         await self.session.commit()
-        return len(records)
+        return result.rowcount or 0
 
     async def count(self) -> int:
         """Counts total search history records.

@@ -25,22 +25,23 @@ const pct = (n?: number | null) =>
 
 const STATUS_LABELS: Record<DealStatus, string> = {
   NEW: "Nuevo",
-  CONTACTED: "Contactado",
-  OFFER: "Oferta",
+  ANALYZING: "Analizando",
+  NEGOTIATING: "Negociando",
   WON: "Ganado",
   BOUGHT: "Comprado",
   IN_TRANSIT: "En transporte",
   REGISTERED: "Matriculado",
   SOLD: "Vendido",
   LOST: "Perdido",
-  DROPPED: "Descartado",
+  CANCELLED: "Cancelado",
 };
 
 const STATUS_COLORS: Record<DealStatus, string> = {
   NEW: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
-  CONTACTED:
+  ANALYZING:
     "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400",
-  OFFER: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400",
+  NEGOTIATING:
+    "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400",
   WON: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
   BOUGHT:
     "bg-teal-100 text-teal-800 dark:bg-teal-900/30 dark:text-teal-400",
@@ -50,29 +51,31 @@ const STATUS_COLORS: Record<DealStatus, string> = {
     "bg-cyan-100 text-cyan-800 dark:bg-cyan-900/30 dark:text-cyan-400",
   SOLD: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400",
   LOST: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
-  DROPPED:
+  CANCELLED:
     "bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400",
 };
 
-// Transiciones válidas (mismo mapa que el backend, ver DealService._TRANSITIONS).
+// Transiciones válidas (mismo mapa que el backend v2 + TASK 3: ver
+// DealService._TRANSITIONS).
 const TRANSITIONS: Record<DealStatus, DealStatus[]> = {
-  NEW: ["CONTACTED", "DROPPED"],
-  CONTACTED: ["OFFER", "LOST", "DROPPED"],
-  OFFER: ["WON", "LOST", "DROPPED"],
-  WON: ["BOUGHT", "DROPPED"],
-  BOUGHT: ["IN_TRANSIT", "DROPPED"],
-  IN_TRANSIT: ["REGISTERED", "DROPPED"],
-  REGISTERED: ["SOLD", "DROPPED"],
+  NEW: ["ANALYZING", "CANCELLED"],
+  ANALYZING: ["NEGOTIATING", "LOST", "CANCELLED"],
+  NEGOTIATING: ["WON", "LOST", "CANCELLED"],
+  WON: ["BOUGHT", "CANCELLED"],
+  BOUGHT: ["IN_TRANSIT", "CANCELLED"],
+  IN_TRANSIT: ["REGISTERED", "CANCELLED"],
+  REGISTERED: ["SOLD", "CANCELLED"],
   SOLD: [],
   LOST: [],
-  DROPPED: [],
+  CANCELLED: [],
 };
 
 // Estados que requieren un pequeño formulario antes de confirmar la
-// transición (igual que OFFER ya hacía). SOLD exige sale_price; el resto
-// de campos son opcionales en todas las etapas.
+// transición (igual que NEGOTIATING ya hacía para offer_price). SOLD exige
+// sale_price; el resto de campos son opcionales en todas las etapas.
 const STAGES_WITH_FORM: DealStatus[] = [
-  "OFFER",
+  "NEGOTIATING",
+  "WON",
   "BOUGHT",
   "IN_TRANSIT",
   "REGISTERED",
@@ -90,12 +93,20 @@ type StageField = {
 // Campos capturados al confirmar la transición a cada etapa (ver
 // DealService.transition en el backend — mismos nombres de campo).
 const STAGE_FIELDS: Partial<Record<DealStatus, StageField[]>> = {
-  OFFER: [
+  NEGOTIATING: [
     {
       key: "offer_price",
       label: "Precio de oferta (EUR)",
       type: "number",
       required: true,
+      placeholder: "ej. 15000",
+    },
+  ],
+  WON: [
+    {
+      key: "offer_price",
+      label: "Precio de oferta (EUR)",
+      type: "number",
       placeholder: "ej. 15000",
     },
   ],
@@ -130,15 +141,15 @@ const STAGE_FIELDS: Partial<Record<DealStatus, StageField[]>> = {
 
 const ALL_STATUSES: DealStatus[] = [
   "NEW",
-  "CONTACTED",
-  "OFFER",
+  "ANALYZING",
+  "NEGOTIATING",
   "WON",
   "BOUGHT",
   "IN_TRANSIT",
   "REGISTERED",
   "SOLD",
   "LOST",
-  "DROPPED",
+  "CANCELLED",
 ];
 
 function StatusBadge({ status }: { status: DealStatus }) {
@@ -190,7 +201,7 @@ function DealRow({ deal }: { deal: Deal }) {
   const handleAction = (target: DealStatus) => {
     if (STAGES_WITH_FORM.includes(target)) {
       const prefill: Record<string, string> = {};
-      if (target === "OFFER") {
+      if (target === "NEGOTIATING" || target === "WON") {
         prefill.offer_price = offerPricePrefill(deal);
       } else if (target === "BOUGHT" && deal.offer_price != null) {
         prefill.actual_purchase_price = String(deal.offer_price);
@@ -370,7 +381,7 @@ function DealRow({ deal }: { deal: Deal }) {
                 variant={
                   target === "WON" || target === "SOLD"
                     ? "primary"
-                    : target === "LOST" || target === "DROPPED"
+                    : target === "LOST" || target === "CANCELLED"
                       ? "danger"
                       : "outline"
                 }
@@ -416,12 +427,13 @@ function DealRow({ deal }: { deal: Deal }) {
               />
             </div>
           ))}
-          {pendingTarget === "OFFER" && deal.last_sim_purchase_price != null && (
-            <p className="text-xs text-secondary-500 dark:text-secondary-400">
-              Prefill desde simulación (compra {eur(deal.last_sim_purchase_price)}
-              {deal.last_sim_profile ? ` · ${deal.last_sim_profile}` : ""})
-            </p>
-          )}
+          {(pendingTarget === "NEGOTIATING" || pendingTarget === "WON") &&
+            deal.last_sim_purchase_price != null && (
+              <p className="text-xs text-secondary-500 dark:text-secondary-400">
+                Prefill desde simulación (compra {eur(deal.last_sim_purchase_price)}
+                {deal.last_sim_profile ? ` · ${deal.last_sim_profile}` : ""})
+              </p>
+            )}
           <Button
             variant="primary"
             size="sm"

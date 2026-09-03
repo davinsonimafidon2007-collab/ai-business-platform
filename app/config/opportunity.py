@@ -156,3 +156,15 @@ CONFIDENCE_NO_MARKET_DATA_BASELINE: Final[float] = 35.0
 (sin comparables): baja pero no cero, ya que el resto de la economía
 (costes fijos del perfil, impuestos) sigue siendo fiable."""
 
+# =============================================================================
+# Umbrales de validación mínima para crear oportunidades
+# =============================================================================
+
+MIN_CONFIDENCE_FOR_OPPORTUNITY: Final[float] = 30.0
+"""Confianza mínima de mercado para considerar una oportunidad válida.
+Si la confianza es menor, la oportunidad no se crea/persiste."""
+
+MIN_SCORE_FOR_OPPORTUNITY: Final[float] = 20.0
+"""Score mínimo para considerar una oportunidad válida.
+Si el overall_score es menor, la oportunidad no se crea/persiste."""
+

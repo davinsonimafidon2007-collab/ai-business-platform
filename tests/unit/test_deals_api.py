@@ -1,4 +1,4 @@
-"""Tests de la API de deals (Task D.1): auth, create, list, status."""
+"""Tests de la API de deals: auth, create, list, transiciones, historial."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from app.core.config import settings
 from app.database import get_db_session
 from app.dependencies.auth import get_current_user
 from app.main import app
-from app.models.deal import Deal, DealStatus
+from app.models.deal import Deal, DealStatus, DealStatusHistory
 from app.models.user import User
 from app.repositories.deal_repository import DealRepository
 
@@ -41,6 +41,25 @@ def _make_deal(
     )
 
 
+def _make_history(deal_id: str) -> list[DealStatusHistory]:
+    return [
+        DealStatusHistory(
+            deal_id=deal_id,
+            from_status=None,
+            to_status="NEW",
+            changed_by_user_id="user-1",
+            created_at=datetime.now(UTC),
+        ),
+        DealStatusHistory(
+            deal_id=deal_id,
+            from_status="NEW",
+            to_status="ANALYZING",
+            changed_by_user_id="user-1",
+            created_at=datetime.now(UTC),
+        ),
+    ]
+
+
 @pytest.fixture
 def auth_override() -> None:
     """Override get_current_user con un usuario mock."""
@@ -61,11 +80,16 @@ def test_deals_requires_auth() -> None:
         assert response.status_code == 401
 
 
+# ---------------------------------------------------------------------------
+# POST /deals
+# ---------------------------------------------------------------------------
+
+
 def test_create_deal_returns_201(auth_override: None) -> None:
     """POST /deals con auth -> 201 y status NEW."""
     deal = _make_deal()
 
-    async def _fake_create(self, deal: Deal) -> Deal:
+    async def _fake_save_transition(self, deal_arg, history, audit_log=None):
         return deal
 
     async def _fake_get_active(self, user_id, opportunity_id):
@@ -76,7 +100,7 @@ def test_create_deal_returns_201(auth_override: None) -> None:
         return session
 
     with pytest.MonkeyPatch.context() as mp:
-        mp.setattr(DealRepository, "create", _fake_create)
+        mp.setattr(DealRepository, "save_transition", _fake_save_transition)
         mp.setattr(DealRepository, "get_active_by_opportunity", _fake_get_active)
         app.dependency_overrides[get_db_session] = _get_db_session
 
@@ -88,6 +112,8 @@ def test_create_deal_returns_201(auth_override: None) -> None:
         data = response.json()
         assert data["status"] == "NEW"
         assert data["id"]  # id generado (UUID)
+        assert data["closed_at"] is None
+        assert data["version"] == 0
 
 
 def test_create_deal_without_link_returns_422(auth_override: None) -> None:
@@ -102,9 +128,9 @@ def test_create_deal_without_link_returns_422(auth_override: None) -> None:
 
 
 def test_create_duplicate_active_returns_409(auth_override: None) -> None:
-    """POST /deals con opportunity con deal activo -> 409 (Task D.3)."""
+    """POST /deals con opportunity con deal activo -> 409."""
     existing = _make_deal(
-        deal_id="deal-existing", status=DealStatus.OFFER, opportunity_id="opp-1"
+        deal_id="deal-existing", status=DealStatus.NEGOTIATING, opportunity_id="opp-1"
     )
 
     async def _fake_get_active(self, user_id, opportunity_id):
@@ -117,9 +143,7 @@ def test_create_duplicate_active_returns_409(auth_override: None) -> None:
         mp.setattr(DealRepository, "get_active_by_opportunity", _fake_get_active)
         app.dependency_overrides[get_db_session] = _get_db_session
 
-        response = client.post(
-            "/api/v1/deals", json={"opportunity_id": "opp-1"}
-        )
+        response = client.post("/api/v1/deals", json={"opportunity_id": "opp-1"})
         assert response.status_code == 409
         body = response.json()
         # El handler de excepciones envuelve el detail en un objeto {error: {...}}.
@@ -127,33 +151,9 @@ def test_create_duplicate_active_returns_409(auth_override: None) -> None:
         assert "active deal" in body["error"]["message"].lower()
 
 
-def test_patch_status_to_offer_saves_price(auth_override: None) -> None:
-    """PATCH a OFFER con offer_price -> persistido (Task D.3)."""
-    deal = _make_deal(status=DealStatus.CONTACTED)
-
-    async def _fake_get_by_id(self, deal_id):
-        return deal
-
-    async def _fake_update(self, deal: Deal) -> Deal:
-        deal.status = DealStatus.OFFER
-        deal.offer_price = 15000.0
-        return deal
-
-    async def _get_db_session() -> AsyncMock:
-        return AsyncMock()
-
-    with pytest.MonkeyPatch.context() as mp:
-        mp.setattr(DealRepository, "get_by_id", _fake_get_by_id)
-        mp.setattr(DealRepository, "update", _fake_update)
-        app.dependency_overrides[get_db_session] = _get_db_session
-
-        response = client.patch(
-            "/api/v1/deals/deal-1/status",
-            json={"status": "OFFER", "offer_price": 15000.0},
-        )
-        assert response.status_code == 200
-        assert response.json()["status"] == "OFFER"
-        assert response.json()["offer_price"] == 15000.0
+# ---------------------------------------------------------------------------
+# GET /deals + filtro de estado validado
+# ---------------------------------------------------------------------------
 
 
 def test_list_deals_returns_shape(auth_override: None) -> None:
@@ -173,17 +173,14 @@ def test_list_deals_returns_shape(auth_override: None) -> None:
         response = client.get("/api/v1/deals")
         assert response.status_code == 200
         data = response.json()
-        assert "items" in data
-        assert "total" in data
-        assert "limit" in data
-        assert "offset" in data
+        assert {"items", "total", "limit", "offset"} <= set(data)
         assert data["total"] == 1
         assert len(data["items"]) == 1
         assert data["items"][0]["status"] == "NEW"
 
 
 def test_list_deals_passes_status_filter(auth_override: None) -> None:
-    """El filtro status se pasa al repo."""
+    """El filtro status se pasa al repo como enum."""
     captured: dict = {}
 
     async def _fake_list_for_user(self, **kwargs):
@@ -200,14 +197,113 @@ def test_list_deals_passes_status_filter(auth_override: None) -> None:
         response = client.get("/api/v1/deals?status=NEW")
         assert response.status_code == 200
         assert captured.get("user_id") == "user-1"
-        assert captured.get("status") is not None
+        assert captured.get("status") == DealStatus.NEW
+
+
+def test_list_deals_invalid_status_filter_returns_422(auth_override: None) -> None:
+    """Filtro status inválido -> 422 (no se pasa crudo al repo)."""
+    async def _get_db_session() -> AsyncMock:
+        return AsyncMock()
+
+    with pytest.MonkeyPatch.context() as mp:
+        app.dependency_overrides[get_db_session] = _get_db_session
+        response = client.get("/api/v1/deals?status=CONTACTED")
+        assert response.status_code == 422
+        assert "Invalid status filter" in response.json()["error"]["message"]
+
+
+# ---------------------------------------------------------------------------
+# PATCH /deals/{id}/status
+# ---------------------------------------------------------------------------
+
+
+def test_patch_status_valid_transition_returns_200(auth_override: None) -> None:
+    """PATCH /deals/{id}/status NEW->ANALYZING -> 200."""
+    deal = _make_deal(status=DealStatus.NEW)
+
+    async def _fake_get_by_id(self, deal_id, *, for_update=False):
+        return deal
+
+    async def _fake_save_transition(self, deal_arg, history, audit_log=None):
+        deal_arg.status = DealStatus.ANALYZING
+        return deal_arg
+
+    async def _get_db_session() -> AsyncMock:
+        return AsyncMock()
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(DealRepository, "get_by_id", _fake_get_by_id)
+        mp.setattr(DealRepository, "save_transition", _fake_save_transition)
+        app.dependency_overrides[get_db_session] = _get_db_session
+
+        response = client.patch(
+            "/api/v1/deals/deal-1/status",
+            json={"status": "ANALYZING"},
+        )
+        assert response.status_code == 200
+        assert response.json()["status"] == "ANALYZING"
+
+
+def test_patch_status_to_negotiating_saves_price(auth_override: None) -> None:
+    """PATCH a NEGOTIATING con offer_price -> persistido."""
+    deal = _make_deal(status=DealStatus.ANALYZING)
+
+    async def _fake_get_by_id(self, deal_id, *, for_update=False):
+        return deal
+
+    async def _fake_save(self, deal_arg, history, audit_log=None):
+        deal.status = DealStatus.NEGOTIATING
+        deal.offer_price = 15000.0
+        return deal
+
+    async def _get_db_session() -> AsyncMock:
+        return AsyncMock()
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(DealRepository, "get_by_id", _fake_get_by_id)
+        mp.setattr(DealRepository, "save_transition", _fake_save)
+        app.dependency_overrides[get_db_session] = _get_db_session
+
+        response = client.patch(
+            "/api/v1/deals/deal-1/status",
+            json={"status": "NEGOTIATING", "offer_price": 15000.0},
+        )
+        assert response.status_code == 200
+        assert response.json()["status"] == "NEGOTIATING"
+        assert response.json()["offer_price"] == 15000.0
+
+
+def test_patch_same_status_is_idempotent_200(auth_override: None) -> None:
+    """PATCH al estado actual -> 200 idempotente, sin escritura."""
+    deal = _make_deal(status=DealStatus.NEGOTIATING)
+
+    async def _fake_get_by_id(self, deal_id, *, for_update=False):
+        return deal
+
+    async def _fake_save(self, *args, **kwargs):  # no debe llamarse
+        raise AssertionError("save_transition no debe llamarse en no-op")
+
+    async def _get_db_session() -> AsyncMock:
+        return AsyncMock()
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(DealRepository, "get_by_id", _fake_get_by_id)
+        mp.setattr(DealRepository, "save_transition", _fake_save)
+        app.dependency_overrides[get_db_session] = _get_db_session
+
+        response = client.patch(
+            "/api/v1/deals/deal-1/status",
+            json={"status": "NEGOTIATING"},
+        )
+        assert response.status_code == 200
+        assert response.json()["status"] == "NEGOTIATING"
 
 
 def test_patch_status_illegal_returns_422(auth_override: None) -> None:
-    """PATCH /deals/{id}/status con transición ilegal -> 422."""
+    """PATCH /deals/{id}/status con transición imposible (NEW->WON) -> 422."""
     deal = _make_deal(status=DealStatus.NEW)
 
-    async def _fake_get_by_id(self, deal_id):
+    async def _fake_get_by_id(self, deal_id, *, for_update=False):
         return deal
 
     async def _get_db_session() -> AsyncMock:
@@ -224,15 +320,39 @@ def test_patch_status_illegal_returns_422(auth_override: None) -> None:
         assert response.status_code == 422
 
 
-def test_patch_status_ok_returns_200(auth_override: None) -> None:
-    """PATCH /deals/{id}/status con transición válida -> 200."""
-    deal = _make_deal(status=DealStatus.NEW)
+def test_patch_invalid_status_value_returns_422(auth_override: None) -> None:
+    """Estado inexistente en el body -> 422 de pydantic."""
+    async def _get_db_session() -> AsyncMock:
+        return AsyncMock()
 
-    async def _fake_get_by_id(self, deal_id):
-        return deal
+    with pytest.MonkeyPatch.context() as mp:
+        app.dependency_overrides[get_db_session] = _get_db_session
+        response = client.patch(
+            "/api/v1/deals/deal-1/status",
+            json={"status": "DROPPED"},
+        )
+        assert response.status_code == 422
 
-    async def _fake_update(self, deal: Deal) -> Deal:
-        deal.status = DealStatus.CONTACTED
+
+def test_patch_negative_offer_price_returns_422(auth_override: None) -> None:
+    """offer_price negativo -> 422."""
+    async def _get_db_session() -> AsyncMock:
+        return AsyncMock()
+
+    with pytest.MonkeyPatch.context() as mp:
+        app.dependency_overrides[get_db_session] = _get_db_session
+        response = client.patch(
+            "/api/v1/deals/deal-1/status",
+            json={"status": "NEGOTIATING", "offer_price": -5},
+        )
+        assert response.status_code == 422
+
+
+def test_patch_foreign_deal_returns_404(auth_override: None) -> None:
+    """PATCH sobre deal ajeno -> 404."""
+    deal = _make_deal(user_id="user-2", status=DealStatus.NEW)
+
+    async def _fake_get_by_id(self, deal_id, *, for_update=False):
         return deal
 
     async def _get_db_session() -> AsyncMock:
@@ -240,15 +360,75 @@ def test_patch_status_ok_returns_200(auth_override: None) -> None:
 
     with pytest.MonkeyPatch.context() as mp:
         mp.setattr(DealRepository, "get_by_id", _fake_get_by_id)
-        mp.setattr(DealRepository, "update", _fake_update)
         app.dependency_overrides[get_db_session] = _get_db_session
 
         response = client.patch(
             "/api/v1/deals/deal-1/status",
-            json={"status": "CONTACTED"},
+            json={"status": "ANALYZING"},
         )
+        assert response.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# GET /deals/{id}/history (auditoría)
+# ---------------------------------------------------------------------------
+
+
+def test_get_history_requires_auth() -> None:
+    """Sin token -> 401."""
+    with patch.object(settings, "auth_disabled", False):
+        response = client.get("/api/v1/deals/deal-1/history")
+        assert response.status_code == 401
+
+
+def test_get_history_returns_entries(auth_override: None) -> None:
+    """GET history -> 200 con items del historial del deal propio."""
+    deal = _make_deal()
+    history = _make_history("deal-1")
+
+    async def _fake_get_by_id(self, deal_id):
+        return deal
+
+    async def _fake_list_history(self, deal_id, *, limit=100, offset=0):
+        return history, len(history)
+
+    async def _get_db_session() -> AsyncMock:
+        return AsyncMock()
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(DealRepository, "get_by_id", _fake_get_by_id)
+        mp.setattr(DealRepository, "list_history", _fake_list_history)
+        app.dependency_overrides[get_db_session] = _get_db_session
+
+        response = client.get("/api/v1/deals/deal-1/history")
         assert response.status_code == 200
-        assert response.json()["status"] == "CONTACTED"
+        data = response.json()
+        assert data["total"] == 2
+        assert len(data["items"]) == 2
+        first = data["items"][0]
+        assert first["from_status"] is None
+        assert first["to_status"] == "NEW"
+        second = data["items"][1]
+        assert second["from_status"] == "NEW"
+        assert second["to_status"] == "ANALYZING"
+
+
+def test_get_history_foreign_deal_returns_404(auth_override: None) -> None:
+    """Historial de un deal ajeno -> 404."""
+    deal = _make_deal(user_id="user-2")
+
+    async def _fake_get_by_id(self, deal_id):
+        return deal
+
+    async def _get_db_session() -> AsyncMock:
+        return AsyncMock()
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(DealRepository, "get_by_id", _fake_get_by_id)
+        app.dependency_overrides[get_db_session] = _get_db_session
+
+        response = client.get("/api/v1/deals/deal-1/history")
+        assert response.status_code == 404
 
 
 # ---------------------------------------------------------------------------

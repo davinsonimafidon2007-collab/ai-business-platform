@@ -65,7 +65,8 @@
       "risk_high_profit_threshold": 3500.0,
       "risk_low_profit_threshold": 700.0,
       "risk_high_cost_ratio_threshold": 0.30,
-      "risk_low_cost_ratio_threshold": 0.12
+      "risk_low_cost_ratio_threshold": 0.12,
+      "applies_iedmt": true
     },
     "PORTUGAL": {
       "transport_cost": 1400.0,

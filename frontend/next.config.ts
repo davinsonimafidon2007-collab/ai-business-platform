@@ -1,6 +1,25 @@
 import type { NextConfig } from "next";
 import path from "path";
 
+// MOBILE-HARDENING #8: VERSION en la raíz del repo es la única fuente de
+// verdad de versión (Android versionName/versionCode y backend /mobile/version
+// derivan de él). Si no viene NEXT_PUBLIC_APP_VERSION del entorno, se lee del
+// archivo; si tampoco existe, fallback seguro 1.0.0.
+const fs = require("fs") as typeof import("fs");
+function resolveAppVersion(): string {
+  const fromEnv = process.env.NEXT_PUBLIC_APP_VERSION;
+  if (fromEnv && /^\d+\.\d+\.\d+$/.test(fromEnv)) return fromEnv;
+  try {
+    const raw = fs
+      .readFileSync(path.join(__dirname, "..", "VERSION"), "utf-8")
+      .trim();
+    if (/^\d+\.\d+\.\d+$/.test(raw)) return raw;
+  } catch {
+    // archivo ausente → fallback
+  }
+  return "1.0.0";
+}
+
 // MOB-P3-006 / PWA (Bloque 1.3): service worker + manifest instalable.
 // next-pwa v5 es CommonJS, por eso se usa require() dentro de un .ts.
 const withPWA = require("next-pwa")({
@@ -11,9 +30,13 @@ const withPWA = require("next-pwa")({
 });
 
 // BUILD_TARGET=capacitor -> export estático (usado por Android/Capacitor).
+// BUILD_TARGET=docker   -> build de servidor con output standalone (imagen
+//                          mínima sin node_modules completo en runtime).
 // Sin BUILD_TARGET (o cualquier otro valor) -> build de servidor normal,
 // necesario para que `next start` funcione en Docker/producción web.
-const isCapacitorBuild = process.env.BUILD_TARGET === "capacitor";
+const buildTarget = process.env.BUILD_TARGET;
+const isCapacitorBuild = buildTarget === "capacitor";
+const isDockerBuild = buildTarget === "docker";
 
 // MOB-P3-006 — Optimización de bundle:
 //  - Separar vendor externo y firebase en chunks propios (cache-rotación).
@@ -22,6 +45,10 @@ const isCapacitorBuild = process.env.BUILD_TARGET === "capacitor";
 // La config de webpack es un función que puede devolver undefined para
 // cohexistir con otras configs (bundle-analyzer).
 const nextConfig: NextConfig = {
+  // MOBILE-HARDENING #8: inyecta la versión de build desde VERSION.
+  env: {
+    NEXT_PUBLIC_APP_VERSION: resolveAppVersion(),
+  },
   ...(isCapacitorBuild
     ? {
         output: "export" as const,
@@ -29,10 +56,13 @@ const nextConfig: NextConfig = {
         skipTrailingSlashRedirect: true,
       }
     : {}),
+  ...(isDockerBuild ? { output: "standalone" as const } : {}),
+  // Raíz de tracing en el repo (dedupe de lockfiles monorepo). En Docker NO:
+  // anidaría .next/standalone bajo un subdirectorio y rompería server.js.
+  ...(isDockerBuild ? {} : { outputFileTracingRoot: path.join(__dirname, "../") }),
   images: {
     unoptimized: true,
   },
-  outputFileTracingRoot: path.join(__dirname, "../"),
   async headers() {
     return [
       {

@@ -15,13 +15,16 @@ from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 from sqlalchemy import (
+    Boolean,
     DateTime,
     Float,
     ForeignKey,
     Integer,
     String,
     Text,
+    UniqueConstraint,
     Uuid,
+    func,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -69,11 +72,14 @@ class SearchOrder(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(UTC),
+        server_default=func.now(),
         nullable=False,
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(UTC),
+        server_default=func.now(),
+        onupdate=lambda: datetime.now(UTC),
         nullable=False,
     )
 
@@ -117,6 +123,12 @@ class SearchOrderVehicle(Base):
     """Vehículo encontrado por una orden de búsqueda + estado "visto"."""
 
     __tablename__ = "search_order_vehicles"
+    # Nota: search_order_id y vehicle_id ya generan sus índices vía
+    # index=True en las columnas; declararlos también aquí duplicaba el
+    # CREATE INDEX (mismo nombre) y rompía metadata.create_all.
+    __table_args__ = (
+        UniqueConstraint("search_order_id", "vehicle_id", name="uq_search_order_vehicle"),
+    )
 
     id: Mapped[str] = mapped_column(
         Uuid(as_uuid=False), primary_key=True, default=lambda: str(uuid4())
@@ -133,12 +145,13 @@ class SearchOrderVehicle(Base):
         nullable=False,
         index=True,
     )
-    seen: Mapped[bool] = mapped_column(nullable=False, default=False)
+    seen: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     result_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     """Snapshot serializado del SearchResultItem (para la UI del detalle)."""
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(UTC),
+        server_default=func.now(),
         nullable=False,
     )
 

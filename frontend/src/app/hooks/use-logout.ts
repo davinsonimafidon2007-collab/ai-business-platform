@@ -7,7 +7,7 @@ import { secureStorage } from "@/app/services/storage";
 import { api } from "@/app/services/api/client";
 import { isAuthDisabled } from "@/app/config/app-mode";
 import { signOutOfGoogle } from "@/app/services/google-auth";
-import { unregisterPushNotifications } from "@/app/services/push-notifications";
+import { teardownPushNotifications } from "@/app/services/push-notifications";
 
 /**
  * Path canónico de logout.
@@ -42,7 +42,9 @@ export function useLogout() {
       // Ignore Firebase sign-out errors
     }
     try {
-      await unregisterPushNotifications();
+      // MOBILE-HARDENING #5: teardown completo (unregister backend + remover
+      // listeners + reset de estado para poder re-inicializar tras re-login).
+      await teardownPushNotifications();
     } catch {
       // Ignore push unregister errors
     }

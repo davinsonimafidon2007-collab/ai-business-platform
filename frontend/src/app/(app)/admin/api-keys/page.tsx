@@ -18,7 +18,7 @@ export default function AdminApiKeysPage() {
   const [activeOnly, setActiveOnly] = useState(true);
 
   useEffect(() => {
-    if (!authLoading && user && user.role !== "ADMIN") {
+    if (!authLoading && user && user.role !== "admin") {
       router.replace("/dashboard/");
     }
   }, [authLoading, user, router]);
@@ -48,7 +48,7 @@ export default function AdminApiKeysPage() {
   if (authLoading || !user) {
     return <p className="text-sm text-secondary-500">Cargando…</p>;
   }
-  if (user.role !== "ADMIN") {
+  if (user.role !== "admin") {
     return null;
   }
 

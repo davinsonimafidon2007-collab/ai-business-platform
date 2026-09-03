@@ -305,10 +305,16 @@ class InspectionService:
         Returns:
             InspectionPhoto creada.
         """
+        # SEC.LFI.1: file_path solo acepta rutas dentro del directorio de
+        # uploads o URLs https públicas (ver app/core/path_safety.py).
+        from app.core.config import settings
+        from app.core.path_safety import validate_photo_file_path
+
+        safe_file_path = validate_photo_file_path(file_path, settings.upload_dir)
         photo = InspectionPhoto(
             session_id=str(session_id),
             observation_id=str(observation_id),
-            file_path=file_path,
+            file_path=safe_file_path,
             file_name=file_name,
             mime_type=mime_type,
             file_size_bytes=file_size_bytes,

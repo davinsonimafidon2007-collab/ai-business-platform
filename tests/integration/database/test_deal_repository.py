@@ -91,12 +91,12 @@ class TestDealFulfillmentFlow:
             notes="flow",
         )
         deal = await service.transition(
-            deal_id=deal.id, user_id=USER_ID, new_status=DealStatus.CONTACTED
+            deal_id=deal.id, user_id=USER_ID, new_status=DealStatus.ANALYZING
         )
         deal = await service.transition(
             deal_id=deal.id,
             user_id=USER_ID,
-            new_status=DealStatus.OFFER,
+            new_status=DealStatus.NEGOTIATING,
             offer_price=15000.0,
         )
         deal = await service.transition(
@@ -148,22 +148,22 @@ class TestDealFulfillmentFlow:
         assert deal.actual_profit == pytest.approx(2850.0, abs=0.01)
 
         # Terminal: no admite más transiciones.
-        from fastapi import HTTPException
+        from app.exceptions.base import DealValidationError
 
-        with pytest.raises(HTTPException) as exc:
+        with pytest.raises(DealValidationError) as exc:
             await service.transition(
-                deal_id=deal.id, user_id=USER_ID, new_status=DealStatus.DROPPED
+                deal_id=deal.id, user_id=USER_ID, new_status=DealStatus.CANCELLED
             )
         assert exc.value.status_code == 422
 
     @pytest.mark.asyncio
-    async def test_dropped_reachable_after_bought(
+    async def test_cancelled_reachable_after_bought(
         self,
         deal_repo: DealRepository,
         vehicle_evaluation_repo: VehicleEvaluationRepository,
     ) -> None:
-        """Un trato puede caerse (DROPPED) después de comprado, p.ej. si el
-        transporte o la matriculación fallan — no es un estado LOST."""
+        """Un trato puede cancelarse (CANCELLED) después de comprado, p.ej. si
+        el transporte o la matriculación fallan — no es un estado LOST."""
         service = DealService(deal_repo, vehicle_evaluation_repo)
         deal = await service.create(
             user_id=USER_ID, vehicle_id="00000000-0000-0000-0000-0000000000bb"
@@ -174,9 +174,9 @@ class TestDealFulfillmentFlow:
             deal_id=deal.id, user_id=USER_ID, new_status=DealStatus.BOUGHT
         )
         deal = await service.transition(
-            deal_id=deal.id, user_id=USER_ID, new_status=DealStatus.DROPPED
+            deal_id=deal.id, user_id=USER_ID, new_status=DealStatus.CANCELLED
         )
-        assert deal.status == DealStatus.DROPPED
+        assert deal.status == DealStatus.CANCELLED
 
     @pytest.mark.asyncio
     async def test_sold_without_sale_price_rejected(
@@ -184,7 +184,7 @@ class TestDealFulfillmentFlow:
         deal_repo: DealRepository,
         vehicle_evaluation_repo: VehicleEvaluationRepository,
     ) -> None:
-        from fastapi import HTTPException
+        from app.exceptions.base import DealValidationError
 
         service = DealService(deal_repo, vehicle_evaluation_repo)
         deal = await service.create(
@@ -193,7 +193,7 @@ class TestDealFulfillmentFlow:
         deal.status = DealStatus.REGISTERED
         deal = await deal_repo.update(deal)
 
-        with pytest.raises(HTTPException) as exc:
+        with pytest.raises(DealValidationError) as exc:
             await service.transition(
                 deal_id=deal.id, user_id=USER_ID, new_status=DealStatus.SOLD
             )

@@ -81,7 +81,7 @@ NEXT_PUBLIC_AUTH_DISABLED=true
 Qué hace:
 
 - Backend: `get_current_user` deja de mirar el Bearer y hace get-or-create del
-  usuario local ADMIN (`local@localhost`, UUID fijo
+  usuario local ADMIN (`local@example.com`, UUID fijo
   `00000000-0000-4000-8000-000000000001`) en la tabla `users` → FKs ok y
   `/admin` accesible.
 - Frontend: no redirige a `/auth/login`, no exige token, no inicializa

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from app.core.config import settings
+from app.core.path_safety import UnsafePhotoPathError, validate_photo_file_path
 from app.models.inspection import InspectionObservation, InspectionPhoto
 from app.models.vision import VisionImage
 from app.providers.vision_provider import VisionProvider
@@ -28,9 +30,19 @@ class VisionService:
         photos: list[InspectionPhoto],
         observations: dict[str, InspectionObservation],
     ) -> dict[str, object]:
-        result = await self._provider.analyze_images(
-            [VisionImage(photo_id=photo.id, file_path=photo.file_path) for photo in photos]
-        )
+        # SEC.LFI.1 / SEC.SSRF.1: nunca enviar al proveedor rutas fuera del
+        # directorio de uploads ni URLs inseguras; se descartan en silencio
+        # (el intento queda registrado en el log de la app).
+        safe_images: list[VisionImage] = []
+        for photo in photos:
+            try:
+                path = validate_photo_file_path(photo.file_path, settings.upload_dir)
+            except UnsafePhotoPathError:
+                continue
+            safe_images.append(
+                VisionImage(photo_id=photo.id, file_path=path)
+            )
+        result = await self._provider.analyze_images(safe_images)
         suggestions: list[dict[str, object]] = []
         for detected in result.observations:
             inspection_observation = observations.get(detected.photo_id)

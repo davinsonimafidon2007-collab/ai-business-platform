@@ -16,9 +16,27 @@ endpoint nunca devuelva un error por configuración incompleta:
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 from fastapi import APIRouter
 from pydantic import BaseModel
+
+
+def _version_file_default() -> str | None:
+    """Lee la versión del archivo VERSION en la raíz del repo.
+
+    MOBILE-HARDENING #8: VERSION es la única fuente de verdad (Android
+    versionName/versionCode y CI derivan de él). Si el archivo no existe
+    (p. ej. imagen Docker sin contexto de git), devuelve None.
+    """
+    try:
+        candidate = Path(__file__).resolve().parents[3] / "VERSION"
+        if candidate.is_file():
+            value = candidate.read_text(encoding="utf-8").strip()
+            return value or None
+    except OSError:
+        pass
+    return None
 
 
 class MobileVersionResponse(BaseModel):
@@ -42,9 +60,10 @@ async def mobile_version() -> MobileVersionResponse:
       versión menor (pero >= min) debe notificarse (recomendado).
     - ``update_url``: dónde descargar la actualización.
     """
+    file_default = _version_file_default() or "1.0.0"
     return MobileVersionResponse(
-        min_version=os.getenv("MOBILE_MIN_VERSION", "1.0.0"),
-        latest_version=os.getenv("MOBILE_LATEST_VERSION", "1.0.0"),
+        min_version=os.getenv("MOBILE_MIN_VERSION", file_default),
+        latest_version=os.getenv("MOBILE_LATEST_VERSION", file_default),
         update_url=os.getenv(
             "MOBILE_UPDATE_URL",
             "https://github.com/davinsonimafidon2007-collab/ai-business-platform/releases",

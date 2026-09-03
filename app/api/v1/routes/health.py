@@ -123,6 +123,8 @@ async def get_health(response: Response) -> HealthResponse:
         version=settings.app_version,
         providers=providers,
         checks=checks,
+        # TASK 1 — modo del pipeline ES, visible para el banner de la UI.
+        es_data_mode=getattr(settings, "es_data_mode", "fixture"),
     )
 
 
@@ -152,7 +154,8 @@ async def get_health_ready(response: Response) -> ReadyResponse:
     dentro de la red de docker-compose; en cualquier otro despliegue el
     check habría fallado siempre aunque `socket` estuviera importado.
     Reutiliza los mismos checks reales que ``/health`` (DB vía el engine
-    configurado, Redis vía el cliente compartido).
+    configurado — un ``SELECT 1`` real, no solo TCP-reachable —, Redis vía
+    el cliente compartido).
 
     Redis "disabled" (sin configurar) cuenta como accesible: es un estado
     soportado deliberadamente (ver ``_check_redis``), igual que en

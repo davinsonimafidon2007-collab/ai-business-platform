@@ -94,10 +94,12 @@ class AuditLogRepository:
         action: str,
         since: datetime,
     ) -> int:
+        from sqlalchemy import func
+
         result = await self.session.execute(
-            select(AuditLog).where(
+            select(func.count(AuditLog.id)).where(
                 AuditLog.action == action,
                 AuditLog.timestamp >= since,
             )
         )
-        return len(result.scalars().all())
+        return result.scalar() or 0

@@ -3,12 +3,39 @@ apply plugin: 'com.android.application'
 android {
     namespace "com.aibusiness.platform"
     compileSdk rootProject.ext.compileSdkVersion
+
+    // MOBILE-HARDENING #8: única fuente de verdad de versión = archivo VERSION
+    // en la raíz del repo ("X.Y.Z", SemVer). Relación garantizada:
+    //   VERSION -> versionName (SemVer) y versionCode (major*1e6+minor*1e3+patch,
+    //   entero monotónico). CI escribe VERSION desde el tag vX.Y.Z.
+    def appVersionName = "1.0.0"
+    def appVersionCode = 1000000
+    try {
+        def vFile = rootProject.file("../../VERSION")
+        if (vFile.exists()) {
+            def m = (vFile.text.trim() =~ /(\d+)\.(\d+)\.(\d+)/)
+            if (m.find()) {
+                appVersionName = "${m.group(1)}.${m.group(2)}.${m.group(3)}"
+                appVersionCode =
+                    (m.group(1) as Integer) * 1000000 +
+                    (m.group(2) as Integer) * 1000 +
+                    (m.group(3) as Integer)
+            } else {
+                logger.warn("MOBILE-HARDENING #8: VERSION no cumple SemVer X.Y.Z; se usa ${appVersionName}")
+            }
+        } else {
+            logger.warn("MOBILE-HARDENING #8: archivo VERSION no encontrado; se usa ${appVersionName}")
+        }
+    } catch (Exception e) {
+        logger.warn("MOBILE-HARDENING #8: error leyendo VERSION (${e.message}); se usa ${appVersionName}")
+    }
+
     defaultConfig {
         applicationId "com.aibusiness.platform"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        versionCode appVersionCode
+        versionName appVersionName
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -18,25 +45,43 @@ android {
     }
     signingConfigs {
         release {
-            // MOB-P1-002: Release signing config.
-            // To generate a keystore, run:
-            //   keytool -genkey -v -keystore release-key.jks -keyalg RSA -keysize 2048 -validity 10000 -alias aibusiness
-            // Then set environment variables or local.properties:
-            //   KEYSTORE_FILE=path/to/release-key.jks
-            //   KEYSTORE_PASSWORD=your_password
-            //   KEY_ALIAS=aibusiness
-            //   KEY_PASSWORD=your_password
-            storeFile file(System.getenv("KEYSTORE_FILE") ?: "keystore/release-key.jks")
-            storePassword System.getenv("KEYSTORE_PASSWORD") ?: ""
-            keyAlias System.getenv("KEY_ALIAS") ?: "aibusiness"
-            keyPassword System.getenv("KEY_PASSWORD") ?: ""
+            // MOBILE-HARDENING #2: mecanismo de firma ÚNICO.
+            // Orden de resolución:
+            //   1) keystore.properties (local, NUNCA commiteado)
+            //   2) variables de entorno CI/CD: KEYSTORE_FILE, KEYSTORE_PASSWORD,
+            //      KEY_ALIAS, KEY_PASSWORD (mismos nombres que los secrets de
+            //      GitHub Actions usados en mobile-release-cicd.yml).
+            // No hay credenciales en Git ni valores por defecto.
+            def keystorePropertiesFile = rootProject.file("keystore.properties")
+            def keystoreProperties = new Properties()
+
+            if (keystorePropertiesFile.exists()) {
+                keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+            }
+
+            def resolvedStoreFile = keystoreProperties['storeFile'] ?: System.getenv('KEYSTORE_FILE')
+            storeFile resolvedStoreFile ? file(resolvedStoreFile) : null
+            storePassword keystoreProperties['storePassword'] ?: System.getenv('KEYSTORE_PASSWORD')
+            keyAlias keystoreProperties['keyAlias'] ?: System.getenv('KEY_ALIAS')
+            keyPassword keystoreProperties['keyPassword'] ?: System.getenv('KEY_PASSWORD')
         }
     }
+
     buildTypes {
         release {
-            minifyEnabled false
-            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
-            signingConfig signingConfigs.release
+            minifyEnabled true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            shrinkResources true
+            // Solo se firma si hay credenciales disponibles; si no, el bundle
+            // sale unsigned con un warning explícito (falla en la subida a
+            // Play/Firebase en vez de con un NPE críptico de Gradle).
+            if (signingConfigs.release.storeFile != null) {
+                signingConfig signingConfigs.release
+            } else {
+                logger.warn("MOBILE-HARDENING #2: sin credenciales de firma " +
+                    "(keystore.properties o env KEYSTORE_FILE/KEYSTORE_PASSWORD/KEY_ALIAS/KEY_PASSWORD). " +
+                    "El release saldra SIN FIRMAR.")
+            }
         }
     }
 }

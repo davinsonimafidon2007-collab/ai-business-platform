@@ -1,18 +1,23 @@
 # Deploy — despliegue a staging y producción (Bloque 6 / DEVOPS).
 #
-# - Tag semántico `v*` (p.ej. v1.2.0) → staging.
-# - Tag `v*` sobre release-* o confirmación manual → producción (environment).
+# - Tag semántico `v*` (p.ej. v1.2.0) → staging, y si va bien → producción.
 #
-# Requiere secrets del repositorio:
-#   STAGING_HOST, STAGING_USER, STAGING_KEY (SSH private key)
-#   PRODUCTION_HOST, PRODUCTION_USER, PRODUCTION_KEY
+# Requiere secrets del repositorio (por environment):
+#   staging:     STAGING_HOST, STAGING_USER, STAGING_KEY (SSH private key)
+#   production:  PRODUCTION_HOST, PRODUCTION_USER, PRODUCTION_KEY
 #
-# Cada environment usa `environment:` (protección con reviewers opcional) y
-# sobreescribe APP_ENV/COMPOSE_FILE vía variables del environment.
+# Cada job valida ANTES de conectar que los secrets existen: sin ellos el job
+# falla con mensaje claro en segundos (no tras un timeout de SSH).
 #
-# El despliegue asume un servidor con: git, docker + compose plugin, y el
-# proyecto clonado en /opt/ai-business-platform con un `.env` propio por
-# entorno (ver docs/deployment.md).
+# En el servidor: git, docker + compose plugin, repo clonado en
+# /opt/ai-business-platform y un `.env` propio por entorno (docs/deployment.md).
+# La pila de observabilidad (--profile obs) es OPCIONAL: se activa definiendo
+# la variable COMPOSE_PROFILE=--profile obs en el environment de GH o en el
+# .env del servidor; por defecto NO se despliega.
+#
+# Tras el despliegue corre scripts/validate_deployment.sh (mismo smoke que el
+# job "docker" de CI): api /health/live + /health + /metrics, frontend,
+# pg_isready y redis-cli ping.
 
 name: Deploy
 
@@ -31,12 +36,28 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Verificar secrets de staging presentes
+        env:
+          STAGING_HOST: ${{ secrets.STAGING_HOST }}
+          STAGING_USER: ${{ secrets.STAGING_USER }}
+          STAGING_KEY: ${{ secrets.STAGING_KEY }}
+        run: |
+          missing=0
+          for var in STAGING_HOST STAGING_USER STAGING_KEY; do
+            if [ -z "${!var}" ]; then
+              echo "::error::Falta el secret ${var} (environment: staging)"
+              missing=1
+            fi
+          done
+          exit $missing
+
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.STAGING_HOST }}
           username: ${{ secrets.STAGING_USER }}
           key: ${{ secrets.STAGING_KEY }}
+          envs: COMPOSE_PROFILE
           script: |
             set -e
             cd /opt/ai-business-platform
@@ -45,10 +66,12 @@ jobs:
             # Health checks docker + stack principal (api, frontend, db, redis)
             # TASK 8 (AUD-025): override de producción — sin bind-mount del
             # working tree del host y sin publicar Postgres/Redis.
-            docker compose -f docker-compose.yml -f docker-compose.prod.yml --profile obs up -d --build
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml ${COMPOSE_PROFILE:-} up -d --build
             docker compose -f docker-compose.yml -f docker-compose.prod.yml ps
             # Validación post-despliegue
             ./scripts/validate_deployment.sh http://localhost
+        env:
+          COMPOSE_PROFILE: ${{ vars.COMPOSE_PROFILE }}
 
   production:
     name: Deploy to production
@@ -60,12 +83,28 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Verificar secrets de producción presentes
+        env:
+          PRODUCTION_HOST: ${{ secrets.PRODUCTION_HOST }}
+          PRODUCTION_USER: ${{ secrets.PRODUCTION_USER }}
+          PRODUCTION_KEY: ${{ secrets.PRODUCTION_KEY }}
+        run: |
+          missing=0
+          for var in PRODUCTION_HOST PRODUCTION_USER PRODUCTION_KEY; do
+            if [ -z "${!var}" ]; then
+              echo "::error::Falta el secret ${var} (environment: production)"
+              missing=1
+            fi
+          done
+          exit $missing
+
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.PRODUCTION_HOST }}
           username: ${{ secrets.PRODUCTION_USER }}
           key: ${{ secrets.PRODUCTION_KEY }}
+          envs: COMPOSE_PROFILE
           script: |
             set -e
             cd /opt/ai-business-platform
@@ -73,6 +112,8 @@ jobs:
             git checkout ${{ github.ref_name }}
             # TASK 8 (AUD-025): override de producción — sin bind-mount del
             # working tree del host y sin publicar Postgres/Redis.
-            docker compose -f docker-compose.yml -f docker-compose.prod.yml --profile obs up -d --build
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml ${COMPOSE_PROFILE:-} up -d --build
             docker compose -f docker-compose.yml -f docker-compose.prod.yml ps
             ./scripts/validate_deployment.sh http://localhost
+        env:
+          COMPOSE_PROFILE: ${{ vars.COMPOSE_PROFILE }}

@@ -1,14 +1,15 @@
 """TASK 3: deal fulfillment fields, deal_status enum extension, opportunity status
 
 Revision ID: s5t6u7v8w9x0
-Revises: r4s5t6u7v8w9
+Revises: u7v8w9x0y1z2
 Create Date: 2026-09-03 00:00:00.000000
 
 - Extiende el enum ``deal_status`` (Postgres) con BOUGHT, IN_TRANSIT,
-  REGISTERED, SOLD (además de los ya existentes NEW/CONTACTED/OFFER/WON/
-  LOST/DROPPED). ALTER TYPE ... ADD VALUE no puede ejecutarse dentro de un
-  bloque transaccional en Postgres, así que se usa autocommit para esta
-  parte de la migración.
+  REGISTERED, SOLD (además de los ya existentes NEW/ANALYZING/NEGOTIATING/
+  WON/LOST/CANCELLED — renombrados por deal_state_machine_v2, fusionado
+  desde origin/main). ALTER TYPE ... ADD VALUE no puede ejecutarse dentro
+  de un bloque transaccional en Postgres, así que se usa autocommit para
+  esta parte de la migración.
 - Añade a ``deals`` los campos de snapshot de negociación y de cumplimiento
   físico (compra real, transporte, matriculación, venta, beneficio real).
 - Añade ``opportunities.status`` (OPEN/CONVERTED, default OPEN) para poder
@@ -23,7 +24,7 @@ import sqlalchemy as sa
 
 
 revision = "s5t6u7v8w9x0"
-down_revision = "r4s5t6u7v8w9"
+down_revision = "u7v8w9x0y1z2"
 branch_labels = None
 depends_on = None
 

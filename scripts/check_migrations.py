@@ -2,16 +2,17 @@
 Verificación de migraciones Alembic.
 
 Checks:
-1. `alembic heads` devuelve exactamente 1 head.
-2. Ese head es `n5o6p7q8r9s0`.
-3. (Opcional) La cadena es lineal desde `2f6d3d5a7b2c` hasta el head.
+1. `alembic heads` devuelve exactamente 1 head (sin hardcodear el ID: el head
+   cambia con cada migración nueva y un valor fijo rompía CI).
+2. La cadena es lineal desde la raíz inicial hasta el head (sin ramas ni
+   ciclos).
 
 Uso:
     uv run python scripts/check_migrations.py
 
 Exit codes:
     0 - OK
-    1 - Heads múltiples o head incorrecto
+    1 - Heads múltiples detectados
     2 - Cadena no lineal / error de ejecución
 """
 
@@ -20,9 +21,6 @@ from __future__ import annotations
 import re
 import subprocess
 import sys
-
-EXPECTED_HEAD = "p2q3r4s5t6u7"
-EXPECTED_ROOT = "2f6d3d5a7b2c"
 
 
 def run(cmd: list[str]) -> str:
@@ -60,10 +58,11 @@ def check_linear_chain(head: str) -> None:
     output = run([sys.executable, "-m", "alembic", "history"])
 
     # Formato típico de `alembic history` (de head hacia base):
-    #   f2a3b4c5d6e8 -> g1h2i3j4k5l6 (head), add explanation ...
-    #   <base> -> 2f6d3d5a7b2c, Initial empty migration
+    #   p2q3r4s5t6u7 -> q3r4s5t6u7v8 (head), add opportunity_phases ...
+    #   <base> -> 20260725_init_empty, Initial empty migration
     parents: list[str] = []
     children: list[str] = []
+    roots: list[str] = []
     head_line = False
     for line in output.splitlines():
         m = re.match(r"(?:<base>|([0-9a-zA-Z]+))\s+->\s+([0-9a-zA-Z]+)", line)
@@ -73,6 +72,8 @@ def check_linear_chain(head: str) -> None:
         child = m.group(2)
         if parent is not None:
             parents.append(parent)
+        else:
+            roots.append(child)
         children.append(child)
         if "(head)" in line:
             head_line = True
@@ -90,10 +91,8 @@ def check_linear_chain(head: str) -> None:
         print("ERROR: No se encontró la línea de head en `alembic history`.")
         sys.exit(2)
 
-    if EXPECTED_ROOT not in children:
-        print(
-            f"ERROR: La raíz esperada {EXPECTED_ROOT} no aparece en la cadena."
-        )
+    if len(roots) == 0:
+        print("ERROR: No se encontró la migración raíz (<base>).")
         sys.exit(2)
 
     # Ramas / ciclos: ningún ID debe aparecer como parent más de una vez
@@ -110,7 +109,10 @@ def check_linear_chain(head: str) -> None:
         print("ERROR: El head aparece como parent de otra migración (cadena rota).")
         sys.exit(2)
 
-    print(f"OK: Cadena lineal desde {EXPECTED_ROOT} hasta {head} ({len(children)} migraciones).")
+    print(
+        f"OK: Cadena lineal única desde {roots[0]} hasta {head} "
+        f"({len(children)} migraciones)."
+    )
 
 
 def main() -> None:
@@ -118,12 +120,7 @@ def main() -> None:
 
     head = check_single_head()
     print(f"Head detectado: {head}")
-
-    if head != EXPECTED_HEAD:
-        print(f"ERROR: Head esperado {EXPECTED_HEAD}, encontrado {head}")
-        sys.exit(1)
-
-    print(f"OK: Head canónico correcto ({EXPECTED_HEAD}).")
+    print("OK: Un único head (sin ramas abiertas).")
 
     try:
         check_linear_chain(head)

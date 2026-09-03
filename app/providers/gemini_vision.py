@@ -29,6 +29,9 @@ from app.models.vision import (
 
 logger = logging.getLogger(__name__)
 
+_MAX_IMAGE_BYTES_GEMINI = 10 * 1024 * 1024
+_MAX_BATCH_BYTES_GEMINI = 40 * 1024 * 1024
+
 # ---------------------------------------------------------------------------
 # Prompt (same as OpenAI provider for consistency)
 # ---------------------------------------------------------------------------
@@ -128,9 +131,25 @@ class GeminiVisionProvider:
             },
         ]
 
+        total_bytes = 0
         for image in images:
             image_data = self._load_image_data(image.file_path)
             mime_type = self._guess_mime(image.file_path)
+            # Validación tamaño decodificado
+            decoded_len = len(base64.b64decode(image_data)) if image_data else 0
+            # fallback: usar longitud base64
+            b64_len = len(image_data.encode("utf-8")) if image_data else 0
+            total_bytes += b64_len
+            if total_bytes > _MAX_BATCH_BYTES_GEMINI:
+                raise VisionProviderError(
+                    f"Batch supera {_MAX_BATCH_BYTES_GEMINI // (1024*1024)} MB; reduce imágenes",
+                    provider="gemini",
+                )
+            if decoded_len > _MAX_IMAGE_BYTES_GEMINI:
+                raise VisionProviderError(
+                    f"Imagen {image.photo_id} supera {_MAX_IMAGE_BYTES_GEMINI // (1024*1024)} MB",
+                    provider="gemini",
+                )
             parts.append({
                 "inlineData": {
                     "mimeType": mime_type,
@@ -208,15 +227,41 @@ class GeminiVisionProvider:
     # ------------------------------------------------------------------
 
     def _load_image_data(self, file_path: str) -> str:
+        # Soporta tanto path local como URL http(s)/data: (para compat con OpenAI)
+        if file_path.startswith(("http://", "https://")):
+            raise VisionProviderError(
+                f"Gemini requiere path local, no URL remota: {file_path[:80]}. Descarga primero.",
+                provider="gemini",
+            )
+        if file_path.startswith("data:"):
+            # Ya viene como base64 inline
+            try:
+                return file_path.split(",", 1)[1]
+            except IndexError as exc:
+                raise VisionProviderError("data URL malformada", provider="gemini") from exc
         path = Path(file_path)
         if not path.exists():
             raise VisionProviderError(
                 f"Image file not found: {file_path}",
                 provider="gemini",
             )
+        size = path.stat().st_size
+        if size > _MAX_IMAGE_BYTES_GEMINI:
+            raise VisionProviderError(
+                f"Imagen {path.name} supera {_MAX_IMAGE_BYTES_GEMINI // (1024*1024)} MB ({size} bytes)",
+                provider="gemini",
+            )
         return base64.b64encode(path.read_bytes()).decode("utf-8")
 
     def _guess_mime(self, file_path: str) -> str:
+        # TEST.PROV.GEMINI fix: una data URL declara su propio MIME; honrarlo
+        # antes del fallback por extensión (no tiene extensión).
+        if file_path.startswith("data:"):
+            header = file_path.split(",", 1)[0]
+            if header.startswith("data:") and "/" in header:
+                mime = header[len("data:") :].split(";", 1)[0]
+                if mime:
+                    return mime
         lower = file_path.lower()
         if lower.endswith(".png"):
             return "image/png"

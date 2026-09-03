@@ -1,4 +1,4 @@
-"""API endpoints for deals pipeline (Task D.1)."""
+"""API endpoints for deals pipeline (Task D.1 / state machine v2)."""
 
 from __future__ import annotations
 
@@ -7,13 +7,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.schemas.deal import (
     DealCreate,
+    DealHistoryResponse,
     DealListResponse,
     DealRead,
     DealSimulationUpdate,
+    DealStatusHistoryEntry,
     DealUpdateStatus,
 )
 from app.database import get_db_session
 from app.dependencies.auth import get_current_user
+from app.models.deal import DealStatus
 from app.models.user import User
 from app.repositories.deal_repository import DealRepository
 from app.repositories.vehicle_evaluation_repository import VehicleEvaluationRepository
@@ -32,6 +35,20 @@ async def get_deal_service(
     )
 
 
+def _parse_status_filter(value: str | None) -> DealStatus | None:
+    """Convierte el query param ``status`` a DealStatus (422 si es inválido)."""
+    if value is None:
+        return None
+    try:
+        return DealStatus(value.strip().upper())
+    except ValueError:
+        allowed = [s.value for s in DealStatus]
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=f"Invalid status filter. Allowed values: {allowed}",
+        ) from None
+
+
 @router.post("", response_model=DealRead, status_code=status.HTTP_201_CREATED)
 async def create_deal(
     payload: DealCreate,
@@ -39,7 +56,12 @@ async def create_deal(
     service: DealService = Depends(get_deal_service),
     current_user: User = Depends(get_current_user),
 ) -> DealRead:
-    """Crea un nuevo deal en estado NEW."""
+    """Crea un nuevo deal en estado NEW.
+
+    Idempotente frente a duplicados: solo puede existir UN deal activo por
+    oportunidad y usuario (409 en caso contrario), garantizado tanto a nivel
+    de servicio como por índice único parcial en BD.
+    """
     vehicle_id = payload.vehicle_id
     if vehicle_id is None and payload.source and payload.external_id:
         vehicle_repository = VehicleRepository(session)
@@ -67,7 +89,7 @@ async def create_deal(
 @router.get("", response_model=DealListResponse)
 async def list_deals(
     deal_status: str | None = Query(
-        None, alias="status", description="Filtro por estado (NEW, CONTACTED, ...)"
+        None, alias="status", description="Filtro por estado (NEW, ANALYZING, ...)"
     ),
     opportunity_id: str | None = Query(
         None,
@@ -81,7 +103,7 @@ async def list_deals(
     """Lista deals del usuario autenticado (solo los suyos)."""
     items, total = await service.list(
         user_id=current_user.id,
-        deal_status=deal_status,
+        deal_status=_parse_status_filter(deal_status),
         opportunity_id=opportunity_id,
         limit=limit,
         offset=offset,
@@ -105,6 +127,33 @@ async def get_deal(
     return DealRead.model_validate(deal)
 
 
+@router.get("/{deal_id}/history", response_model=DealHistoryResponse)
+async def get_deal_history(
+    deal_id: str,
+    limit: int = Query(100, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    service: DealService = Depends(get_deal_service),
+    current_user: User = Depends(get_current_user),
+) -> DealHistoryResponse:
+    """Historial de estados de un deal propio (auditoría de transiciones).
+
+    Cada cambio de estado queda registrado de forma inmutable: estado origen,
+    estado destino, usuario, notas, precio de oferta y fecha.
+    """
+    items, total = await service.get_history(
+        deal_id,
+        current_user.id,
+        limit=limit,
+        offset=offset,
+    )
+    return DealHistoryResponse(
+        items=[DealStatusHistoryEntry.model_validate(h) for h in items],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
+
+
 @router.patch("/{deal_id}/status", response_model=DealRead)
 async def update_deal_status(
     deal_id: str,
@@ -114,9 +163,12 @@ async def update_deal_status(
 ) -> DealRead:
     """Transiciona un deal a un nuevo estado del pipeline.
 
-    Los campos de cumplimiento (TASK 3) solo se aplican cuando ``status``
-    es la etapa correspondiente (BOUGHT/IN_TRANSIT/REGISTERED/SOLD); se
-    ignoran en cualquier otra transición.
+    - Transición inválida según la máquina de estados -> 422.
+    - Mismo estado actual -> 200 idempotente (no-op).
+    - Escritura concurrente perdida -> 409.
+    - Los campos de cumplimiento (TASK 3) solo se aplican cuando ``status``
+      es la etapa correspondiente (BOUGHT/IN_TRANSIT/REGISTERED/SOLD); se
+      ignoran en cualquier otra transición.
     """
     deal = await service.transition(
         deal_id=deal_id,

@@ -1,6 +1,6 @@
 import type { Deal } from "@/app/services/deals";
 
-/** Valor inicial del input de oferta al pasar a OFFER. */
+/** Valor inicial del input de oferta al pasar a NEGOTIATING/WON. */
 export function offerPricePrefill(
   deal: Pick<Deal, "last_sim_purchase_price">
 ): string {

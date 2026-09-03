@@ -11,7 +11,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.database.manager import DatabaseManager
 
-db_manager = DatabaseManager(settings.database_url, echo=False)
+db_manager = DatabaseManager(
+    settings.database_url,
+    echo=False,
+    pool_size=settings.database_pool_size,
+    max_overflow=settings.database_max_overflow,
+    pool_timeout=settings.database_pool_timeout,
+    pool_pre_ping=settings.database_pool_pre_ping,
+)
 AsyncSessionLocal = db_manager.session_factory
 
 

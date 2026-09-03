@@ -135,6 +135,15 @@ class Settings(BaseSettings):
         return self
 
     @model_validator(mode="after")
+    def validate_es_data_mode(self) -> "Settings":
+        """Fail-fast si ES_DATA_MODE no es fixture|live (TASK 1)."""
+        if self.es_data_mode not in ("fixture", "live"):
+            raise ValueError(
+                f"ES_DATA_MODE inválido: '{self.es_data_mode}'. Debe ser 'fixture' o 'live'."
+            )
+        return self
+
+    @model_validator(mode="after")
     def validate_cors_for_env(self) -> "Settings":
         """Enforce strict CORS defaults for production (SEC-001).
 
@@ -187,16 +196,9 @@ class Settings(BaseSettings):
     rate_limit_readonly: int = 10
     password_reset_token_expire_hours: int = 1
 
-    # Redis configuration
-    redis_url: str = ""
-    redis_password: str = ""
-
     # API Key configuration
     api_key_prefix: str = "abp_live"
     api_key_length: int = 32
-
-    # Audit configuration
-    audit_retention_days: int = 365
 
     # Provider HTTP client configuration
     provider_http_timeout: float = 30.0
@@ -213,11 +215,36 @@ class Settings(BaseSettings):
     # Delay mínimo entre peticiones (ms). 0 = off. Prod: 800–1500
     provider_http_min_delay_ms: int = 0
 
+    # SEARCH.ORCH.1 — concurrencia y límites del SearchOrchestrator.
+    search_provider_timeout: float = 60.0
+    """Timeout (segundos) por provider en el orquestador. Cubre la descarga
+    completa del provider incluidos reintentos HTTP con backoff; evita que un
+    provider colgado bloquee la búsqueda entera. <= 0 = sin timeout."""
+    search_max_concurrent_analyses: int = 4
+    """Máximo de análisis de vehículos concurrentes (scoring/mercado/profit).
+    El estimador de mercado puede golpear providers externos, así que se acota
+    con semáforo para no multiplicar el tráfico saliente."""
+    search_cache_enabled: bool = False
+    """Caché Redis de respuestas POST /search (fail-soft). Desactivada por
+    defecto para no servir resultados congelados en uso personal."""
+    search_cache_ttl: int = 300
+    """TTL en segundos de la caché de respuestas de búsqueda."""
+
     # mobile.de (CRIT.001). Fuente secundaria opcional. Sin proxy residencial
     # (PROVIDER_HTTP_PROXY) la mayoría de IPs reciben 403 anti-bot. Por
     # defecto desactivado para evitar retries en fuentes caídas; activar
     # solo cuando haya proxy disponible. AutoScout24 DE es primaria.
     enable_mobile_de: bool = False
+
+    # Playwright para mobile.de (browser headless). No requiere cuenta.
+    # Si True, mobile.de intenta primero con Playwright (JS completo, bypass
+    # parcial de anti-bot estático) y cae a httpx si falla o no está instalado.
+    # Sin cuenta externa; solo `playwright install chromium` en Docker/CI.
+    enable_mobile_de_playwright: bool = False
+    """Si True, mobile.de usa Playwright headless como transporte principal."""
+    playwright_timeout_ms: int = 30000
+    """Timeout de navegación Playwright (ms)."""
+    playwright_headless: bool = True
 
     # =========================================================================
     # Scheduler / Jobs configuration
@@ -293,11 +320,32 @@ class Settings(BaseSettings):
     Valores: DEFAULT, SPAIN, PORTUGAL, GERMANY, FRANCE (o alias ES, PT, DE, FR)."""
 
     # =========================================================================
-    # Mercado destino ES (fixtures offline; sin HTTP)
+    # Mercado destino ES — contrato explícito fixture vs live (TASK 1)
     # =========================================================================
+    # TASK 1 — modo explícito del pipeline de datos ES
+    es_data_mode: str = "fixture"
+    """Modo del pipeline de comparables españoles: "fixture" | "live".
+
+    Es el contrato maestro: manda sobre los flags de fixtures ES de abajo
+    (``enable_es_market_fixture``, ``enable_coches_net_fixture``,
+    ``enable_coches_net_html_fixture``) y sobre el auto-registro por perfil
+    SPAIN/ES.
+
+    - "fixture" (default): registra los providers offline es_market_fixture /
+      coches_net_fixture / coches_net_html_fixture (datos SIMULADOS, sin HTTP).
+      Solo dev/test. Loggea un WARNING visible al arrancar; /health expone
+      ``es_data_mode`` para que la UI muestre banner de "datos de demostración".
+    - "live": los fixtures ES NO se registran bajo ninguna circunstancia.
+      TASK 2 registra aquí el provider coches_net real (scraping con
+      degradación explícita: nunca cae a fixtures en silencio).
+
+    Valor inválido → RuntimeError en el startup (fail-fast, mismo espíritu
+    que JWT_SECRET_KEY).
+    """
+
     # Si True, registra provider es_market_fixture en ProviderRegistry al arrancar / en DI.
     # Además, cuando el perfil de costes destino es SPAIN/ES, se auto-registra
-    # sin necesidad de activar este flag.
+    # sin necesidad de activar este flag. Ignorado si ES_DATA_MODE=live.
     enable_es_market_fixture: bool = False
     disable_es_market_auto: bool = False
     """Si True, desactiva el auto-registro de fixtures ES por perfil SPAIN."""
@@ -330,6 +378,7 @@ class Settings(BaseSettings):
     # Además, cuando el perfil de costes destino es SPAIN/ES, se auto-registra
     # sin necesidad de activar este flag SALVO que el provider real esté
     # activo (enable_coches_net), en cuyo caso el real tiene prioridad.
+    # Ignorado si ES_DATA_MODE=live.
     enable_coches_net_fixture: bool = False
     """Si True, registra provider coches_net_fixture (comparables ES offline)."""
 
@@ -373,9 +422,27 @@ class Settings(BaseSettings):
     max_log_body_size: int = 4096
     enable_access_log: bool = True
 
+    # Security hardening
+    security_headers_enabled: bool = True
+    """Si True, inyecta cabeceras de seguridad (X-Content-Type-Options, etc.)."""
+
+    trusted_hosts: str = ""
+    """Lista separada por comas de hosts confiables en producción. Vacío = deshabilitado."""
+
     @property
-    def database_url_for_environment(self) -> str:
-        return self.database_url
+    def trusted_hosts_list(self) -> list[str]:
+        """Convierte la cadena de trusted hosts en una lista."""
+        return [h.strip() for h in self.trusted_hosts.split(",") if h.strip()]
+
+    # Database pool tuning (parametrizable por env, antes hardcodeado en manager)
+    database_pool_size: int = 5
+    database_max_overflow: int = 10
+    database_pool_timeout: float = 30.0
+    database_pool_pre_ping: bool = True
+
+    # Redis tuning
+    redis_socket_timeout: float = 2.0
+    """Timeout de socket Redis (s)."""
 
     @property
     def cors_origins_list(self) -> list[str]:

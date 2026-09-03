@@ -8,6 +8,8 @@ sin fila real fallarían. La fila se crea una sola vez y se reutiliza.
 
 from __future__ import annotations
 
+from sqlalchemy.exc import IntegrityError
+
 from app.core.local_user import (
     LOCAL_USER_EMAIL,
     LOCAL_USER_FULL_NAME,
@@ -39,5 +41,14 @@ class PersonalUserService:
             is_verified=True,
             role=Role.ADMIN,
         )
-        await self.repository.create(user)
+        try:
+            await self.repository.create(user)
+        except IntegrityError:
+            # Carrera benigna (primer arranque con peticiones simultáneas): otra
+            # request ya insertó la fila. Rollback y reutilizar la existente.
+            await self.repository.session.rollback()
+            existing = await self.repository.get_by_email(LOCAL_USER_EMAIL)
+            if existing is None:
+                raise
+            return existing
         return user

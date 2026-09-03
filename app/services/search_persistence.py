@@ -15,6 +15,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.deal import ACTIVE_STATUSES, Deal, DealStatus
 from app.models.opportunity import Opportunity
 from app.models.vehicle import Vehicle
 from app.models.vehicle_evaluation import VehicleEvaluation
@@ -78,7 +79,10 @@ class SearchPersistenceService:
                     saved += 1
 
                     await self._upsert_evaluation(vehicle.id, search_result)
-                    await self._upsert_opportunity(vehicle.id, search_result)
+                    opp = await self._upsert_opportunity(vehicle.id, search_result)
+                    # Pipeline OPPORTUNITY→DEAL: auto-crea Deal en NEW si BUY y no existe activo
+                    if opp is not None:
+                        await self._ensure_deal(user_id, vehicle.id, opp)
             except Exception:
                 failed += 1
                 logger.warning(
@@ -237,33 +241,131 @@ class SearchPersistenceService:
     # Oportunidades
     # ------------------------------------------------------------------
 
-    async def _upsert_opportunity(self, vehicle_id: str, search_result: Any) -> None:
+    async def _upsert_opportunity(self, vehicle_id: str, search_result: Any) -> Opportunity | None:
         opportunity = getattr(search_result, "opportunity", None)
         if opportunity is None:
-            return
+            return None
 
-        result = await self.session.execute(
-            select(Opportunity)
-            .where(Opportunity.vehicle_id == vehicle_id)
-            .order_by(Opportunity.created_at.desc())
-            .limit(1)
-        )
-        opp = result.scalar_one_or_none()
-        if opp is None:
-            opp = Opportunity(vehicle_id=vehicle_id)
+        # Validate critical data before creating/updating opportunity
+        if not self._validate_opportunity_data(vehicle_id, search_result, opportunity):
+            logger.warning(
+                "Skipping opportunity creation for vehicle %s: critical data missing",
+                vehicle_id,
+            )
+            return None
 
+        # Build Opportunity object with all data
         rec = getattr(opportunity, "recommendation", None)
-        opp.opportunity_score = (
-            getattr(opportunity, "overall_score", None) or opp.opportunity_score
-        )
-        opp.recommendation = (
-            rec.value if hasattr(rec, "value") else _stringify(rec)
-        ) or opp.recommendation
-        opp.roi = getattr(opportunity, "roi", None) or opp.roi
-        opp.risk = getattr(opportunity, "risk_level", None) or opp.risk
-        opp.profit = getattr(opportunity, "estimated_profit", None) or opp.profit
-        confidence = getattr(opportunity, "confidence", None)
-        opp.confidence = confidence if confidence is not None else opp.confidence
-        opp.analyzed_at = datetime.now(UTC)
+        risk_level = getattr(opportunity, "risk_level", None)
 
-        self.session.add(opp)
+        opp = Opportunity(
+            vehicle_id=vehicle_id,
+            opportunity_score=getattr(opportunity, "overall_score", None),
+            recommendation=rec.value if hasattr(rec, "value") else _stringify(rec),
+            roi=getattr(opportunity, "roi", None),
+            risk=risk_level.value if hasattr(risk_level, "value") else _stringify(risk_level),
+            profit=getattr(opportunity, "estimated_profit", None),
+            confidence=getattr(opportunity, "confidence", None),
+            analyzed_at=datetime.now(UTC),
+            engine_version=getattr(opportunity, "engine_version", None),
+        )
+
+        # Use repository to upsert (prevents duplicates)
+        from app.repositories.opportunity_repository import OpportunityRepository
+
+        repo = OpportunityRepository(self.session)
+        opp = await repo.upsert_opportunity(opp)
+
+        # Seed workflow phases for this opportunity
+        from app.services.opportunity_phase_service import OpportunityPhaseService
+
+        phase_service = OpportunityPhaseService(self.session)
+        await phase_service.ensure_seeded(opp)
+
+        return opp
+
+    def _validate_opportunity_data(
+        self, vehicle_id: str, search_result: Any, opportunity: Any
+    ) -> bool:
+        """Valida que los datos críticos estén presentes antes de persistir una oportunidad.
+
+        Criterios:
+        - El vehículo debe tener precio
+        - El opportunity score debe ser un número válido
+        - Debe haber recomendación
+        - Debe haber nivel de riesgo
+        - El beneficio y ROI deben estar calculados
+        """
+        # Validar que el vehículo tiene precio
+        vehicle = getattr(search_result, "vehicle", None)
+        if vehicle is None:
+            logger.debug("Vehicle missing for vehicle_id=%s", vehicle_id)
+            return False
+
+        vehicle_price = getattr(vehicle, "price", None)
+        if vehicle_price is None or vehicle_price <= 0:
+            logger.debug("Vehicle price missing or invalid for vehicle_id=%s", vehicle_id)
+            return False
+
+        # Validar opportunity score
+        overall_score = getattr(opportunity, "overall_score", None)
+        if overall_score is None or not (0 <= overall_score <= 100):
+            logger.debug("Invalid opportunity score for vehicle_id=%s: %s", vehicle_id, overall_score)
+            return False
+
+        # Validar recomendación
+        recommendation = getattr(opportunity, "recommendation", None)
+        if recommendation is None:
+            logger.debug("Recommendation missing for vehicle_id=%s", vehicle_id)
+            return False
+
+        # Validar nivel de riesgo
+        risk_level = getattr(opportunity, "risk_level", None)
+        if risk_level is None:
+            logger.debug("Risk level missing for vehicle_id=%s", vehicle_id)
+            return False
+
+        # Validar que el profit analysis tiene datos
+        profit_analysis = getattr(search_result, "profit_analysis", None)
+        if profit_analysis is None:
+            logger.debug("Profit analysis missing for vehicle_id=%s", vehicle_id)
+            return False
+
+        roi = getattr(profit_analysis, "roi_percentage", None)
+        net_profit = getattr(profit_analysis, "net_profit", None)
+        if roi is None or net_profit is None:
+            logger.debug("ROI or net_profit missing for vehicle_id=%s", vehicle_id)
+            return False
+
+        return True
+
+    async def _ensure_deal(self, user_id: str, vehicle_id: str, opp: Opportunity) -> None:
+        """Crea Deal NEW si la oportunidad es BUY y no existe Deal activo."""
+        rec = (opp.recommendation or "").upper()
+        # Soporta BUY, BUY_NOW, BUY_NOW con texto o enum
+        is_buy = rec in {"BUY", "BUY_NOW"} or "BUY" in rec
+        if not is_buy:
+            return
+        # Evitar duplicados: solo si no hay Deal activo para esta oportunidad
+        from sqlalchemy import select as _select
+
+        active_statuses = [s.value for s in ACTIVE_STATUSES]
+        result = await self.session.execute(
+            _select(Deal).where(
+                Deal.user_id == str(user_id),
+                Deal.opportunity_id == opp.id,
+                Deal.status.in_(active_statuses),
+            )
+        )
+        if result.scalar_one_or_none() is not None:
+            return
+        deal = Deal(
+            user_id=str(user_id),
+            vehicle_id=vehicle_id,
+            opportunity_id=opp.id,
+            status=DealStatus.NEW,
+            notes=f"Auto-creado desde búsqueda: {opp.recommendation} (score {opp.opportunity_score})",
+        )
+        self.session.add(deal)
+        await self.session.flush()
+        logger.info("Deal auto-creado %s para opportunity %s (vehicle %s)", deal.id, opp.id, vehicle_id)

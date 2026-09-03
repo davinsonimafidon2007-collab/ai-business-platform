@@ -16,7 +16,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text, Uuid
+from sqlalchemy import DateTime, Float, ForeignKey, Index, Integer, String, Text, Uuid, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.config.inspection import (
@@ -40,6 +40,11 @@ class InspectionSession(Base):
     """
 
     __tablename__ = "inspection_sessions"
+    __table_args__ = (
+        Index("ix_inspection_sessions_vehicle_id", "vehicle_id"),
+        Index("ix_inspection_sessions_user_id", "user_id"),
+        Index("ix_inspection_sessions_created_at", "created_at"),
+    )
 
     id: Mapped[str] = mapped_column(
         Uuid(as_uuid=False), primary_key=True, default=lambda: str(uuid4())
@@ -47,18 +52,19 @@ class InspectionSession(Base):
     # TASK 9 (AUD-017): índices en las FKs más consultadas (antes ninguna
     # tabla de inspección tenía índice: InspectionObservationRepository.
     # get_by_session, InspectionPhotoRepository.get_by_session/
-    # get_by_observation escaneaban la tabla entera).
+    # get_by_observation escaneaban la tabla entera). Declarados en
+    # __table_args__ arriba (no también como index=True por columna: crear
+    # el mismo índice dos veces con el mismo nombre auto-generado rompe
+    # create_all en SQLite).
     vehicle_id: Mapped[str] = mapped_column(
         Uuid(as_uuid=False),
         ForeignKey("vehicles.id", ondelete="CASCADE"),
         nullable=False,
-        index=True,
     )
     user_id: Mapped[str] = mapped_column(
         Uuid(as_uuid=False),
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
-        index=True,
     )
     status: Mapped[str] = mapped_column(
         String(20),
@@ -91,11 +97,14 @@ class InspectionSession(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(UTC),
+        server_default=func.now(),
         nullable=False,
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(UTC),
+        server_default=func.now(),
+        onupdate=lambda: datetime.now(UTC),
         nullable=False,
     )
     completed_at: Mapped[datetime | None] = mapped_column(
@@ -194,6 +203,10 @@ class InspectionObservation(Base):
     """
 
     __tablename__ = "inspection_observations"
+    __table_args__ = (
+        Index("ix_inspection_observations_session_id", "session_id"),
+        Index("ix_inspection_observations_category_item", "session_id", "category_id", "item_id", unique=True),
+    )
 
     id: Mapped[str] = mapped_column(
         Uuid(as_uuid=False), primary_key=True, default=lambda: str(uuid4())
@@ -202,7 +215,6 @@ class InspectionObservation(Base):
         Uuid(as_uuid=False),
         ForeignKey("inspection_sessions.id", ondelete="CASCADE"),
         nullable=False,
-        index=True,
     )
     category_id: Mapped[str] = mapped_column(String(50), nullable=False)
     """ID de la categoría (ej: 'exterior'). Ref al catálogo estático."""
@@ -227,11 +239,14 @@ class InspectionObservation(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(UTC),
+        server_default=func.now(),
         nullable=False,
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(UTC),
+        server_default=func.now(),
+        onupdate=lambda: datetime.now(UTC),
         nullable=False,
     )
 
@@ -282,6 +297,10 @@ class InspectionPhoto(Base):
     """
 
     __tablename__ = "inspection_photos"
+    __table_args__ = (
+        Index("ix_inspection_photos_observation_id", "observation_id"),
+        Index("ix_inspection_photos_session_id", "session_id"),
+    )
 
     id: Mapped[str] = mapped_column(
         Uuid(as_uuid=False), primary_key=True, default=lambda: str(uuid4())
@@ -290,13 +309,11 @@ class InspectionPhoto(Base):
         Uuid(as_uuid=False),
         ForeignKey("inspection_observations.id", ondelete="CASCADE"),
         nullable=False,
-        index=True,
     )
     session_id: Mapped[str] = mapped_column(
         Uuid(as_uuid=False),
         ForeignKey("inspection_sessions.id", ondelete="CASCADE"),
         nullable=False,
-        index=True,
     )
 
     # Almacenamos la URL/ruta del archivo
@@ -327,6 +344,7 @@ class InspectionPhoto(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(UTC),
+        server_default=func.now(),
         nullable=False,
     )
 

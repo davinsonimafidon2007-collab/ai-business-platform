@@ -1,0 +1,24 @@
+# =============================================================================
+# docker-compose.dev.yml — overlay SOLO para desarrollo local.
+#
+# Añade lo que NO debe existir en un despliegue:
+#   - Bind-mount del repo sobre /app (hot-reload de código backend).
+#   - AUTH_DISABLED=true por defecto (uso personal sin login).
+#
+# Uso:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+#
+# Para no escribir los -f cada vez, añade esto al .env del proyecto:
+#   COMPOSE_FILE=docker-compose.yml:docker-compose.dev.yml
+#
+# (El frontend se sirve desde la imagen standalone; su hot-reload se hace con
+#  `npm run dev` en el host, no vía bind-mount.)
+# =============================================================================
+services:
+  api:
+    volumes:
+      - .:/app
+      - uploads_data:/app/uploads/inspection_photos
+    environment:
+      # Personal/local: sin login por defecto en desarrollo.
+      AUTH_DISABLED: "${AUTH_DISABLED:-true}"

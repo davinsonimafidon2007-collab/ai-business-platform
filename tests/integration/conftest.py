@@ -255,7 +255,16 @@ def pytest_configure(config: Any) -> None:
 
 @pytest.fixture(autouse=True)
 def check_postgres_availability(request: Any) -> None:
-    """Salta automáticamente los tests de integración si Postgres no está levantado."""
+    """Salta automáticamente los tests de integración si Postgres no está levantado.
+
+    TEST.INFRA.2: los tests de ``tests/integration/database/`` usan SQLite
+    en memoria (ver su conftest) y NO dependen de Postgres; el autouse del
+    padre los skippeaba injustamente (265 tests nunca se ejecutaban en una
+    máquina sin Postgres). Se excluyen por ruta.
+    """
     postgres_available = getattr(request.config, "postgres_available", True)
     if not postgres_available:
+        node_path = str(request.node.path).replace("\\", "/")
+        if "/tests/integration/database/" in node_path:
+            return
         pytest.skip("PostgreSQL is not running on 5432 (skipping integration tests)")

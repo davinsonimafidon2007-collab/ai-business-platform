@@ -37,17 +37,17 @@ describe("getApiBaseUrl (F1)", () => {
   it("ignores a garbage override", () => {
     window.localStorage.setItem(OVERRIDE_KEY, "garbage");
     // jsdom corre en http://localhost:3000 → rama navegador localhost
-    expect(getApiBaseUrl()).toBe("http://localhost:8000");
+    expect(getApiBaseUrl()).toBe("http://localhost:8001");
   });
 
   it("uses the emulator alias on native Android without override", () => {
     isNativePlatform.mockReturnValue(true);
     getPlatform.mockReturnValue("android");
-    expect(getApiBaseUrl()).toBe("http://10.0.2.2:8000");
+    expect(getApiBaseUrl()).toBe("http://10.0.2.2:8001");
   });
 
   it("falls back to localhost on browser", () => {
-    expect(getApiBaseUrl()).toBe("http://localhost:8000");
+    expect(getApiBaseUrl()).toBe("http://localhost:8001");
   });
 
   it("setApiBaseUrl persists for the next app start", () => {

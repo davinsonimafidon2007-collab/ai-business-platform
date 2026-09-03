@@ -1,7 +1,9 @@
 """Tests para Budget Search Agent y endpoint."""
+
 import pytest
 from fastapi.testclient import TestClient
 
+from app.agents.base import AgentValidationError
 from app.agents.budget_search_agent import BudgetSearchAgent
 from app.api.v1.dependencies import get_search_engine_service
 from app.dependencies.auth import get_current_user
@@ -45,41 +47,49 @@ class _FakeEngine:
 
 
 @pytest.mark.asyncio
-async def test_search_by_budget_runs_real_search_with_budget_max():
+async def test_budget_agent_runs_real_search_with_budget_max():
     engine = _FakeEngine()
     agent = BudgetSearchAgent(profile_name="SPAIN", search_engine=engine)
 
-    result = await agent.search_by_budget(
-        total_budget=15000, query="VW Golf", max_results=25
+    result = await agent.run(
+        {"total_budget": 15000, "query": "VW Golf", "max_results": 25, "profit_margin_min": 0}
     )
 
-    assert result["status"] == "ok"
-    assert result["max_purchase_price"] > 0
-    assert result["query"] == "VW Golf"
+    assert result.status == "ok"
+    assert result.max_purchase_price > 0
+    assert result.query == "VW Golf"
     assert len(engine.requests) == 1
     search_request = engine.requests[0]
-    assert search_request.budget_max == result["max_purchase_price"]
+    assert search_request.budget_max == result.max_purchase_price
     assert search_request.max_results == 25
 
 
 @pytest.mark.asyncio
-async def test_search_by_budget_without_engine_raises():
+async def test_budget_agent_without_engine_raises():
     agent = BudgetSearchAgent(profile_name="SPAIN")
 
-    with pytest.raises(ValueError, match="SearchEngineService"):
-        await agent.search_by_budget(total_budget=15000)
+    with pytest.raises(Exception, match="SearchEngineService"):
+        await agent.run({"total_budget": 15000})
 
 
 @pytest.mark.asyncio
-async def test_search_by_budget_too_low_returns_budget_too_low():
+async def test_budget_agent_budget_too_low_returns_status_without_search():
     engine = _FakeEngine()
     agent = BudgetSearchAgent(profile_name="SPAIN", search_engine=engine)
 
-    result = await agent.search_by_budget(total_budget=10)
+    result = await agent.run({"total_budget": 10})
 
-    assert result["status"] == "budget_too_low"
-    assert result["results"] == []
+    assert result.status == "budget_too_low"
+    assert result.results == []
     assert engine.requests == []
+
+
+@pytest.mark.asyncio
+async def test_budget_agent_validates_input():
+    agent = BudgetSearchAgent(profile_name="SPAIN", search_engine=_FakeEngine())
+
+    with pytest.raises(AgentValidationError):
+        await agent.run({"total_budget": -5})
 
 
 # =============================================================================
@@ -123,6 +133,7 @@ def test_budget_search_endpoint_runs_search(budget_search_api):
     assert payload["max_purchase_price"] > 0
     assert payload["query"] == "VW Golf"
     assert payload["results"] == []
+    assert payload["filtered_out_count"] == 0
     assert len(fake.requests) == 1
     assert fake.requests[0].budget_max == payload["max_purchase_price"]
 

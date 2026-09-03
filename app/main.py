@@ -7,7 +7,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 
 from app.api.v1.metrics import router as metrics_router
-from app.api.v1.mobile import router as mobile_router
 from app.api.v1.router import api_router
 from app.api.v1.routes.health import router as health_router
 from app.core.config import settings
@@ -23,6 +22,7 @@ from app.middleware.logging_middleware import AccessLogMiddleware
 from app.middleware.rate_limit_middleware import RateLimitMiddleware
 from app.middleware.redirect_https import HTTPSRedirectMiddleware
 from app.middleware.request_id import RequestIdMiddleware
+from app.middleware.trusted_hosts_middleware import TrustedHostsMiddleware
 
 setup_logging()
 
@@ -144,6 +144,14 @@ app.add_middleware(RequestIdMiddleware)
 if settings.environment != "development" or settings.https_redirect:
     app.add_middleware(HTTPSRedirectMiddleware)
 
+if settings.security_headers_enabled:
+    from app.middleware.security_middleware import SecurityHeadersMiddleware
+
+    app.add_middleware(SecurityHeadersMiddleware)
+
+if settings.environment == "production" and settings.trusted_hosts.strip():
+    app.add_middleware(TrustedHostsMiddleware)
+
 # Configuración CORS (debe ser el último middleware añadido, primero en ejecutarse)
 app.add_middleware(
     CORSMiddleware,
@@ -154,10 +162,9 @@ app.add_middleware(
 )
 
 app.include_router(api_router, prefix="/api/v1")
-app.include_router(mobile_router, prefix="/api/v1")
-# Health compuesto (DB + Redis) también en raíz para el healthcheck de Docker.
+# Health y métricas en raíz para healthcheck Docker / scraping Prometheus.
+# api_router ya expone /api/v1/health y /api/v1/metrics; aquí solo raíz.
 app.include_router(health_router)
-# Métricas Prometheus públicas (scraping interno perfil obs; Bloque 6).
 app.include_router(metrics_router)
 
 

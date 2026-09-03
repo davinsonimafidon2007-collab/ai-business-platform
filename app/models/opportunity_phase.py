@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
-from sqlalchemy import DateTime, Enum, ForeignKey, String, Text, Uuid
+from sqlalchemy import DateTime, Enum, ForeignKey, Index, String, Text, Uuid, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
@@ -24,6 +24,10 @@ _PHASE_STATUS = Enum(
 
 class OpportunityPhase(Base):
     __tablename__ = "opportunity_phases"
+    __table_args__ = (
+        Index("ix_opportunity_phases_opportunity_id", "opportunity_id"),
+        Index("ix_opportunity_phases_opportunity_order", "opportunity_id", "order", unique=True),
+    )
 
     id: Mapped[str] = mapped_column(
         Uuid(as_uuid=False),
@@ -41,9 +45,10 @@ class OpportunityPhase(Base):
         _PHASE_STATUS,
         nullable=False,
         default="pending",
+        server_default="pending",
     )
     agent: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    order: Mapped[int] = mapped_column(nullable=False, default=0)
+    order: Mapped[int] = mapped_column(nullable=False, default=0, server_default="0")
     started_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
@@ -54,11 +59,13 @@ class OpportunityPhase(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(UTC),
+        server_default=func.now(),
         nullable=False,
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(UTC),
+        server_default=func.now(),
         onupdate=lambda: datetime.now(UTC),
         nullable=False,
     )

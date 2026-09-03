@@ -19,6 +19,11 @@ Perfiles disponibles (nombre canónico → uso):
 Uso típico en el negocio DE→ES:
     analyzer.analyze(vehicle, profile_name="SPAIN")  # o "ES"
 
+Moneda: todos los importes están en EUR. El perfil SPAIN aplica además el
+IEDMT (``applies_iedmt=True``) cuando hay datos de CO₂; el resto de perfiles
+no lo aplican (cada país tiene su impuesto de matriculación reflejado en
+``registration_cost``).
+
 Para añadir un país, añade el perfil al archivo versionado
 ``import_costs_data.json`` y añade el alias correspondiente si procede.
 
@@ -105,10 +110,22 @@ class ImportCostProfile:
     """Beneficio neto por debajo de este valor (EUR) contribuye a riesgo alto."""
 
     risk_high_cost_ratio_threshold: float
-    """Ratio coste total / precio de compra por encima del cual los costes son altos."""
+    """Ratio (costes de importación excluyendo compra) / precio de compra por
+    encima del cual los costes se consideran altos.
+
+    Definición exacta usada por ProfitAnalyzer:
+        cost_ratio = (total_cost - purchase_price) / purchase_price
+    (los umbrales del perfil DEFAULT son legacy y están calibrados con esta
+    misma definición; ver COST_RATIO_THRESHOLD_MAX)."""
 
     risk_low_cost_ratio_threshold: float
-    """Ratio coste total / precio de compra por debajo del cual los costes son bajos."""
+    """Ratio (costes de importación excluyendo compra) / precio de compra por
+    debajo del cual los costes se consideran bajos."""
+
+    applies_iedmt: bool = False
+    """True si el destino del perfil aplica el IEDMT español sobre la compra
+    según emisiones CO₂. Solo SPAIN (destino España): el resto de destinos ya
+    incluyen su impuesto de matriculación en ``registration_cost``."""
 
     # -------------------------------------------------------------------------
     # Validación de rangos (fail-fast al cargar perfiles)
@@ -139,6 +156,7 @@ class ImportCostProfile:
             raise ValueError(
                 f"ImportCostProfile incompleto: falta el campo {exc.args[0]!r}."
             ) from exc
+        values["applies_iedmt"] = bool(data.get("applies_iedmt", False))
         return cls(**values)
 
     def validate(self) -> None:
@@ -279,6 +297,7 @@ SPAIN_PROFILE: Final[ImportCostProfile] = ImportCostProfile(
     risk_low_profit_threshold=700.0,
     risk_high_cost_ratio_threshold=0.30,
     risk_low_cost_ratio_threshold=0.12,
+    applies_iedmt=True,  # destino España: IEDMT por CO₂ sobre la compra
 )
 
 PORTUGAL_PROFILE: Final[ImportCostProfile] = ImportCostProfile(
@@ -373,6 +392,44 @@ ADDITIONAL_COSTS_CATEGORIES: Final[list[str]] = [
     "storage",
     "detailing",
 ]
+
+# -----------------------------------------------------------------------------
+# Parámetros económicos compartidos (ProfitAnalyzer ↔ negotiation ↔ API)
+# -----------------------------------------------------------------------------
+
+DEFAULT_TARGET_MARGIN_PERCENT: Final[float] = 15.0
+"""Margen porcentual objetivo sobre el precio de venta (0..100).
+
+Usado para calcular el ``target_sale_price`` (precio objetivo) y como
+``target_margin`` por defecto en el motor de negociación."""
+
+DEFAULT_SCENARIO_SPREAD_PERCENT: Final[float] = 10.0
+"""Desviación ±% aplicada al precio de venta para los escenarios de
+incertidumbre deterministas (pesimista / base / optimista)."""
+
+MIN_DESIRED_PROFIT_FRACTION: Final[float] = 0.5
+"""Fracción del beneficio neto estimado que se exige como beneficio mínimo
+deseado en la negociación (``minimum_desired_profit``)."""
+
+
+def resolve_profile_name(profile_name: str | None = None) -> str:
+    """Resuelve un nombre/alias de perfil a su nombre canónico.
+
+    Args:
+        profile_name: Nombre canónico o alias (ES, es, Spain, ...). ``None``
+            se trata como "DEFAULT".
+
+    Returns:
+        Nombre canónico en mayúsculas (p. ej. "ES" → "SPAIN").
+
+    Raises:
+        KeyError: Si el perfil no existe.
+    """
+    key = (profile_name or "DEFAULT").strip().upper()
+    key = PROFILE_ALIASES.get(key, key)
+    if key not in PROFILES:
+        get_profile(key)  # lanza KeyError con mensaje explicativo
+    return key
 
 
 def get_profile(profile_name: str = "DEFAULT") -> ImportCostProfile:

@@ -13,7 +13,9 @@ from app.api.v1.admin_api_keys import router as admin_api_keys_router
 from app.api.v1.admin_feature_flags import router as admin_feature_flags_router
 from app.api.v1.admin_metrics import router as admin_metrics_router
 from app.api.v1.admin_status import router as admin_status_router
+from app.api.v1.agents import router as agents_router
 from app.api.v1.api_keys import router as api_keys_router
+from app.api.v1.approvals import router as approvals_router
 from app.api.v1.auth import router as auth_router
 from app.api.v1.budget_search import router as budget_search_router
 from app.api.v1.dashboard import router as dashboard_router
@@ -30,6 +32,7 @@ from app.api.v1.search_orders import router as search_orders_router
 from app.api.v1.searches import router as searches_router
 from app.api.v1.users import router as users_router
 from app.api.v1.vehicles import router as vehicles_crud_router
+from app.api.v1.workflows import router as workflows_router
 
 api_router = APIRouter()
 
@@ -55,5 +58,8 @@ api_router.include_router(opportunities_router)
 api_router.include_router(deals_router)
 api_router.include_router(budget_search_router)
 api_router.include_router(notifications_router)
+api_router.include_router(workflows_router)
+api_router.include_router(agents_router)
+api_router.include_router(approvals_router)
 
 __all__ = ["api_router"]

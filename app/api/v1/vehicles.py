@@ -267,6 +267,7 @@ async def simulate_vehicle_profit(
             self.year = getattr(src, "year", None)
             self.mileage = getattr(src, "mileage", None)
             self.seller_type = getattr(src, "seller_type", None)
+            self.emissions = getattr(src, "emissions", None)
 
     seller_type = (
         body.seller_type if body.seller_type is not None else getattr(vehicle, "seller_type", None)
@@ -282,6 +283,8 @@ async def simulate_vehicle_profit(
     max_purchase_price = None
     max_purchase_price_binding = None
     try:
+        from app.services.iedmt import parse_co2_gkm
+
         max_price_result = profit_analyzer.calculate_max_purchase_price(
             analysis.estimated_sale_price,
             profile_name=body.profile_name,
@@ -289,6 +292,7 @@ async def simulate_vehicle_profit(
             min_roi_percentage=body.min_roi_percentage,
             risk_buffer_percentage=body.risk_buffer_percentage,
             seller_type=seller_type,
+            co2_gkm=parse_co2_gkm(getattr(vehicle, "emissions", None)),
         )
         max_purchase_price = max_price_result.max_purchase_price
         max_purchase_price_binding = max_price_result.binding_constraint

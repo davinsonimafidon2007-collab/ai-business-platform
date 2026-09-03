@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiGet, apiPatch, apiPost } from "@/app/services/api";
+import { apiGet, apiPatch } from "@/app/services/api";
 import { toastLoading, updateToast, dismissToast } from "@/app/store/toast";
 import { handleApiError } from "./useApiError";
 
@@ -110,7 +110,7 @@ export function useApprovePhase() {
         queryClient.invalidateQueries({ queryKey: ["opportunity", variables.opportunityId] }),
         queryClient.invalidateQueries({ queryKey: ["opportunities"] }),
         queryClient.invalidateQueries({ queryKey: ["approvals"] }),
-        queryClient.invalidateQueries({ queryKey: ["dashboard"] }),
+        queryClient.invalidateQueries({ queryKey: ["dashboardStats"] }),
       ]);
     },
 

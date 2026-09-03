@@ -21,8 +21,15 @@ if TYPE_CHECKING:
 from fastapi import Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.agents.alert_agent import AlertAgent
+from app.agents.budget_search_agent import BudgetSearchAgent
+from app.agents.negotiation_agent import NegotiationAgent
+from app.agents.opportunity_agent import OpportunityAgent
+from app.agents.scoring_agent import ScoringAgent
+from app.agents.search_agent import SearchAgent
 from app.core.config import settings
 from app.database import get_db_session
+from app.orchestrator.pipeline import PipelineOrchestrator
 from app.providers.autoscout24 import AutoScout24Provider
 from app.providers.base import VehicleProvider
 from app.providers.http_client import ProviderHttpClient
@@ -141,12 +148,10 @@ def get_market_estimator(
 
 
 def get_mobile_de_provider() -> MobileDeProvider:
-    """Provider mobile.de con cliente HTTP anti-bot unificado (settings-driven).
+    """Provider mobile.de con Playwright opcional (sin cuenta, settings-driven).
 
-    El ``ProviderHttpClient`` aplica proxy/cookies/delay desde ``settings``
-    (``PROVIDER_HTTP_PROXY`` / ``PROVIDER_HTTP_COOKIES`` /
-    ``PROVIDER_HTTP_MIN_DELAY_MS``) de forma centralizada — un solo camino
-    de red para todos los providers.
+    Si ``enable_mobile_de_playwright=true`` y ``playwright`` está instalado,
+    usa browser headless (JS, bypass parcial anti-bot). Fallback a httpx.
     """
     client = ProviderHttpClient(
         provider_name="mobile_de",
@@ -154,6 +159,15 @@ def get_mobile_de_provider() -> MobileDeProvider:
         timeout=settings.provider_http_timeout,
         max_retries=settings.provider_http_max_retries,
     )
+    if getattr(settings, "enable_mobile_de_playwright", False):
+        try:
+            from app.providers.mobile_de_playwright import MobileDePlaywrightProvider
+
+            return MobileDePlaywrightProvider(
+                http_client=client, base_url="https://suchen.mobile.de"
+            )  # type: ignore[return-value]
+        except ImportError:
+            pass
     return MobileDeProvider(http_client=client, base_url="https://suchen.mobile.de")
 
 
@@ -188,6 +202,19 @@ def get_autoscout24_es_provider() -> AutoScout24EsProvider:
         http_client=client,
         base_url="https://www.autoscout24.es",
     )
+
+
+def get_coches_net_provider():
+    """Provider Coches.net live (HTTP scraping real)."""
+    from app.providers.coches_net import CochesNetProvider
+
+    client = ProviderHttpClient(
+        provider_name="coches_net",
+        base_url="https://www.coches.net",
+        timeout=settings.provider_http_timeout,
+        max_retries=settings.provider_http_max_retries,
+    )
+    return CochesNetProvider(http_client=client, base_url="https://www.coches.net")
 
 
 # =============================================================================
@@ -240,6 +267,7 @@ def get_vision_provider():
     """
     if settings.gemini_api_key:
         from app.providers.gemini_vision import GeminiVisionProvider
+
         return GeminiVisionProvider(
             api_key=settings.gemini_api_key,
             model=settings.gemini_model,
@@ -268,12 +296,15 @@ def get_vehicle_evaluation_repository(
 ) -> VehicleEvaluationRepository:
     """Obtiene el repositorio de evaluaciones de vehículos."""
     from app.repositories.vehicle_evaluation_repository import VehicleEvaluationRepository
+
     return VehicleEvaluationRepository(session)
 
 
 def get_inspection_service(
     session_repo: InspectionSessionRepository = Depends(get_inspection_session_repository),
-    observation_repo: InspectionObservationRepository = Depends(get_inspection_observation_repository),
+    observation_repo: InspectionObservationRepository = Depends(
+        get_inspection_observation_repository
+    ),
     photo_repo: InspectionPhotoRepository = Depends(get_inspection_photo_repository),
     vision_service: VisionService = Depends(get_vision_service),
     evaluation_repo: VehicleEvaluationRepository = Depends(get_vehicle_evaluation_repository),
@@ -332,6 +363,52 @@ def get_search_engine_service(
 
 
 # =============================================================================
+# Agents (AUDIT.AGENTS.1) — capa fina de orquestación sobre los services
+# =============================================================================
+
+
+def get_search_agent(
+    search_engine: SearchEngineService = Depends(get_search_engine_service),
+) -> SearchAgent:
+    """Obtiene el agent SEARCH cableado al motor de búsqueda real."""
+    return SearchAgent(search_engine=search_engine)
+
+
+def get_scoring_agent() -> ScoringAgent:
+    """Obtiene el agent SCORE (VehicleScorer real)."""
+    return ScoringAgent()
+
+
+def get_opportunity_agent() -> OpportunityAgent:
+    """Obtiene el agent OPPORTUNITY (OpportunityFinder real)."""
+    return OpportunityAgent()
+
+
+def get_negotiation_agent() -> NegotiationAgent:
+    """Obtiene el agent NEGOTIATE (NegotiationEngine real)."""
+    return NegotiationAgent()
+
+
+def get_alert_agent() -> AlertAgent:
+    """Obtiene el agent ALERT (reglas umbral)."""
+    return AlertAgent()
+
+
+def get_budget_search_agent(
+    search_engine: SearchEngineService = Depends(get_search_engine_service),
+) -> BudgetSearchAgent:
+    """Obtiene el agent de búsqueda por presupuesto cableado al motor real."""
+    return BudgetSearchAgent(search_engine=search_engine)
+
+
+def get_pipeline_orchestrator(
+    search_engine: SearchEngineService = Depends(get_search_engine_service),
+) -> PipelineOrchestrator:
+    """Obtiene el orquestador del pipeline SEARCH → ALERT con agents reales."""
+    return PipelineOrchestrator(search_engine=search_engine)
+
+
+# =============================================================================
 # Provider lookup for vehicle detail endpoint
 # =============================================================================
 
@@ -356,4 +433,3 @@ def get_provider(provider_name: str) -> VehicleProvider:
             detail=f"Provider '{provider_name}' not found. "
             f"Available: {ProviderRegistry.list_providers()}",
         ) from exc
-

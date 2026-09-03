@@ -191,17 +191,18 @@ class CachedMarketRepository:
         Returns:
             Number of deleted records.
         """
+        from sqlalchemy import delete
+
         now = datetime.now(UTC)
+        # TEST.INFRA.2 fix: synchronize_session="auto" evalúa el criterio en
+        # Python y compara datetimes naive (SQLite) contra now aware →
+        # TypeError. Con False la comparación la hace el motor vía SQL.
         result = await self.session.execute(
-            select(CachedMarketData).where(
-                CachedMarketData.expires_at < now
-            )
+            delete(CachedMarketData).where(CachedMarketData.expires_at < now),
+            execution_options={"synchronize_session": False},
         )
-        expired = list(result.scalars().all())
-        for entry in expired:
-            await self.session.delete(entry)
         await self.session.commit()
-        return len(expired)
+        return result.rowcount or 0
 
     async def delete(self, market_data: CachedMarketData) -> None:
         """Deletes a cached market data entry.

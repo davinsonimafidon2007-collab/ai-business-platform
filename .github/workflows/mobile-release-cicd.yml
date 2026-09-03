@@ -1,10 +1,20 @@
 # =============================================================================
 # MOB-P3-001 — CI/CD automático para release móvil
+# MOBILE-HARDENING #2/#3/#8/#11 — revisión de producción
 # =============================================================================
 # Jobs:
-#   1. debug-apk       — Build APK debug en cada PR a main
-#   2. release-aab     — Build AAB release con keystore en tags v*
-#   3. firebase-dist   — Distribución a Firebase App Distribution (opcional)
+#   1. debug-apk       — Quality gate + APK debug en cada PR/push a main
+#   2. release-aab     — AAB firmado con secretos en tags v*
+#   3. firebase-dist   — Distribución a Firebase App Distribution (manual)
+#
+# Firma (MOBILE-HARDENING #2): mecanismo único. El keystore se decodifica a
+# android/app/release.keystore y se exporta KEYSTORE_FILE para que
+# signingConfigs.release (frontend/android/app/build.gradle) lo consuma
+# directamente. No se usan -Pandroid.injected.* ni credenciales en Git.
+#
+# Versión (MOBILE-HARDENING #8): VERSION en la raíz del repo es la fuente de
+# verdad; en tags vX.Y.Z se sobreescribe con la versión del tag antes del
+# build, y NEXT_PUBLIC_APP_VERSION se inyecta al export de Next.js.
 # =============================================================================
 name: Mobile Release CI/CD
 
@@ -14,6 +24,7 @@ on:
     tags: ["v*"]
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 env:
   NODE_VERSION: "22"
@@ -22,12 +33,15 @@ env:
 
 jobs:
   # ---------------------------------------------------------------------------
-  # JOB 1 — Debug APK (cada PR / push a main)
+  # JOB 1 — Debug APK (quality gate: cada PR / push a main)
   # ---------------------------------------------------------------------------
   debug-apk:
     name: Debug APK
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+    if: >-
+      github.event_name == 'pull_request' ||
+      github.ref == 'refs/heads/main' ||
+      github.event_name == 'workflow_dispatch'
 
     defaults:
       run:
@@ -58,10 +72,20 @@ jobs:
       - name: Run unit tests
         run: npm run test:run
 
+      - name: Capacitor config guard
+        run: npm run check:cap-config
+
+      - name: Resolve app version
+        run: |
+          APP_VERSION="$(cat ../VERSION 2>/dev/null || echo '0.0.0')"
+          echo "APP_VERSION=${APP_VERSION}" >> "$GITHUB_ENV"
+          echo "Versión de build: ${APP_VERSION}"
+
       - name: Build Next.js export
-        run: npm run export
+        run: BUILD_TARGET=capacitor npm run export
         env:
           NEXT_PUBLIC_API_URL: ${{ vars.API_URL || 'http://10.0.2.2:8000' }}
+          NEXT_PUBLIC_APP_VERSION: ${{ env.APP_VERSION }}
 
       - name: Sync Capacitor
         run: npx cap sync android
@@ -72,12 +96,17 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleDebug
 
+      - name: Verify debug APK exists
+        run: |
+          APK="android/app/build/outputs/apk/debug/app-debug.apk"
+          test -s "$APK" || { echo "::error::No se generó ${APK}"; exit 1; }
+          ls -la android/app/build/outputs/apk/debug/
+
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
           name: app-debug
           path: ${{ env.FRONTEND_DIR }}/android/app/build/outputs/apk/debug/
-
 
   # ---------------------------------------------------------------------------
   # JOB 2 — Release AAB (tags v*)
@@ -110,14 +139,42 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # MOBILE-HARDENING #8: el tag vX.Y.Z manda sobre el archivo VERSION.
+      - name: Pin VERSION to tag
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          echo "${TAG}" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || {
+            echo "::error::El tag '${GITHUB_REF_NAME}' no es SemVer vX.Y.Z"; exit 1; }
+          printf '%s\n' "${TAG}" > ../VERSION
+          echo "APP_VERSION=${TAG}" >> "$GITHUB_ENV"
+
+      - name: Capacitor config guard
+        run: npm run check:cap-config
+
+      - name: Run unit tests
+        run: npm run test:run
+
+      # Producción: WebView HTTPS obligatorio (ver capacitor.config.ts).
       - name: Build Next.js export (production)
-        run: npm run export
+        run: BUILD_TARGET=capacitor npm run export
+        env:
+          NEXT_PUBLIC_API_URL: ${{ secrets.API_URL }}
+          NEXT_PUBLIC_APP_VERSION: ${{ env.APP_VERSION }}
+          CAPACITOR_ANDROID_SCHEME: https
+
+      - name: Guard — NEXT_PUBLIC_API_URL definido en release
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          test -n "$NEXT_PUBLIC_API_URL" || {
+            echo "::error::Falta secret/variable API_URL: el AAB de release apuntaría a una URL vacía"; exit 1; }
         env:
           NEXT_PUBLIC_API_URL: ${{ secrets.API_URL }}
 
       - name: Sync Capacitor
         run: npx cap sync android
 
+      # MOBILE-HARDENING #2: firma exclusivamente desde secrets de GH Actions.
+      # KEYSTORE_FILE lo consume signingConfigs.release en app/build.gradle.
       - name: Build release AAB
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
@@ -125,14 +182,26 @@ jobs:
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
+          test -n "$KEYSTORE_BASE64" || { echo "::error::Falta secret KEYSTORE_BASE64"; exit 1; }
+          test -n "$KEYSTORE_PASSWORD" || { echo "::error::Falta secret KEYSTORE_PASSWORD"; exit 1; }
+          test -n "$KEY_ALIAS" || { echo "::error::Falta secret KEY_ALIAS"; exit 1; }
+          test -n "$KEY_PASSWORD" || { echo "::error::Falta secret KEY_PASSWORD"; exit 1; }
           echo "$KEYSTORE_BASE64" | base64 -d > android/app/release.keystore
+          export KEYSTORE_FILE="$PWD/android/app/release.keystore"
           cd android
           chmod +x gradlew
-          ./gradlew bundleRelease \
-            -Pandroid.injected.signing.store.file=app/release.keystore \
-            -Pandroid.injected.signing.store.password="$KEYSTORE_PASSWORD" \
-            -Pandroid.injected.signing.key.alias="$KEY_ALIAS" \
-            -Pandroid.injected.signing.key.password="$KEY_PASSWORD"
+          ./gradlew bundleRelease
+
+      # MOBILE-HARDENING #3: validar que el artefacto existe ANTES de subirlo.
+      - name: Verify release AAB exists and is signed
+        run: |
+          AAB="android/app/build/outputs/bundle/release/app-release.aab"
+          test -s "$AAB" || { echo "::error::No se generó ${AAB}"; exit 1; }
+          UNSIGNED="android/app/build/outputs/bundle/release/app-release-unsigned.aab"
+          if [ ! -f "$AAB" ] && [ -f "$UNSIGNED" ]; then
+            echo "::error::El bundle salió SIN FIRMAR (revisar secrets KEYSTORE_*)"; exit 1;
+          fi
+          ls -la android/app/build/outputs/bundle/release/
 
       - name: Upload release AAB
         uses: actions/upload-artifact@v4
@@ -147,7 +216,7 @@ jobs:
           generate_release_notes: true
 
   # ---------------------------------------------------------------------------
-  # JOB 3 — Firebase App Distribution (opcional, manual trigger)
+  # JOB 3 — Firebase App Distribution (disparo manual)
   # ---------------------------------------------------------------------------
   firebase-dist:
     name: Firebase Distribution
@@ -177,10 +246,22 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Capacitor config guard
+        run: npm run check:cap-config
+
+      - name: Resolve app version
+        run: |
+          APP_VERSION="$(cat ../VERSION 2>/dev/null || echo '0.0.0')"
+          echo "APP_VERSION=${APP_VERSION}" >> "$GITHUB_ENV"
+
+      # Producción: WebView HTTPS obligatorio.
       - name: Build export + Sync
         run: |
-          npm run export
+          BUILD_TARGET=capacitor npm run export
           npx cap sync android
+        env:
+          NEXT_PUBLIC_APP_VERSION: ${{ env.APP_VERSION }}
+          CAPACITOR_ANDROID_SCHEME: https
 
       - name: Build release AAB
         env:
@@ -189,14 +270,21 @@ jobs:
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
+          test -n "$KEYSTORE_BASE64" || { echo "::error::Falta secret KEYSTORE_BASE64"; exit 1; }
+          test -n "$KEYSTORE_PASSWORD" || { echo "::error::Falta secret KEYSTORE_PASSWORD"; exit 1; }
+          test -n "$KEY_ALIAS" || { echo "::error::Falta secret KEY_ALIAS"; exit 1; }
+          test -n "$KEY_PASSWORD" || { echo "::error::Falta secret KEY_PASSWORD"; exit 1; }
           echo "$KEYSTORE_BASE64" | base64 -d > android/app/release.keystore
+          export KEYSTORE_FILE="$PWD/android/app/release.keystore"
           cd android
           chmod +x gradlew
-          ./gradlew bundleRelease \
-            -Pandroid.injected.signing.store.file=app/release.keystore \
-            -Pandroid.injected.signing.store.password="$KEYSTORE_PASSWORD" \
-            -Pandroid.injected.signing.key.alias="$KEY_ALIAS" \
-            -Pandroid.injected.signing.key.password="$KEY_PASSWORD"
+          ./gradlew bundleRelease
+
+      # MOBILE-HARDENING #3: no intentar distribuir si el artefacto no existe.
+      - name: Verify release AAB before distribution
+        run: |
+          AAB="android/app/build/outputs/bundle/release/app-release.aab"
+          test -s "$AAB" || { echo "::error::No se generó ${AAB}; nada que distribuir"; exit 1; }
 
       - name: Upload to Firebase App Distribution
         uses: wzieba/Firebase-Distribution-Github-Action@v1
@@ -205,4 +293,3 @@ jobs:
           serviceCredentialsFileContent: ${{ secrets.FIREBASE_CREDENTIALS_JSON }}
           groups: qa-team
           file: ${{ env.FRONTEND_DIR }}/android/app/build/outputs/bundle/release/app-release.aab
-

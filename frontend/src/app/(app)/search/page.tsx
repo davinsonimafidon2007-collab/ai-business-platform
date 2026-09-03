@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { Suspense, useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useMutation } from "@tanstack/react-query";
 import { useSearchParams } from "next/navigation";
@@ -52,6 +52,14 @@ function searchErrorMessage(err: unknown): { title: string; detail: string; hint
 }
 
 export default function SearchPage() {
+  return (
+    <Suspense fallback={<div className="space-y-6"><SkeletonCard lines={4} /></div>}>
+      <SearchPageInner />
+    </Suspense>
+  );
+}
+
+function SearchPageInner() {
   const searchMutation = useSearchVehicles();
   const [selectedVehicle, setSelectedVehicle] = useState<SearchResultItem | null>(null);
   const [backgroundOrder, setBackgroundOrder] = useState<SearchOrder | null>(null);

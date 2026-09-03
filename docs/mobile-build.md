@@ -7,8 +7,8 @@ frontend (Next.js + Capacitor 6).
 
 - Node.js ≥ 18 y npm.
 - JDK 17 (Temurin recomendado: https://adoptium.net).
-- Android SDK con `cmdline-tools;latest`, `platform-tools`, `build-tools;34.0.0`
-  y `platforms;android-34`. Desde Android Studio:
+- Android SDK con `cmdline-tools;latest`, `platform-tools`, `build-tools;35.0.0`
+  y `platforms;android-36`. Desde Android Studio:
   *Settings > Languages & Frameworks > Android SDK*.
 - Variables de entorno (ver `frontend/.env.example`):
   - `NEXT_PUBLIC_API_URL` (obligatoria).
@@ -54,15 +54,37 @@ cd android
 
 Resultado: `frontend/android/app/build/outputs/apk/debug/app-debug.apk`.
 
+## Versionado (fuente única)
+
+- El archivo `VERSION` en la raíz del repo (SemVer: `X.Y.Z`) es la **única
+  fuente de versión** (MOB-P1-004):
+  - Android: `app/build.gradle` deriva `versionName = X.Y.Z` y
+    `versionCode = X*1000000 + Y*1000 + Z`.
+  - Backend: `app/api/v1/mobile.py` lo lee como fallback para el endpoint de
+    update-check.
+  - Web: `next.config.ts` lo inyecta como `NEXT_PUBLIC_APP_VERSION` en build.
+- En CI release, la versión se fija desde el tag `vX.Y.Z` (job `release`
+  reescribe `VERSION` con `git describe`). No editar `VERSION` a mano antes de
+  un release por tag.
+
 ## Release (firma)
 
-- El keystore de release **no se commitea** (SEC-001). Está en `.gitignore`
-  (`android/app/*.keystore`, `android/app/keystore.properties`).
-- Para un APK firmado: crea el keystore, define
-  `android/app/keystore.properties` y ejecuta:
+- El keystore de release **no se commitea**. `.gitignore` cubre
+  `frontend/android/keystore/`, `*.jks`, `*.keystore`,
+  `frontend/android/keystore.properties` y `frontend/android/app/release.keystore`.
+- Firma unificada (MOB-P1-006): `signingConfigs.release` resuelve credenciales
+  en este orden:
+  1. `frontend/android/keystore.properties` con las claves
+     `storeFile`, `storePassword`, `keyAlias`, `keyPassword` (local).
+     Rutas relativas se resuelven contra `frontend/android/`.
+  2. Variables de entorno `KEYSTORE_FILE`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`,
+     `KEY_PASSWORD` (los mismos nombres que usan los secrets de GitHub Actions).
+  3. Sin credenciales: el build type `release` firma con la config debug y
+     emite un warning — útil para smoke tests, **no** publicar ese AAB.
+- Para un AAB firmado local:
   ```bash
   cd frontend/android
-  ./gradlew assembleRelease
+  ./gradlew bundleRelease
   ```
 - FCM y push **no funcionan en debug** (Firebase requiere `google-services.json`
   + `SHA-1` de la firma registrado en Firebase Console). Ver
@@ -70,17 +92,41 @@ Resultado: `frontend/android/app/build/outputs/apk/debug/app-debug.apk`.
 
 ## Deep links (App Links)
 
-- Config en `frontend/capacitor.config.ts` → `server.allowNavigation` y el
-  intent-filter en `AndroidManifest.xml`.
+- Host productivo único: **`aibusiness.app`** (autoVerify). El filtro
+  `https://app.aibusiness.com` y el scheme inexistente `aibusiness.platform`
+  fueron eliminados del manifest (MOB-P1-009).
+- Config en `frontend/capacitor.config.ts` → `server.allowNavigation:
+  ["aibusiness.app"]`.
 - El `assetlinks.json` de producción está en `frontend/public/.well-known/`
-  con placeholders; sustituye `REPLACE_WITH_*` por el fingerprint SHA-256 real
-  de la firma antes de publicar (MOB-P1-009).
+  con placeholders; sustituye el fingerprint SHA-256 real de la firma antes de
+  publicar y verifica `https://aibusiness.app/.well-known/assetlinks.json`.
+- Parser (`use-deep-links.ts`): acepta `aibusiness://` y
+  `https://aibusiness.app`; soporta búsqueda en path
+  (`aibusiness://search/Toyota`) y queryParams; cold start vía
+  `App.getLaunchUrl()`. Cubierto por tests en
+  `src/__tests__/mobile/deep-links.test.ts`.
+
+## Seguridad de red
+
+- Release: cleartext HTTP **deshabilitado por completo**
+  (`network_security_config.xml` de `src/main`, MOB-P1-007).
+- Debug: overlay `src/debug/res/xml/network_security_config.xml` permite
+  cleartext solo para `10.0.2.2` y `localhost` (emulador/desarrollo).
+
+## CI/CD
+
+- Workflow: `.github/workflows/mobile-release-cicd.yml`
+  - `debug-apk`: quality gate (lint, vitest, check-cap-config, export,
+    `cap sync`, `assembleDebug`) + artefacto APK en cada push a `main`.
+  - `release`: manual (`workflow_dispatch`) o tag `vX.Y.Z`; fija VERSION,
+    decodifica secrets `KEYSTORE_*`, valida SemVer y verifica que el AAB no
+    esté vacío antes de subirlo a Firebase App Distribution.
 
 ## Validación
 
 - `npm run typecheck` (tsc --noEmit) debe pasar.
-- `npm test` (vitest) debe pasar.
+- `npm run test:run` (vitest) debe pasar.
 - `node scripts/check-capacitor-config.mjs` debe salir 0.
 - En emulador: la API local se alcanza vía `http://10.0.2.2:8001`
-  (host virtualizado de Android). El `network_security_config.xml` permite
-  cleartext solo para `10.0.2.2` y `localhost` (desarrollo).
+  (host virtualizado de Android). Permitido únicamente por el overlay debug;
+  el binario de release rechaza cualquier tráfico cleartext.

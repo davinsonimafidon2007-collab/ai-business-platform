@@ -142,9 +142,10 @@ class SearchEngineService:
             request: Parámetros de la búsqueda.
 
         Returns:
-            SearchEngineResult con el resumen y la lista completa de resultados.
+            SearchEngineResult con el resumen, la lista completa de resultados
+            y metadatos de trazabilidad (total pre-paginación, providers OK).
         """
-        # 1. Ejecutar el orquestador (pipeline completo)
+        # 1. Ejecutar el orquestador (pipeline completo, providers en paralelo)
         results: list[SearchResult] = await self._orchestrator.search(request)
 
         # 2. Generar resumen a partir de los resultados
@@ -153,10 +154,18 @@ class SearchEngineService:
         # 3. Devolver resultado completo, incluidos los providers que fallaron
         #    (SEARCH.DIAG.1): sin esto, "0 resultados" y "todo caído" se ven
         #    igual desde fuera.
+        provider_issues = self._orchestrator.last_provider_issues
+        failed_names = {issue.provider for issue in provider_issues}
+        providers_succeeded = [
+            p for p in request.providers if p not in failed_names
+        ]
+
         return SearchEngineResult(
             summary=summary,
             results=results,
-            provider_issues=self._orchestrator.last_provider_issues,
+            provider_issues=provider_issues,
+            total_matches=getattr(self._orchestrator, "last_total_matches", len(results)),
+            providers_succeeded=providers_succeeded,
         )
 
     # ------------------------------------------------------------------

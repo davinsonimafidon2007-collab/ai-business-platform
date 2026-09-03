@@ -40,6 +40,7 @@ class VehicleRead(VehicleBase):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
+    user_id: str
     created_at: datetime
     updated_at: datetime
 

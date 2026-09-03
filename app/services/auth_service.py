@@ -24,7 +24,10 @@ class AuthService:
     async def register_user(self, *, email: str, password: str) -> User:
         existing_user = await self.repository.get_by_email(email)
         if existing_user is not None:
-            raise UserAlreadyExistsError(f"User with email '{email}' already exists")
+            # SEC.ENUM.1: mensaje genérico para no revelar emails registrados.
+            raise UserAlreadyExistsError(
+                "Registration not possible with the provided data"
+            )
 
         hashed_password = password_hasher.hash(password)
         user = User(email=email, hashed_password=hashed_password)

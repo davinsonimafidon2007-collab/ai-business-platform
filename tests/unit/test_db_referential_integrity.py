@@ -80,20 +80,37 @@ class TestAuditLogForeignKey:
         assert len(column.foreign_keys) == 0
 
 
+def _has_index_on(table, *columns: str) -> bool:
+    """True si alguna Index() de la tabla cubre exactamente estas columnas
+    (como primeras columnas, en cualquier índice compuesto o simple)."""
+    wanted = list(columns)
+    for index in table.indexes:
+        cols = [c.name for c in index.columns]
+        if cols[: len(wanted)] == wanted:
+            return True
+    return False
+
+
 class TestInspectionIndexes:
-    """AUD-017: ninguna FK de las tablas de inspección tenía índice."""
+    """AUD-017: ninguna FK de las tablas de inspección tenía índice.
+
+    Los índices se declaran en ``__table_args__`` (fusionado con
+    origin/main), no como ``index=True`` por columna: declararlo de las dos
+    formas a la vez crea el mismo índice dos veces con el mismo nombre
+    auto-generado, lo que rompe ``create_all`` en SQLite.
+    """
 
     def test_session_vehicle_id_indexed(self) -> None:
-        assert InspectionSession.__table__.c.vehicle_id.index is True
+        assert _has_index_on(InspectionSession.__table__, "vehicle_id")
 
     def test_session_user_id_indexed(self) -> None:
-        assert InspectionSession.__table__.c.user_id.index is True
+        assert _has_index_on(InspectionSession.__table__, "user_id")
 
     def test_observation_session_id_indexed(self) -> None:
-        assert InspectionObservation.__table__.c.session_id.index is True
+        assert _has_index_on(InspectionObservation.__table__, "session_id")
 
     def test_photo_observation_id_indexed(self) -> None:
-        assert InspectionPhoto.__table__.c.observation_id.index is True
+        assert _has_index_on(InspectionPhoto.__table__, "observation_id")
 
     def test_photo_session_id_indexed(self) -> None:
-        assert InspectionPhoto.__table__.c.session_id.index is True
+        assert _has_index_on(InspectionPhoto.__table__, "session_id")

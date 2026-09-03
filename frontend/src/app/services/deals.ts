@@ -1,16 +1,17 @@
 import { api } from "@/app/services/api/client";
 
+/** Debe espejar app/models/deal.py::DealStatus (máquina de estados v2). */
 export type DealStatus =
   | "NEW"
-  | "CONTACTED"
-  | "OFFER"
+  | "ANALYZING"
+  | "NEGOTIATING"
   | "WON"
   | "BOUGHT"
   | "IN_TRANSIT"
   | "REGISTERED"
   | "SOLD"
   | "LOST"
-  | "DROPPED";
+  | "CANCELLED";
 
 export type Deal = {
   id: string;

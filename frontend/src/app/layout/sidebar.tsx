@@ -25,7 +25,7 @@ export function Sidebar() {
   const pathname = usePathname();
   const user = useAuthStore((s) => s.user);
   const items =
-    user?.role === "ADMIN"
+    user?.role === "admin"
       ? [...navigation, ...adminNavigation]
       : navigation;
 

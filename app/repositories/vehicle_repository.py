@@ -32,10 +32,22 @@ class VehicleRepository:
         )
         return result.scalar_one_or_none()
 
-    async def get_by_external_id(self, source: str, external_id: str, user_id: str | None = None) -> Vehicle | None:
-        query = select(Vehicle).where(Vehicle.source == source, Vehicle.external_id == external_id)
+    async def get_by_external_id(
+        self, source: str | None, external_id: str, user_id: str | None = None
+    ) -> Vehicle | None:
+        """Busca un vehículo por external_id, opcionalmente acotado por source.
+
+        ``source`` vacío/None NO se traduce a ``Vehicle.source == ""`` (que
+        nunca matchea nada real): en ese caso la búsqueda queda solo por
+        ``external_id`` (+ ``user_id`` si se pasa), para soportar el caso
+        de "no sé de qué proveedor viene este id, solo tengo el id".
+        """
+        query = select(Vehicle).where(Vehicle.external_id == external_id)
+        if source:
+            query = query.where(Vehicle.source == source)
         if user_id is not None:
             query = query.where(Vehicle.user_id == str(user_id))
+        query = query.options(selectinload(Vehicle.evaluations), selectinload(Vehicle.opportunities))
         result = await self.session.execute(query)
         return result.scalar_one_or_none()
 
@@ -50,13 +62,16 @@ class VehicleRepository:
         query = select(Vehicle).where(Vehicle.vin == normalized)
         if user_id is not None:
             query = query.where(Vehicle.user_id == str(user_id))
+        query = query.options(selectinload(Vehicle.evaluations), selectinload(Vehicle.opportunities))
         result = await self.session.execute(query)
         return result.scalar_one_or_none()
 
     async def list_all(self, skip: int = 0, limit: int = 100) -> list[Vehicle]:
         skip = clamp_skip(skip)
         limit = clamp_limit(limit)
-        result = await self.session.execute(select(Vehicle).offset(skip).limit(limit))
+        result = await self.session.execute(
+            select(Vehicle).order_by(Vehicle.created_at.desc(), Vehicle.id.desc()).offset(skip).limit(limit)
+        )
         return list(result.scalars().all())
 
     async def list_by_user(self, user_id: str, skip: int = 0, limit: int = 100) -> list[Vehicle]:

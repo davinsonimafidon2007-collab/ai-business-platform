@@ -42,7 +42,22 @@ export function OpportunityDetailClient() {
   const { data, isLoading, isError, refetch } = useOpportunityDetail(id);
   const approveMutation = useApprovePhase();
 
-  const opportunity = data;
+  const raw: any = data;
+  // Normalizar backend -> frontend (vehicle anidado, score/profit en root)
+  const opportunity: any = raw ? {
+    ...raw,
+    // Derivados para compatibilidad con UI legacy
+    title: raw.vehicle ? `${raw.vehicle.brand || ""} ${raw.vehicle.model || ""}`.trim() || `Oportunidad ${raw.id.slice(0,8)}` : raw.title || `Oportunidad ${raw.id.slice(0,8)}`,
+    brand: raw.vehicle?.brand ?? raw.brand ?? "",
+    model: raw.vehicle?.model ?? raw.model ?? "",
+    year: raw.vehicle?.year ?? raw.year ?? null,
+    price: raw.vehicle?.price ?? raw.price ?? null,
+    market_price: raw.market_price ?? raw.estimated_profit ?? null,
+    margin: raw.margin ?? raw.roi_percentage ?? null,
+    status: raw.status ?? (raw.recommendation ? (raw.recommendation === "BUY_NOW" ? "active" : raw.recommendation === "REJECT" ? "aborted" : "pending") : "pending"),
+    files: raw.files ?? [],
+    activity_log: raw.activity_log ?? [],
+  } : null;
 
   const phases = opportunity?.phases ?? [];
   const currentPhase = phases.find((p) => p.status === "pending_approval");

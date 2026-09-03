@@ -118,6 +118,28 @@ async def test_health_db_down_redis_error() -> None:
 
 
 @pytest.mark.asyncio
+async def test_health_exposes_es_data_mode(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """TASK 1: /health expone es_data_mode para el banner de la UI."""
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "es_data_mode", "fixture")
+
+    with patch(
+        "app.api.v1.routes.health._check_database",
+        new=AsyncMock(return_value=True),
+    ), patch(
+        "app.api.v1.routes.health._check_redis",
+        new=AsyncMock(return_value="ok"),
+    ):
+        response = client.get("/health")
+
+    assert response.status_code == 200
+    assert response.json()["es_data_mode"] == "fixture"
+
+
+@pytest.mark.asyncio
 async def test_health_ready_ok_all_checks() -> None:
     """DB ok + Redis ok → status 'ok', 200 (TASK 7)."""
     with patch(
@@ -217,4 +239,13 @@ async def test_health_live_registered_in_api_prefix() -> None:
 
     assert response.status_code == 200
     assert response.json()["status"] == "ok"
+
+
+# ---------------------------------------------------------------------------
+# /health/ready — ver también los tests TASK 7 más abajo (test_health_ready_*):
+# reutilizan _check_database()/_check_redis() (chequeo funcional real, no un
+# TCP probe a DATABASE_URL/REDIS_URL) — decisión tomada al fusionar con
+# origin/main, que sí tenía un TCP probe (_db_host_port/_redis_host_port/
+# _host_port_from_url, ya eliminados junto con sus tests).
+# ---------------------------------------------------------------------------
 

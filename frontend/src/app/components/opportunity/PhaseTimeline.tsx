@@ -69,7 +69,7 @@ export function PhaseTimeline({ phases, opportunityId, onPhaseAction }: PhaseTim
                     : "bg-[#16161f] border-[#2a2a3d] text-secondary-500"
                 )}
               >
-                {phase.status === "completed" ? <Check className="w-4 h-4" /> : phase.order + 1}
+                {phase.status === "completed" ? <Check className="w-4 h-4" /> : phase.order}
               </div>
               {!isLast && (
                 <div

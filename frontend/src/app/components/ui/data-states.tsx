@@ -123,7 +123,7 @@ export function SkeletonList({ count = 5, className = "" }: SkeletonProps) {
   );
 }
 
-interface DataStateProps<T> {
+export interface DataStateProps<T> {
   isLoading?: boolean;
   isError?: boolean;
   data?: T[] | null;

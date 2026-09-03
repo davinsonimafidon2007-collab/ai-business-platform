@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class VehicleEvaluationBase(BaseModel):
@@ -31,6 +31,26 @@ class VehicleEvaluationRead(VehicleEvaluationBase):
     id: str
     created_at: datetime
     updated_at: datetime
+
+    @field_validator("negotiation", mode="before")
+    @classmethod
+    def _coerce_negotiation(cls, v: Any) -> Any:
+        # Model exposes NegotiationResult dataclass; convert to dict for schema.
+        if v is None or isinstance(v, dict):
+            return v
+        # dataclass NegotiationResult -> dict via asdict
+        try:
+            from dataclasses import asdict, is_dataclass
+
+            if is_dataclass(v):
+                data = asdict(v)
+                # Enum -> value
+                if "recommendation" in data and hasattr(data["recommendation"], "value"):
+                    data["recommendation"] = data["recommendation"].value
+                return data
+        except Exception:
+            pass
+        return v
 
 
 class VehicleEvaluationUpdate(BaseModel):

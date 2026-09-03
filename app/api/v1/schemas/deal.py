@@ -70,6 +70,30 @@ class DealUpdateStatus(BaseModel):
     buyer_contact: str | None = None
 
 
+class DealStatusHistoryEntry(BaseModel):
+    """Entrada inmutable del historial de estados de un deal (auditoría)."""
+
+    id: str
+    deal_id: str
+    from_status: str | None = None
+    to_status: str
+    changed_by_user_id: str | None = None
+    notes: str | None = None
+    offer_price: float | None = None
+    created_at: datetime | None = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class DealHistoryResponse(BaseModel):
+    """Respuesta paginada del historial de estados de un deal."""
+
+    items: list[DealStatusHistoryEntry]
+    total: int
+    limit: int
+    offset: int
+
+
 class DealSimulationUpdate(BaseModel):
     """Body para guardar la última simulación de margen en un deal (Task E.2).
 
@@ -103,6 +127,9 @@ class DealRead(BaseModel):
     last_sim_roi: float | None = None
     last_sim_profile: str | None = None
     last_sim_at: datetime | None = None
+    status_changed_at: datetime | None = None
+    closed_at: datetime | None = None
+    version: int = 0
     # --- TASK 3: snapshot de negociación ---
     negotiation_initial_offer: float | None = None
     negotiation_max_price: float | None = None

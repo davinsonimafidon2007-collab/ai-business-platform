@@ -28,8 +28,8 @@ async def init_redis() -> None:
             settings.redis_url,
             encoding="utf-8",
             decode_responses=True,
-            socket_connect_timeout=2.0,
-            socket_timeout=2.0,
+            socket_connect_timeout=settings.redis_socket_timeout,
+            socket_timeout=settings.redis_socket_timeout,
         )
         await _client.ping()
         logger.info("Redis connected: %s", settings.redis_url)
