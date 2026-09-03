@@ -10,6 +10,11 @@ export type SimulateProfitRequest = {
   profile_name?: string; // "SPAIN" | "ES" | "PORTUGAL" | "PT" | ...
   purchase_price?: number;
   estimated_sale_price?: number;
+  /** "dealer"/"private"/...; si se omite usa vehicle.seller_type (TASK 2). */
+  seller_type?: string;
+  min_margin_percentage?: number;
+  min_roi_percentage?: number;
+  risk_buffer_percentage?: number;
 };
 
 export type SimulateProfitResponse = {
@@ -32,6 +37,9 @@ export type SimulateProfitResponse = {
   coherence_warnings?: string[];
   recommendation_label_es?: string;
   risk_label_es?: string;
+  /** Precio de compra máximo (EUR) que sigue cumpliendo el margen/ROI mínimos (TASK 2). */
+  max_purchase_price?: number | null;
+  max_purchase_price_binding_constraint?: string | null;
 };
 
 export async function simulateProfit(

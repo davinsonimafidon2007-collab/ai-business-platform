@@ -37,7 +37,7 @@ from app.services.profit_analyzer import (
     CostBreakdown,
     ProfitAnalysis,
     ProfitAnalyzer,
-    Recommendation,
+    ProfitRecommendation,
     RiskLevel,
 )
 
@@ -92,12 +92,12 @@ class TestModelStructure:
     """Verifica que las estructuras de datos son correctas."""
 
     def test_recommendation_enum_values(self) -> None:
-        assert Recommendation.BUY.value == "BUY"
-        assert Recommendation.CONSIDER.value == "CONSIDER"
-        assert Recommendation.REJECT.value == "REJECT"
+        assert ProfitRecommendation.BUY.value == "BUY"
+        assert ProfitRecommendation.CONSIDER.value == "CONSIDER"
+        assert ProfitRecommendation.REJECT.value == "REJECT"
 
     def test_recommendation_enum_unique(self) -> None:
-        values = [m.value for m in Recommendation]
+        values = [m.value for m in ProfitRecommendation]
         assert len(values) == len(set(values))
         assert len(values) == 3
 
@@ -161,7 +161,7 @@ class TestModelStructure:
         assert isinstance(result.roi_percentage, float)
         assert isinstance(result.profit_margin_percentage, float)
         assert isinstance(result.risk_level, RiskLevel)
-        assert isinstance(result.recommendation, Recommendation)
+        assert isinstance(result.recommendation, ProfitRecommendation)
         assert isinstance(result.cost_breakdown, CostBreakdown)
 
     def test_cost_breakdown_in_cost_breakdown(self, analyzer: ProfitAnalyzer, cheap_vehicle: VehicleStub) -> None:
@@ -279,7 +279,7 @@ class TestHighProfitScenario:
         vehicle = VehicleStub(price=5000.0)
         result = analyzer.analyze(vehicle, sale_price_multiplier=2.5)
         assert result.net_profit > 2000.0
-        assert result.recommendation in (Recommendation.BUY, Recommendation.CONSIDER)
+        assert result.recommendation in (ProfitRecommendation.BUY, ProfitRecommendation.CONSIDER)
 
     def test_high_profit_positive_values(self, analyzer: ProfitAnalyzer) -> None:
         vehicle = VehicleStub(price=5000.0)
@@ -298,7 +298,7 @@ class TestNegativeProfitScenario:
         vehicle = VehicleStub(price=80000.0)
         result = analyzer.analyze(vehicle, sale_price_multiplier=0.8)
         assert result.net_profit < 0
-        assert result.recommendation == Recommendation.REJECT
+        assert result.recommendation == ProfitRecommendation.REJECT
 
     def test_negative_profit_risk(self, analyzer: ProfitAnalyzer) -> None:
         vehicle = VehicleStub(price=80000.0)
@@ -319,7 +319,7 @@ class TestHighROIScenario:
         result = analyzer.analyze(vehicle, sale_price_multiplier=3.0)
         assert result.roi_percentage > 30.0  # ROI alto (>30%)
         assert result.risk_level == RiskLevel.LOW
-        assert result.recommendation == Recommendation.BUY
+        assert result.recommendation == ProfitRecommendation.BUY
 
 
 class TestLowROIScenario:
@@ -329,7 +329,7 @@ class TestLowROIScenario:
         vehicle = VehicleStub(price=40000.0)
         result = analyzer.analyze(vehicle, sale_price_multiplier=1.05)
         assert result.roi_percentage < 10.0  # ROI bajo (<10%)
-        assert result.recommendation in (Recommendation.CONSIDER, Recommendation.REJECT)
+        assert result.recommendation in (ProfitRecommendation.CONSIDER, ProfitRecommendation.REJECT)
 
 
 # =============================================================================
@@ -389,7 +389,7 @@ class TestHighCostsScenario:
 
         result = analyzer.analyze(vehicle, sale_price_multiplier=1.2)
         assert result.total_cost > 15000.0  # Costes muy elevados
-        assert result.recommendation == Recommendation.REJECT
+        assert result.recommendation == ProfitRecommendation.REJECT
 
 
 # =============================================================================
@@ -560,28 +560,28 @@ class TestCompleteScenarios:
         assert result.net_profit > 3000.0
         assert result.roi_percentage > 50.0
         assert result.risk_level == RiskLevel.LOW
-        assert result.recommendation == Recommendation.BUY
+        assert result.recommendation == ProfitRecommendation.BUY
 
     def test_low_profitability_sale(self, analyzer: ProfitAnalyzer) -> None:
         """Venta poco rentable: coche caro, precio de venta ajustado."""
         vehicle = VehicleStub(price=45000.0)
         result = analyzer.analyze(vehicle, sale_price_multiplier=1.08)
         assert result.net_profit < 2000.0 or result.net_profit < 0
-        assert result.recommendation in (Recommendation.CONSIDER, Recommendation.REJECT)
+        assert result.recommendation in (ProfitRecommendation.CONSIDER, ProfitRecommendation.REJECT)
 
     def test_high_roi_scenario(self, analyzer: ProfitAnalyzer) -> None:
         """ROI muy alto."""
         vehicle = VehicleStub(price=5000.0)
         result = analyzer.analyze(vehicle, sale_price_multiplier=3.0)
         assert result.roi_percentage > 30.0
-        assert result.recommendation == Recommendation.BUY
+        assert result.recommendation == ProfitRecommendation.BUY
 
     def test_low_roi_scenario(self, analyzer: ProfitAnalyzer) -> None:
         """ROI muy bajo."""
         vehicle = VehicleStub(price=70000.0)
         result = analyzer.analyze(vehicle, sale_price_multiplier=1.02)
         assert result.roi_percentage < 5.0
-        assert result.recommendation == Recommendation.REJECT
+        assert result.recommendation == ProfitRecommendation.REJECT
 
 
 # =============================================================================
@@ -709,14 +709,14 @@ class TestIntegrity:
         vehicle = VehicleStub(price=80000.0)
         result = analyzer.analyze(vehicle, sale_price_multiplier=0.9)
         if result.risk_level == RiskLevel.HIGH:
-            assert result.recommendation == Recommendation.REJECT
+            assert result.recommendation == ProfitRecommendation.REJECT
 
     def test_risk_low_with_positive_profit_gives_buy(self, analyzer: ProfitAnalyzer) -> None:
         """Riesgo bajo con beneficio positivo debe dar BUY."""
         vehicle = VehicleStub(price=5000.0)
         result = analyzer.analyze(vehicle, sale_price_multiplier=3.0)
         if result.risk_level == RiskLevel.LOW:
-            assert result.recommendation == Recommendation.BUY
+            assert result.recommendation == ProfitRecommendation.BUY
 
 
 # =============================================================================
@@ -786,7 +786,7 @@ class TestEdgeCases:
         """BUY solo cuando riesgo es LOW y ROI > 0."""
         vehicle = VehicleStub(price=5000.0)
         result = analyzer.analyze(vehicle, sale_price_multiplier=3.0)
-        if result.recommendation == Recommendation.BUY:
+        if result.recommendation == ProfitRecommendation.BUY:
             assert result.risk_level == RiskLevel.LOW
             assert result.roi_percentage > 0
 
@@ -795,7 +795,7 @@ class TestEdgeCases:
         vehicle = VehicleStub(price=60000.0)
         result = analyzer.analyze(vehicle, sale_price_multiplier=1.02)
         if result.risk_level == RiskLevel.HIGH:
-            assert result.recommendation == Recommendation.REJECT
+            assert result.recommendation == ProfitRecommendation.REJECT
 
 
 # =============================================================================
@@ -1037,7 +1037,7 @@ def test_regression_negative_roi_is_valid() -> None:
     )
     assert a.net_profit < 0
     assert a.roi_percentage < 0
-    assert a.recommendation == Recommendation.REJECT
+    assert a.recommendation == ProfitRecommendation.REJECT
 
 
 def test_regression_warnings_default_and_high_cost() -> None:
@@ -1060,4 +1060,93 @@ def test_regression_zero_price_raises_controlled() -> None:
     analyzer = ProfitAnalyzer()
     with pytest.raises(ValueError, match="precio"):
         analyzer.analyze(VehicleStub(price=0.0), profile_name="SPAIN")
+
+
+# =============================================================================
+# TASK 2 (AUD-009): régimen de margen (particular) vs IVA pleno (dealer)
+# =============================================================================
+
+
+@dataclass
+class VehicleWithEmissions:
+    """Stub con emisiones CO₂ y tipo de vendedor, para tests de IEDMT/IVA."""
+
+    price: float | None = None
+    brand: str | None = "TestBrand"
+    model: str | None = "TestModel"
+    year: int | None = 2020
+    mileage: int | None = 50000
+    emissions: str | None = None
+    seller_type: str | None = None
+
+
+class TestDealerVsPrivateTax:
+    def test_dealer_pays_more_tax_than_private(self) -> None:
+        analyzer = ProfitAnalyzer()
+        vehicle = VehicleWithEmissions(price=20000.0, emissions="140 g/km")
+
+        private = analyzer.analyze(vehicle, profile_name="SPAIN", seller_type="private")
+        dealer = analyzer.analyze(vehicle, profile_name="SPAIN", seller_type="dealer")
+
+        assert dealer.taxes > private.taxes
+
+    def test_dealer_tax_matches_iedmt_plus_full_vat(self) -> None:
+        """El impuesto de un vendedor profesional debe ser exactamente
+        IEDMT + IVA pleno (21%), no el tax_rate del régimen de margen."""
+        from app.services.iedmt import VAT_RATE_SPAIN, iedmt_tax
+
+        analyzer = ProfitAnalyzer()
+        vehicle = VehicleWithEmissions(price=20000.0, emissions="140 g/km")
+        dealer = analyzer.analyze(vehicle, profile_name="SPAIN", seller_type="dealer")
+
+        expected_iedmt = iedmt_tax(140.0, 20000.0)
+        expected_vat = 20000.0 * VAT_RATE_SPAIN
+        assert dealer.taxes == pytest.approx(expected_iedmt + expected_vat, abs=0.01)
+
+    def test_private_seller_uses_margin_scheme_tax_rate(self) -> None:
+        """Sin CO₂, un particular tributa el tax_rate plano del perfil."""
+        analyzer = ProfitAnalyzer()
+        vehicle = VehicleWithEmissions(price=20000.0, seller_type="private")
+        result = analyzer.analyze(vehicle, profile_name="SPAIN")
+        profile = get_profile("SPAIN")
+        assert result.taxes == pytest.approx(20000.0 * profile.tax_rate, abs=0.01)
+
+    def test_seller_type_from_vehicle_attribute_when_not_overridden(self) -> None:
+        """Si no se pasa seller_type explícito, se usa vehicle.seller_type."""
+        analyzer = ProfitAnalyzer()
+        vehicle = VehicleWithEmissions(
+            price=20000.0, emissions="140 g/km", seller_type="professional"
+        )
+        via_attribute = analyzer.analyze(vehicle, profile_name="SPAIN")
+        via_explicit = analyzer.analyze(
+            vehicle, profile_name="SPAIN", seller_type="dealer"
+        )
+        assert via_attribute.taxes == pytest.approx(via_explicit.taxes, abs=0.01)
+
+    def test_explicit_seller_type_overrides_vehicle_attribute(self) -> None:
+        analyzer = ProfitAnalyzer()
+        vehicle = VehicleWithEmissions(
+            price=20000.0, emissions="140 g/km", seller_type="dealer"
+        )
+        result = analyzer.analyze(vehicle, profile_name="SPAIN", seller_type="private")
+        profile = get_profile("SPAIN")
+        from app.services.iedmt import iedmt_tax
+
+        expected = 20000.0 * profile.tax_rate + iedmt_tax(140.0, 20000.0)
+        assert result.taxes == pytest.approx(expected, abs=0.01)
+
+    def test_dealer_without_co2_data_gets_warning(self) -> None:
+        analyzer = ProfitAnalyzer()
+        vehicle = VehicleWithEmissions(price=20000.0)
+        result = analyzer.analyze(vehicle, profile_name="SPAIN", seller_type="dealer")
+        assert any("sin emisiones" in w.lower() for w in result.warnings)
+
+    def test_unrecognized_seller_type_treated_as_private(self) -> None:
+        analyzer = ProfitAnalyzer()
+        vehicle = VehicleWithEmissions(price=20000.0)
+        result = analyzer.analyze(
+            vehicle, profile_name="SPAIN", seller_type="not-a-real-type"
+        )
+        profile = get_profile("SPAIN")
+        assert result.taxes == pytest.approx(20000.0 * profile.tax_rate, abs=0.01)
 

@@ -262,6 +262,8 @@ class SearchPersistenceService:
         opp.roi = getattr(opportunity, "roi", None) or opp.roi
         opp.risk = getattr(opportunity, "risk_level", None) or opp.risk
         opp.profit = getattr(opportunity, "estimated_profit", None) or opp.profit
+        confidence = getattr(opportunity, "confidence", None)
+        opp.confidence = confidence if confidence is not None else opp.confidence
         opp.analyzed_at = datetime.now(UTC)
 
         self.session.add(opp)

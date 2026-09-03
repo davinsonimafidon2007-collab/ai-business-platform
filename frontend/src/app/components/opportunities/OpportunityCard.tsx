@@ -20,6 +20,8 @@ interface OpportunityCardProps {
     recommendation_label_es?: string | null;
     risk_level?: string | null;
     risk_label_es?: string | null;
+    /** Confianza 0-100 de los datos (TASK 2): distinta de profit/roi y de risk. */
+    confidence?: number | null;
     created_at?: string | null;
   };
 }
@@ -81,9 +83,14 @@ export function OpportunityCard({ id, opportunity }: OpportunityCardProps) {
           </div>
 
           <div className="text-right">
-            <span className="text-[11px] text-secondary-400 font-medium">
+            <span className="text-[11px] text-secondary-400 font-medium block">
               {opportunity.risk_label_es ?? opportunity.risk_level ?? "Riesgo no calculado"}
             </span>
+            {opportunity.confidence != null ? (
+              <span className="text-[10px] text-secondary-500 block mt-0.5">
+                Confianza {Math.round(opportunity.confidence)}%
+              </span>
+            ) : null}
           </div>
         </div>
       </div>

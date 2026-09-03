@@ -12,7 +12,8 @@ from datetime import datetime
 
 from app.core.config import settings
 from app.models.vehicle import Vehicle
-from app.services.profit_analyzer import ProfitAnalyzer, Recommendation
+from app.services.confidence import estimate_confidence
+from app.services.profit_analyzer import ProfitAnalyzer, ProfitRecommendation
 
 
 @dataclass
@@ -38,6 +39,7 @@ class EvaluationResult:
     classification: str  # "verde", "amarillo", "rojo"
     warnings: list[str]  # Lista de advertencias
     recommendation: str  # Recomendación
+    confidence: float = 0.0  # TASK 2: confianza 0-100, ver app/services/confidence.py
 
 
 class EvaluationEngine:
@@ -79,23 +81,51 @@ class EvaluationEngine:
     def _current_year() -> int:
         return datetime.now().year
 
-    def evaluate(self, vehicle: Vehicle) -> EvaluationResult:
+    def evaluate(
+        self,
+        vehicle: Vehicle,
+        *,
+        estimated_sale_price: float | None = None,
+        seller_type: str | None = None,
+        market_confidence: float | None = None,
+    ) -> EvaluationResult:
         """Evalúa un vehículo y calcula todos los costes y rentabilidad.
 
         Args:
             vehicle: Vehículo a evaluar.
+            estimated_sale_price: Precio de venta real (comparables de
+                mercado), si el caller ya lo calculó. TASK 2 (AUD-008): sin
+                esto, ProfitAnalyzer recurre a un multiplicador fijo (×1.4)
+                sin ningún respaldo de mercado — se prefiere siempre pasar
+                un valor real cuando esté disponible (p. ej. desde
+                ComparableMarketEstimator).
+            seller_type: Tipo de vendedor real (dealer/private/...), si el
+                caller lo conoce; si no, se usa ``vehicle.seller_type``.
+            market_confidence: Confianza 0-100 del ``MarketEstimation`` usado
+                para ``estimated_sale_price``, si está disponible.
 
         Returns:
             EvaluationResult con todos los cálculos.
         """
         warnings: list[str] = []
 
+        sale_price_override = (
+            estimated_sale_price
+            if estimated_sale_price is not None and estimated_sale_price > 0
+            else getattr(vehicle, "estimated_sale_price", None)
+        )
+        market_grounded = bool(sale_price_override and sale_price_override > 0)
+        seller = (
+            seller_type if seller_type is not None else getattr(vehicle, "seller_type", None)
+        )
+
         # --- Bloque económico delegado en ProfitAnalyzer ---
         try:
             analysis = self._profit.analyze(
                 vehicle,
                 profile_name=self._profile,
-                estimated_sale_price=getattr(vehicle, "estimated_sale_price", None),
+                estimated_sale_price=sale_price_override,
+                seller_type=seller,
             )
         except ValueError:
             # Vehículo sin precio: ProfitAnalyzer no puede analizar.
@@ -117,6 +147,11 @@ class EvaluationEngine:
             warnings.append("no tiene precio de compra definido")
         if estimated_sale_price_es == 0:
             warnings.append("No se pudo estimar el precio de venta en España")
+        elif not market_grounded:
+            warnings.append(
+                "precio de venta estimado sin comparables de mercado "
+                "(multiplicador por defecto); confianza reducida"
+            )
 
         # --- Score y clasificación (scoring propio del engine) ---
         score = self._calculate_score(vehicle, profit_margin_percent, warnings)
@@ -125,6 +160,13 @@ class EvaluationEngine:
         # --- Recomendación alineada con ProfitAnalysis ---
         recommendation = self._generate_recommendation(
             classification, profit_margin_percent, warnings, analysis.recommendation
+        )
+
+        confidence = estimate_confidence(
+            market_confidence=market_confidence,
+            warnings=analysis.warnings,
+            weaknesses=warnings,
+            market_grounded=market_grounded,
         )
 
         return EvaluationResult(
@@ -142,6 +184,7 @@ class EvaluationEngine:
             classification=classification,
             warnings=warnings,
             recommendation=recommendation,
+            confidence=confidence,
         )
 
     def _empty_result(self, vehicle: Vehicle, warnings: list[str]) -> EvaluationResult:
@@ -150,7 +193,13 @@ class EvaluationEngine:
         score = self._calculate_score(vehicle, 0.0, warnings)
         classification = self._classify(0.0, score)
         recommendation = self._generate_recommendation(
-            classification, 0.0, warnings, Recommendation.REJECT
+            classification, 0.0, warnings, ProfitRecommendation.REJECT
+        )
+        confidence = estimate_confidence(
+            market_confidence=None,
+            warnings=[],
+            weaknesses=warnings,
+            market_grounded=False,
         )
         return EvaluationResult(
             vehicle_cost=0.0,
@@ -167,6 +216,7 @@ class EvaluationEngine:
             classification=classification,
             warnings=warnings,
             recommendation=recommendation,
+            confidence=confidence,
         )
 
     def _calculate_score(
@@ -249,7 +299,7 @@ class EvaluationEngine:
         classification: str,
         profit_margin_percent: float,
         warnings: list[str],
-        profit_recommendation: Recommendation | None = None,
+        profit_recommendation: ProfitRecommendation | None = None,
     ) -> str:
         """Genera una recomendación alineada con ProfitAnalysis.
 
@@ -262,11 +312,11 @@ class EvaluationEngine:
         Returns:
             Recomendación en texto.
         """
-        if profit_recommendation == Recommendation.BUY:
+        if profit_recommendation == ProfitRecommendation.BUY:
             recommendation = "Vehículo recomendado para importación. El margen de beneficio es adecuado."
-        elif profit_recommendation == Recommendation.CONSIDER:
+        elif profit_recommendation == ProfitRecommendation.CONSIDER:
             recommendation = "Vehículo con margen ajustado. Considerar negociar el precio de compra."
-        elif profit_recommendation == Recommendation.REJECT:
+        elif profit_recommendation == ProfitRecommendation.REJECT:
             recommendation = "Vehículo no recomendado. El margen de beneficio es insuficiente o negativo."
         else:
             # Fallback al comportamiento basado en clasificación

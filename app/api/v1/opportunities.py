@@ -15,7 +15,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.v1.schemas.opportunity import (
     OpportunityCreate,
     OpportunityListResponse,
-    OpportunityPhaseRead,
     OpportunityRead,
     OpportunityReadDetail,
     OpportunityUpdate,
@@ -28,8 +27,8 @@ from app.models.user import User
 from app.models.vehicle import Vehicle
 from app.repositories.opportunity_repository import OpportunityRepository
 from app.schemas.pagination import CursorPage
-from app.services.recommendation_labels import recommendation_label_es, risk_label_es
 from app.services.opportunity_phase_service import OpportunityPhaseService
+from app.services.recommendation_labels import recommendation_label_es, risk_label_es
 
 router = APIRouter(prefix="/opportunities", tags=["Opportunities"])
 
@@ -118,6 +117,7 @@ def _to_opportunity_read(opp: Opportunity) -> OpportunityRead:
         roi_percentage=opp.roi,
         recommendation=opp.recommendation,
         risk_level=opp.risk,
+        confidence=opp.confidence,
         recommendation_label_es=recommendation_label_es(opp.recommendation),
         risk_label_es=risk_label_es(opp.risk),
         created_at=opp.created_at,

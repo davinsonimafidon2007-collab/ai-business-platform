@@ -88,7 +88,7 @@ class VehicleScorerStub:
     score_value: int = 75
     category: str = "Muy bueno"
 
-    def score(self, vehicle: object) -> VehicleScore:
+    def score(self, vehicle: object, *, market_price: float | None = None) -> VehicleScore:
         return VehicleScore(
             score=self.score_value,
             category=self.category,
@@ -144,6 +144,8 @@ class OpportunityFinderStub:
         vehicle_score: object,
         profit_analysis: object,
         market_estimation: object,
+        *,
+        market_grounded: bool = True,
     ) -> OpportunityAnalysis:
         return OpportunityAnalysis(
             overall_score=self.overall_score,

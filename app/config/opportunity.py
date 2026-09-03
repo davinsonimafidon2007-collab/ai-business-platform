@@ -134,3 +134,25 @@ SATURATED_SUPPLY_THRESHOLD: Final[float] = 70.0
 HIGH_DEMAND_THRESHOLD: Final[float] = 70.0
 """Por encima de este nivel de demanda, el mercado es favorable."""
 
+
+# =============================================================================
+# Confianza (TASK 2): separación explícita entre profitability/risk/confidence.
+# La confianza combina la confianza de mercado (comparables encontrados) con
+# penalizaciones por datos faltantes o estimaciones sin respaldo real. Nunca
+# se infla la confianza cuando faltan datos: solo se penaliza o se deja el
+# valor base de mercado.
+# =============================================================================
+
+CONFIDENCE_MISSING_FIELD_PENALTY: Final[float] = 8.0
+"""Puntos de confianza restados por cada campo crítico ausente detectado en
+las debilidades del VehicleScore (precio, comparativa de mercado, etc.)."""
+
+CONFIDENCE_EXTRA_WARNING_PENALTY: Final[float] = 5.0
+"""Puntos de confianza restados por cada aviso adicional del ProfitAnalysis
+más allá del disclaimer estándar (p. ej. costes de importación anómalos)."""
+
+CONFIDENCE_NO_MARKET_DATA_BASELINE: Final[float] = 35.0
+"""Confianza base cuando no hay ninguna estimación de mercado disponible
+(sin comparables): baja pero no cero, ya que el resto de la economía
+(costes fijos del perfil, impuestos) sigue siendo fiable."""
+

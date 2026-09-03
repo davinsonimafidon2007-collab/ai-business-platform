@@ -18,6 +18,7 @@ No depende de:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from decimal import ROUND_DOWN, Decimal
 from enum import Enum
 from typing import Any, ClassVar, Final, Protocol
 
@@ -26,8 +27,15 @@ from typing import Any, ClassVar, Final, Protocol
 # =============================================================================
 
 
-class Recommendation(str, Enum):
-    """Recomendación de compra basada en el análisis económico.
+class ProfitRecommendation(str, Enum):
+    """Recomendación de compra basada exclusivamente en la señal financiera
+    aislada de ProfitAnalyzer (riesgo + ROI + beneficio de este vehículo).
+
+    TASK 2: renombrado desde ``Recommendation`` para no colisionar
+    conceptualmente con ``OpportunityFinder.Recommendation`` (BUY_NOW/WATCH/
+    NEGOTIATE/REJECT), que es la recomendación de nivel Opportunity que se
+    persiste y expone en la API/frontend. ``ProfitRecommendation`` es una
+    señal más estrecha, consumida internamente por ``EvaluationEngine``.
 
     Únicamente puede devolver uno de estos tres valores.
     """
@@ -174,9 +182,47 @@ class ProfitAnalysis:
     roi_percentage: float
     profit_margin_percentage: float
     risk_level: RiskLevel
-    recommendation: Recommendation
+    recommendation: ProfitRecommendation
     cost_breakdown: CostBreakdown = field(repr=False)
     warnings: list[str] = field(default_factory=list, repr=False)
+
+
+@dataclass
+class MaxPurchasePriceResult:
+    """Resultado del cálculo inverso de precio máximo de compra (TASK 2).
+
+    Dado un precio de venta esperado y unos requisitos mínimos de margen/ROI,
+    ``max_purchase_price`` es el precio de compra más alto que sigue
+    cumpliendo AMBOS requisitos simultáneamente (el más restrictivo de los
+    dos, indicado en ``binding_constraint``).
+    """
+
+    max_purchase_price: float
+    """Precio de compra máximo permitido (EUR), redondeado hacia abajo
+    (conservador: nunca sugiere pagar más de lo que realmente cumple los
+    requisitos)."""
+
+    binding_constraint: str
+    """Cuál de los dos requisitos determina el resultado: "margin" o "roi"."""
+
+    effective_sale_price: float
+    """Precio de venta tras aplicar el buffer de riesgo (más bajo que
+    ``estimated_sale_price`` si ``risk_buffer_percentage`` > 0)."""
+
+    estimated_sale_price: float
+    """Precio de venta de entrada, sin el buffer de riesgo aplicado."""
+
+    fixed_costs: float
+    """Suma de costes fijos del perfil (transporte, matriculación, ITV,
+    gestoría, otros) usados en el cálculo."""
+
+    variable_rate: float
+    """Tasa variable total aplicada sobre el precio de compra (impuestos +
+    comisión + reparación estimada), como fracción (0..1)."""
+
+    is_dealer: bool
+    """Si se aplicó el régimen de IVA pleno (vendedor profesional) en vez
+    del régimen de margen (particular) al calcular ``variable_rate``."""
 
 
 # =============================================================================
@@ -245,6 +291,7 @@ class ProfitAnalyzer:
         *,
         estimated_sale_price: float | None = None,
         sale_price_multiplier: float = 1.4,
+        seller_type: str | None = None,
         **extra_costs: float,
     ) -> ProfitAnalysis:
         """Realiza el análisis económico completo de importación.
@@ -255,7 +302,14 @@ class ProfitAnalyzer:
             estimated_sale_price: Precio de venta estimado (si se proporciona,
                 se usa directamente; si no, se calcula como purchase_price * multiplier).
             sale_price_multiplier: Multiplicador para estimar precio de venta
-                cuando no se proporciona estimated_sale_price.
+                cuando no se proporciona estimated_sale_price. Solo se usa
+                como último recurso: preferir siempre pasar un
+                estimated_sale_price real (comparables de mercado).
+            seller_type: Tipo de vendedor ("private"/"dealer"/"professional"/...).
+                Si es ``None``, se usa ``getattr(vehicle, "seller_type", None)``.
+                Un vendedor profesional/concesionario tributa IVA pleno (21%)
+                en vez del régimen de margen simplificado del perfil
+                (AUD-009): ver ``_is_dealer_seller``.
             **extra_costs: Costes adicionales opcionales (insurance, customs, etc.).
 
         Returns:
@@ -278,11 +332,16 @@ class ProfitAnalyzer:
         from app.services.iedmt import parse_co2_gkm
 
         co2_gkm = parse_co2_gkm(getattr(vehicle, "emissions", None))
+        seller_type_value = (
+            seller_type if seller_type is not None else getattr(vehicle, "seller_type", None)
+        )
+        is_dealer = self._is_dealer_seller(seller_type_value)
         breakdown = self._compute_cost_breakdown(
             purchase_price=purchase_price,
             profile=profile,
             extra_costs=extra_costs,
             co2_gkm=co2_gkm,
+            is_dealer=is_dealer,
         )
 
         # --- Precio de venta estimado ---
@@ -332,7 +391,10 @@ class ProfitAnalyzer:
 
         # --- Avisos (no errores) sobre el análisis ---
         warnings = self._compute_warnings(
-            breakdown=breakdown, purchase_price=purchase_price
+            breakdown=breakdown,
+            purchase_price=purchase_price,
+            is_dealer=is_dealer,
+            co2_gkm=co2_gkm,
         )
 
         return ProfitAnalysis(
@@ -366,6 +428,7 @@ class ProfitAnalyzer:
         profile: Any,
         extra_costs: dict[str, float],
         co2_gkm: float | None = None,
+        is_dealer: bool = False,
     ) -> CostBreakdown:
         """Calcula el desglose completo de costes.
 
@@ -374,6 +437,10 @@ class ProfitAnalyzer:
             profile: Perfil de costes ImportCostProfile.
             extra_costs: Costes adicionales opcionales.
             co2_gkm: Emisiones CO₂ del vehículo (para IEDMT, solo España).
+            is_dealer: Si el vendedor es profesional/concesionario (AUD-009):
+                tributa IVA pleno (21%) + IEDMT en vez del régimen de margen
+                simplificado (``profile.tax_rate``) que asume vendedor
+                particular.
 
         Returns:
             CostBreakdown con todos los costes calculados.
@@ -385,16 +452,21 @@ class ProfitAnalyzer:
         paperwork_cost = profile.paperwork_cost
         base_miscellaneous = profile.miscellaneous_cost
 
-        # IEDMT: impuesto especial por CO₂ (solo España, co2 disponible).
-        # GRAVE.008: es un % de la base imponible (purchase_price), no un
-        # importe fijo por tramo.
-        from app.services.iedmt import iedmt_tax
+        # Impuestos: régimen de margen (particular, perfil) vs IVA pleno +
+        # IEDMT (profesional/concesionario). GRAVE.008: el IEDMT es un % de
+        # la base imponible (purchase_price), no un importe fijo por tramo.
+        from app.services.iedmt import iedmt_plus_vat, iedmt_tax
 
-        iedmt = iedmt_tax(co2_gkm, purchase_price) if co2_gkm else 0.0
+        if is_dealer:
+            vat_breakdown = iedmt_plus_vat(co2_gkm, purchase_price)
+            iedmt = vat_breakdown["iedmt"]
+            taxes = vat_breakdown["total_taxes"]
+        else:
+            iedmt = iedmt_tax(co2_gkm, purchase_price) if co2_gkm else 0.0
+            # Costes variables (porcentaje sobre el precio de compra).
+            # Si hay IEDMT, se suma al tax_rate base (régimen de margen).
+            taxes = purchase_price * profile.tax_rate + iedmt
 
-        # Costes variables (porcentaje sobre el precio de compra)
-        # Si hay IEDMT, se suma al tax_rate base
-        taxes = purchase_price * profile.tax_rate + iedmt
         commission_cost = purchase_price * profile.commission_rate
         repair_estimate = purchase_price * profile.repair_estimate_rate
 
@@ -488,22 +560,22 @@ class ProfitAnalyzer:
         roi: float,
         net_profit: float,
         profile: Any,
-    ) -> Recommendation:
+    ) -> ProfitRecommendation:
         """Determina la recomendación final basada en el riesgo y la rentabilidad."""
         # Beneficio negativo → rechazar
         if net_profit <= 0:
-            return Recommendation.REJECT
+            return ProfitRecommendation.REJECT
 
         # Riesgo bajo y ROI positivo → comprar
         if risk_level == RiskLevel.LOW and roi > 0:
-            return Recommendation.BUY
+            return ProfitRecommendation.BUY
 
         # Riesgo alto → rechazar
         if risk_level == RiskLevel.HIGH:
-            return Recommendation.REJECT
+            return ProfitRecommendation.REJECT
 
         # Caso intermedio → considerar
-        return Recommendation.CONSIDER
+        return ProfitRecommendation.CONSIDER
 
     # ------------------------------------------------------------------
     # Avisos (warnings) — enriquecen el breakdown sin ser errores
@@ -515,7 +587,12 @@ class ProfitAnalyzer:
     )
 
     @staticmethod
-    def _compute_warnings(breakdown: CostBreakdown, purchase_price: float) -> list[str]:
+    def _compute_warnings(
+        breakdown: CostBreakdown,
+        purchase_price: float,
+        is_dealer: bool = False,
+        co2_gkm: float | None = None,
+    ) -> list[str]:
         """Genera avisos (no errores) sobre el análisis económico.
 
         Incluye un disclaimer de estimación y avisos ante costes anómalos
@@ -528,4 +605,175 @@ class ProfitAnalyzer:
                 "Los costes de importación superan el 50% del precio de compra; "
                 "revisa el perfil de costes."
             )
+        if is_dealer and not co2_gkm:
+            warnings.append(
+                "Vendedor profesional/concesionario sin emisiones CO₂ disponibles: "
+                "se aplicó IVA pleno (21%) sin IEDMT (no se pudo calcular el tramo)."
+            )
         return warnings
+
+    # ------------------------------------------------------------------
+    # Tipo de vendedor (AUD-009: régimen de margen vs IVA pleno)
+    # ------------------------------------------------------------------
+
+    _DEALER_MARKERS: Final[tuple[str, ...]] = (
+        "dealer",
+        "professional",
+        "profesional",
+        "concesionario",
+        "empresa",
+        "comercial",
+        "business",
+        "trade",
+        "händler",
+        "handler",
+    )
+
+    @classmethod
+    def _is_dealer_seller(cls, seller_type: str | None) -> bool:
+        """Determina si ``seller_type`` corresponde a un vendedor profesional.
+
+        Normaliza distintos vocabularios usados por las distintas fuentes de
+        datos de vehículos (unas usan "dealer"/"private"; otras
+        "professional"/"private", o valores en alemán/español). Cualquier
+        valor no reconocido se trata como particular (régimen de margen),
+        que es el comportamiento previo por defecto — no se asume IVA pleno
+        sin evidencia explícita.
+        """
+        if not seller_type:
+            return False
+        normalized = str(seller_type).strip().lower()
+        return any(marker in normalized for marker in cls._DEALER_MARKERS)
+
+    # ------------------------------------------------------------------
+    # Precio máximo de compra (cálculo inverso, TASK 2)
+    # ------------------------------------------------------------------
+
+    def calculate_max_purchase_price(
+        self,
+        estimated_sale_price: float,
+        profile_name: str = "DEFAULT",
+        *,
+        min_margin_percentage: float = 15.0,
+        min_roi_percentage: float = 15.0,
+        risk_buffer_percentage: float = 0.0,
+        seller_type: str | None = None,
+        co2_gkm: float | None = None,
+    ) -> MaxPurchasePriceResult:
+        """Calcula el precio máximo de compra que sigue cumpliendo los
+        requisitos mínimos de margen y ROI (cálculo inverso al de ``analyze``).
+
+        Toda la aritmética se hace con ``Decimal`` para evitar arrastrar
+        errores de redondeo de punto flotante en una cadena de divisiones;
+        solo se convierte a ``float`` en el resultado final, igual que el
+        resto de la API pública de este módulo (que trabaja en float).
+
+        Modelo: dado un precio de compra P, los costes fijos F (transporte,
+        matriculación, ITV, gestoría, otros — no dependen de P) y una tasa
+        variable v (impuestos + comisión + reparación, como fracción de P):
+
+            total_cost   = P * (1 + v) + F
+            net_profit   = S_eff - total_cost
+            margin       = net_profit / S_eff        >= min_margin
+            roi          = net_profit / total_cost    >= min_roi
+
+        Despejando P de cada restricción por separado y tomando el mínimo
+        (la restricción más exigente gana):
+
+            P_margin = (S_eff * (1 - min_margin) - F) / (1 + v)
+            P_roi    = (S_eff / (1 + min_roi) - F) / (1 + v)
+
+        Args:
+            estimated_sale_price: Precio de venta esperado en destino (EUR).
+            profile_name: Perfil de costes a usar para F y v.
+            min_margin_percentage: Margen mínimo requerido (%), sobre el
+                precio de venta efectivo.
+            min_roi_percentage: ROI mínimo requerido (%), sobre el coste total.
+            risk_buffer_percentage: Reduce el precio de venta usado en el
+                cálculo en este porcentaje, para no depender de que el precio
+                de venta estimado se cumpla exactamente (buffer de riesgo).
+            seller_type: Tipo de vendedor; determina si se usa IVA pleno
+                (profesional) o régimen de margen (particular) para la tasa
+                variable, igual que en ``analyze``.
+            co2_gkm: Emisiones CO₂, para el tramo de IEDMT si es vendedor
+                profesional.
+
+        Returns:
+            MaxPurchasePriceResult con el precio máximo y el desglose usado.
+
+        Raises:
+            ValueError: Si ``estimated_sale_price`` no es positivo, o si los
+                porcentajes están fuera de rangos razonables (0-99.99 para
+                margen/buffer; ROI mínimo no puede ser negativo).
+        """
+        if estimated_sale_price is None or estimated_sale_price <= 0:
+            raise ValueError(
+                "estimated_sale_price debe ser un valor positivo para calcular "
+                "el precio máximo de compra."
+            )
+        if not (0.0 <= min_margin_percentage < 100.0):
+            raise ValueError("min_margin_percentage debe estar en [0, 100).")
+        if min_roi_percentage < 0.0:
+            raise ValueError("min_roi_percentage no puede ser negativo.")
+        if not (0.0 <= risk_buffer_percentage < 100.0):
+            raise ValueError("risk_buffer_percentage debe estar en [0, 100).")
+
+        profile = self._get_profile(profile_name)
+        is_dealer = self._is_dealer_seller(seller_type)
+
+        sale_price = Decimal(str(estimated_sale_price))
+        buffer_fraction = Decimal(str(risk_buffer_percentage)) / Decimal("100")
+        effective_sale_price = sale_price * (Decimal("1") - buffer_fraction)
+
+        margin_fraction = Decimal(str(min_margin_percentage)) / Decimal("100")
+        roi_fraction = Decimal(str(min_roi_percentage)) / Decimal("100")
+
+        fixed_costs = Decimal(
+            str(
+                profile.transport_cost
+                + profile.registration_cost
+                + profile.inspection_cost
+                + profile.paperwork_cost
+                + profile.miscellaneous_cost
+            )
+        )
+
+        if is_dealer:
+            from app.services.iedmt import VAT_RATE_SPAIN, iedmt_rate
+
+            tax_rate = Decimal(str(iedmt_rate(co2_gkm))) + Decimal(str(VAT_RATE_SPAIN))
+        else:
+            tax_rate = Decimal(str(profile.tax_rate))
+
+        variable_rate = (
+            tax_rate + Decimal(str(profile.commission_rate)) + Decimal(str(profile.repair_estimate_rate))
+        )
+        rate_denominator = Decimal("1") + variable_rate
+
+        price_from_margin = (
+            effective_sale_price * (Decimal("1") - margin_fraction) - fixed_costs
+        ) / rate_denominator
+        price_from_roi = (
+            effective_sale_price / (Decimal("1") + roi_fraction) - fixed_costs
+        ) / rate_denominator
+
+        if price_from_margin <= price_from_roi:
+            max_price = price_from_margin
+            binding = "margin"
+        else:
+            max_price = price_from_roi
+            binding = "roi"
+
+        max_price = max(Decimal("0"), max_price).quantize(
+            Decimal("0.01"), rounding=ROUND_DOWN
+        )
+
+        return MaxPurchasePriceResult(
+            max_purchase_price=float(max_price),
+            binding_constraint=binding,
+            effective_sale_price=float(effective_sale_price.quantize(Decimal("0.01"))),
+            estimated_sale_price=float(estimated_sale_price),
+            fixed_costs=float(fixed_costs),
+            variable_rate=float(variable_rate),
+            is_dealer=is_dealer,
+        )

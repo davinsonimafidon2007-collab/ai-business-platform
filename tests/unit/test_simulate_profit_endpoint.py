@@ -14,7 +14,13 @@ from app.dependencies.auth import get_current_user
 from app.main import app
 from app.models.user import User
 from app.models.vehicle import Vehicle
-from app.services.profit_analyzer import ProfitAnalysis, ProfitAnalyzer, Recommendation, RiskLevel
+from app.services.profit_analyzer import (
+    MaxPurchasePriceResult,
+    ProfitAnalysis,
+    ProfitAnalyzer,
+    ProfitRecommendation,
+    RiskLevel,
+)
 
 client = TestClient(app)
 
@@ -56,7 +62,7 @@ def _make_analysis() -> ProfitAnalysis:
         roi_percentage=3.09,
         profit_margin_percentage=3.0,
         risk_level=RiskLevel.MEDIUM,
-        recommendation=Recommendation.CONSIDER,
+        recommendation=ProfitRecommendation.CONSIDER,
         cost_breakdown=cost_breakdown,
     )
 
@@ -85,6 +91,17 @@ def override_deps() -> None:
     def _get_profit_analyzer() -> ProfitAnalyzer:
         analyzer = MagicMock(spec=ProfitAnalyzer)
         analyzer.analyze = MagicMock(return_value=_make_analysis())
+        analyzer.calculate_max_purchase_price = MagicMock(
+            return_value=MaxPurchasePriceResult(
+                max_purchase_price=15000.0,
+                binding_constraint="margin",
+                effective_sale_price=24000.0,
+                estimated_sale_price=24000.0,
+                fixed_costs=2220.0,
+                variable_rate=0.17,
+                is_dealer=False,
+            )
+        )
         return analyzer
 
     app.dependency_overrides[get_current_user] = _get_current_user
@@ -153,6 +170,17 @@ def test_simulate_profit_coherence_warnings_extreme_roi(override_deps: None) -> 
 
     analyzer = MagicMock(spec=ProfitAnalyzer)
     analyzer.analyze = MagicMock(return_value=analysis)
+    analyzer.calculate_max_purchase_price = MagicMock(
+        return_value=MaxPurchasePriceResult(
+            max_purchase_price=15000.0,
+            binding_constraint="margin",
+            effective_sale_price=24000.0,
+            estimated_sale_price=24000.0,
+            fixed_costs=2220.0,
+            variable_rate=0.17,
+            is_dealer=False,
+        )
+    )
 
     app.dependency_overrides[get_profit_analyzer] = lambda: analyzer
     try:

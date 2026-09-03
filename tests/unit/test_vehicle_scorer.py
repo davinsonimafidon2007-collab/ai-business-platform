@@ -153,7 +153,9 @@ class TestCategoryMapping:
     """Verifica que la categorización es correcta."""
 
     def test_excellent_category(self, scorer: VehicleScorer, perfect_vehicle: VehicleStub) -> None:
-        result = scorer.score(perfect_vehicle)
+        # market_price 25%+ por encima del precio real: precio genuinamente
+        # competitivo (TASK 2 / AUD-007), no un bono automático sin datos.
+        result = scorer.score(perfect_vehicle, market_price=20000.0)
         assert result.category == "Excelente"
         assert result.score >= SCORE_EXCELLENT
 
@@ -176,7 +178,9 @@ class TestCategoryMapping:
             brand="Ford",
             model="Focus",
         )
-        result = scorer.score(vehicle)
+        # market_price ~30% por encima del precio real: precio competitivo
+        # verificable (antes del fix se asumía siempre, sin comparar nada).
+        result = scorer.score(vehicle, market_price=35714.0)
         assert SCORE_GOOD <= result.score < SCORE_VERY_GOOD
         assert result.category == "Bueno"
 
@@ -194,7 +198,7 @@ class TestCategoryMapping:
             brand="Seat",
             model="Ibiza",
         )
-        result = scorer.score(vehicle)
+        result = scorer.score(vehicle, market_price=7143.0)
         assert SCORE_ACCEPTABLE <= result.score < SCORE_GOOD
         assert result.category == "Aceptable"
 
@@ -206,7 +210,7 @@ class TestCategoryMapping:
         assert SCORE_CATEGORY_LABELS_ES["poor"] == "Malo"
 
     def test_score_populates_category_key_and_label(self, scorer: VehicleScorer, perfect_vehicle: VehicleStub) -> None:
-        result = scorer.score(perfect_vehicle)
+        result = scorer.score(perfect_vehicle, market_price=20000.0)
         assert result.category == "Excelente"
         assert result.category_key == "excellent"
         assert result.category_label_es == "Excelente"
@@ -235,7 +239,55 @@ class TestPriceEvaluation:
         vehicle = VehicleStub(price=20000.0)
         result = scorer.score(vehicle)
         assert any("precio definido" in r.reason.lower() and r.is_positive for r in result.reasons)
-        assert any("precio competitivo" in r.reason.lower() and r.is_positive for r in result.reasons)
+
+    def test_price_without_market_data_has_no_fake_competitive_bonus(
+        self, scorer: VehicleScorer
+    ) -> None:
+        """TASK 2 (AUD-007): sin market_price no se inventa competitividad.
+
+        Antes del fix, cualquier vehículo con precio > 0 recibía siempre el
+        bono máximo de "precio competitivo" sin comparar contra nada — un
+        coche caro y uno barato puntuaban igual. Ahora, sin datos de
+        mercado, solo se puntúa que el precio exista (30% del peso) y se
+        deja constancia explícita de que falta la comparación.
+        """
+        vehicle = VehicleStub(price=20000.0)
+        result = scorer.score(vehicle)
+        assert not any(
+            "precio competitivo" in r.reason.lower() for r in result.reasons
+        )
+        assert any(
+            "sin comparativa de mercado" in r.reason.lower() and not r.is_positive
+            for r in result.reasons
+        )
+
+    def test_price_below_market_gets_real_bonus(self, scorer: VehicleScorer) -> None:
+        """Precio genuinamente por debajo de mercado → bono real, no fijo."""
+        vehicle = VehicleStub(price=15000.0)
+        result = scorer.score(vehicle, market_price=20000.0)  # 25% por debajo
+        assert any(
+            "por debajo del mercado" in r.reason.lower() and r.is_positive
+            for r in result.reasons
+        )
+
+    def test_price_above_market_gets_penalty(self, scorer: VehicleScorer) -> None:
+        """Precio por encima de mercado → penalización, no un bono."""
+        vehicle = VehicleStub(price=25000.0)
+        result = scorer.score(vehicle, market_price=20000.0)  # 25% por encima
+        assert any(
+            "por encima del mercado" in r.reason.lower() and not r.is_positive
+            for r in result.reasons
+        )
+
+    def test_price_at_market_is_neutral(self, scorer: VehicleScorer) -> None:
+        """Precio exactamente igual a mercado → impacto ~0, ni bono ni penalización."""
+        vehicle = VehicleStub(price=20000.0)
+        result = scorer.score(vehicle, market_price=20000.0)
+        price_reasons = [r for r in result.reasons if r.category == "price"]
+        market_reason = next(
+            r for r in price_reasons if "mercado" in r.reason.lower()
+        )
+        assert abs(market_reason.impact) < 0.01
 
 
 # =============================================================================
@@ -521,7 +573,7 @@ class TestFullScenarios:
     """Escenarios completos que validan el scoring global."""
 
     def test_perfect_vehicle_scores_excellent(self, scorer: VehicleScorer, perfect_vehicle: VehicleStub) -> None:
-        result = scorer.score(perfect_vehicle)
+        result = scorer.score(perfect_vehicle, market_price=20000.0)
         assert result.category == "Excelente"
         assert result.score >= 90
         assert len(result.strengths) >= 5
@@ -584,7 +636,7 @@ class TestFullScenarios:
             brand="Toyota",
             model="Corolla",
         )
-        result = scorer.score(vehicle)
+        result = scorer.score(vehicle, market_price=50000.0)
         assert result.category in ("Excelente", "Muy bueno")
         assert result.score >= 80
 
@@ -633,6 +685,7 @@ class TestScoreFromDTO:
             images=["img1.jpg", "img2.jpg"],
             brand="Tesla",
             model="Model Y",
+            market_price=27000.0,
         )
         assert isinstance(result, VehicleScore)
         assert result.score >= 80
@@ -666,6 +719,7 @@ class TestScoreFromDTO:
             power_hp=190,
             description="Impecable",
             images=["img1.jpg"],
+            market_price=40000.0,
             extra_field="should be ignored",
             another_extra=123,
         )

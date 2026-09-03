@@ -293,6 +293,9 @@ class TestRefreshOpportunityJob:
             patch(
                 "app.services.evaluation_engine.EvaluationEngine"
             ) as mock_engine_class,
+            patch(
+                "app.services.comparable_market_estimator.ComparableMarketEstimator"
+            ) as mock_market_estimator_class,
         ):
             # Mock vehicles
             mock_vehicle = MagicMock()
@@ -316,9 +319,18 @@ class TestRefreshOpportunityJob:
             mock_result.recommendation = "Buena oportunidad"
             mock_result.profit_margin_percent = 20.0
             mock_result.gross_profit = 1500.0
+            mock_result.confidence = 40.0
             mock_engine_instance = MagicMock()
             mock_engine_instance.evaluate = MagicMock(return_value=mock_result)
             mock_engine_class.return_value = mock_engine_instance
+
+            # Mock ComparableMarketEstimator: sin comparables (AUD-008) —
+            # el job debe seguir funcionando con el fallback de EvaluationEngine.
+            mock_market_estimator_instance = AsyncMock()
+            mock_market_estimator_instance.estimate = AsyncMock(
+                return_value=MagicMock(market_price=0.0, confidence=0.0)
+            )
+            mock_market_estimator_class.return_value = mock_market_estimator_instance
 
             job = RefreshOpportunityJob()
             result = await job.execute(context)
@@ -355,6 +367,9 @@ class TestRefreshOpportunityJob:
             patch(
                 "app.services.telegram_alert_service.TelegramAlertService"
             ) as mock_tg_svc,
+            patch(
+                "app.services.comparable_market_estimator.ComparableMarketEstimator"
+            ) as mock_market_estimator_class,
         ):
             mock_vehicle = MagicMock(id="v1", user_id="u1")
             mock_vehicle_repo_instance = AsyncMock()
@@ -372,9 +387,16 @@ class TestRefreshOpportunityJob:
             mock_result.recommendation = "Buena oportunidad"
             mock_result.profit_margin_percent = 20.0
             mock_result.gross_profit = 1500.0
+            mock_result.confidence = 40.0
             mock_engine_instance = MagicMock()
             mock_engine_instance.evaluate = MagicMock(return_value=mock_result)
             mock_engine_class.return_value = mock_engine_instance
+
+            mock_market_estimator_instance = AsyncMock()
+            mock_market_estimator_instance.estimate = AsyncMock(
+                return_value=MagicMock(market_price=0.0, confidence=0.0)
+            )
+            mock_market_estimator_class.return_value = mock_market_estimator_instance
 
             mock_user_repo_instance = AsyncMock()
             mock_user_repo_instance.get_by_id = AsyncMock(
@@ -425,6 +447,9 @@ class TestRefreshOpportunityJob:
             patch(
                 "app.services.telegram_alert_service.TelegramAlertService"
             ) as mock_tg_svc,
+            patch(
+                "app.services.comparable_market_estimator.ComparableMarketEstimator"
+            ) as mock_market_estimator_class,
         ):
             mock_vehicle = MagicMock(id="v1", user_id="u1")
             mock_vehicle_repo_instance = AsyncMock()
@@ -443,8 +468,15 @@ class TestRefreshOpportunityJob:
                     recommendation="BUY",
                     profit_margin_percent=20.0,
                     gross_profit=1500.0,
+                    confidence=40.0,
                 )
             )
+
+            mock_market_estimator_instance = AsyncMock()
+            mock_market_estimator_instance.estimate = AsyncMock(
+                return_value=MagicMock(market_price=0.0, confidence=0.0)
+            )
+            mock_market_estimator_class.return_value = mock_market_estimator_instance
 
             mock_user_repo.return_value.get_by_id = AsyncMock(
                 return_value=MagicMock(email="a@b.com")

@@ -256,6 +256,22 @@ const saveSim = useMutation({
                     {eur(simulate.data.estimated_sale_price)}
                   </p>
                 </div>
+                {simulate.data.max_purchase_price != null && (
+                  <div>
+                    <p className="text-xs font-medium text-secondary-500 dark:text-secondary-400">
+                      Precio máx. de compra
+                    </p>
+                    <p className="mt-1 font-semibold text-secondary-900 dark:text-secondary-100">
+                      {eur(simulate.data.max_purchase_price)}
+                    </p>
+                    <p className="text-[10px] text-secondary-400">
+                      límite:{" "}
+                      {simulate.data.max_purchase_price_binding_constraint === "roi"
+                        ? "ROI mínimo"
+                        : "margen mínimo"}
+                    </p>
+                  </div>
+                )}
                 <div className="flex items-center gap-3">
                   <RecommendationBadge
                     recommendation={

@@ -46,6 +46,7 @@ from app.config.opportunity import (
     WATCH_MAX_SCORE,
     WATCH_MIN_SCORE,
 )
+from app.services.confidence import estimate_confidence
 
 # =============================================================================
 # Enumeraciones de salida
@@ -103,7 +104,14 @@ class OpportunityAnalysis:
         recommendation: Recomendación de acción.
         estimated_profit: Beneficio neto estimado (del ProfitAnalysis).
         roi: Retorno sobre la inversión (del ProfitAnalysis).
-        market_confidence: Confianza de mercado (del MarketEstimation).
+        market_confidence: Confianza de mercado cruda (del MarketEstimation),
+            sin penalizaciones adicionales.
+        confidence: Confianza global 0-100 (TASK 2) que combina
+            market_confidence con penalizaciones por datos faltantes o
+            estimaciones sin respaldo de mercado real. Es un concepto
+            DISTINTO de profitability (estimated_profit/roi) y de risk
+            (risk_level): una oportunidad puede tener beneficio alto, riesgo
+            alto y confianza baja simultáneamente — ver app/services/confidence.py.
         risk_level: Nivel de riesgo (del ProfitAnalysis).
         strengths: Lista de fortalezas detectadas (texto legible).
         weaknesses: Lista de debilidades detectadas (texto legible).
@@ -117,6 +125,7 @@ class OpportunityAnalysis:
     roi: float
     market_confidence: float
     risk_level: str
+    confidence: float = 0.0
     strengths: list[str] = field(default_factory=list)
     weaknesses: list[str] = field(default_factory=list)
     reasons: list[OpportunityReason] = field(default_factory=list)
@@ -152,6 +161,8 @@ class OpportunityFinder:
         vehicle_score: Any,
         profit_analysis: Any,
         market_estimation: Any,
+        *,
+        market_grounded: bool = True,
     ) -> OpportunityAnalysis:
         """Analiza un vehículo combinando score, beneficio y mercado.
 
@@ -161,6 +172,9 @@ class OpportunityFinder:
                 .risk_level, .recommendation).
             market_estimation: MarketEstimation (debe tener .market_price, .confidence,
                 .supply_level, .demand_level, .market_trend).
+            market_grounded: ``False`` cuando el precio de venta usado por
+                ProfitAnalyzer viene del multiplicador por defecto en vez de
+                un comparable de mercado real (TASK 2). Reduce ``confidence``.
 
         Returns:
             OpportunityAnalysis con el análisis completo.
@@ -217,6 +231,13 @@ class OpportunityFinder:
         if hasattr(risk_level, "value"):
             risk_level = risk_level.value
 
+        confidence = estimate_confidence(
+            market_confidence=market_confidence,
+            warnings=list(getattr(profit_analysis, "warnings", None) or []),
+            weaknesses=weaknesses,
+            market_grounded=market_grounded,
+        )
+
         return OpportunityAnalysis(
             overall_score=round(overall_score, 2),
             opportunity_level=opportunity_level,
@@ -225,6 +246,7 @@ class OpportunityFinder:
             roi=roi,
             market_confidence=market_confidence,
             risk_level=risk_level,
+            confidence=confidence,
             strengths=strengths,
             weaknesses=weaknesses,
             reasons=reasons,

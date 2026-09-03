@@ -266,13 +266,34 @@ async def simulate_vehicle_profit(
             self.model = getattr(src, "model", None)
             self.year = getattr(src, "year", None)
             self.mileage = getattr(src, "mileage", None)
+            self.seller_type = getattr(src, "seller_type", None)
 
+    seller_type = (
+        body.seller_type if body.seller_type is not None else getattr(vehicle, "seller_type", None)
+    )
     analysis = profit_analyzer.analyze(
         _V(vehicle, float(purchase)),
         profile_name=body.profile_name,
         estimated_sale_price=body.estimated_sale_price,
+        seller_type=seller_type,
     )
     costs = analysis.cost_breakdown
+
+    max_purchase_price = None
+    max_purchase_price_binding = None
+    try:
+        max_price_result = profit_analyzer.calculate_max_purchase_price(
+            analysis.estimated_sale_price,
+            profile_name=body.profile_name,
+            min_margin_percentage=body.min_margin_percentage,
+            min_roi_percentage=body.min_roi_percentage,
+            risk_buffer_percentage=body.risk_buffer_percentage,
+            seller_type=seller_type,
+        )
+        max_purchase_price = max_price_result.max_purchase_price
+        max_purchase_price_binding = max_price_result.binding_constraint
+    except ValueError:
+        pass
     cost_lines_raw = build_cost_lines(costs)
     warnings = build_coherence_warnings(
         purchase_price=float(purchase),
@@ -307,4 +328,6 @@ async def simulate_vehicle_profit(
         coherence_warnings=warnings,
         recommendation_label_es=recommendation_label_es(analysis.recommendation),
         risk_label_es=risk_label_es(analysis.risk_level),
+        max_purchase_price=max_purchase_price,
+        max_purchase_price_binding_constraint=max_purchase_price_binding,
     )

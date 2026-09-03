@@ -48,6 +48,13 @@ class Opportunity(Base):
     profit: Mapped[float | None] = mapped_column(Float, nullable=True)
     """Beneficio neto estimado (EUR)."""
 
+    confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    """Confianza 0-100 de la estimación (TASK 2, ver app/services/confidence.py).
+
+    Concepto distinto de ``profit``/``roi`` (rentabilidad) y de ``risk``
+    (riesgo): mide cuán fiables son los datos usados para el análisis, no
+    cuánto se podría ganar ni cuán probable es que algo salga mal."""
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(UTC),

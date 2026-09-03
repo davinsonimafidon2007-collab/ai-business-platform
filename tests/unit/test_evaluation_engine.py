@@ -341,9 +341,9 @@ def test_recommendation_aligned_with_profit_analyzer(evaluation_engine, sample_v
     analysis = ProfitAnalyzer().analyze(
         sample_vehicle, profile_name="SPAIN"
     )
-    from app.services.profit_analyzer import Recommendation
+    from app.services.profit_analyzer import ProfitRecommendation
 
-    if analysis.recommendation == Recommendation.BUY:
+    if analysis.recommendation == ProfitRecommendation.BUY:
         assert "recomendado" in result.recommendation.lower()
-    elif analysis.recommendation == Recommendation.REJECT:
+    elif analysis.recommendation == ProfitRecommendation.REJECT:
         assert "no recomendado" in result.recommendation.lower()
