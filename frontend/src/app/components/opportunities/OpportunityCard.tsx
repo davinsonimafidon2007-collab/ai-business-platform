@@ -96,9 +96,7 @@ export function OpportunityCard({ id, opportunity }: OpportunityCardProps) {
                 </span>
               ) : null}
             </div>
-            <p className="text-xs text-secondary-400 mt-1">
-              {year ?? "—"} {vehicle.url ? `· <a href="${vehicle.url}" target="_blank" rel="noreferrer" className="text-primary-400">Ver anuncio</a>` : ""}
-            </p>
+            <p className="text-xs text-secondary-400 mt-1">{year ?? "—"}</p>
           </div>
 
           <div className="flex items-center justify-between gap-2 mt-3 pt-3 border-t border-[#1e1e2d]">
@@ -127,25 +125,38 @@ export function OpportunityCard({ id, opportunity }: OpportunityCardProps) {
         </div>
       </Link>
 
-      {(isConvertible || isConverted) && (
+      {(isConvertible || isConverted || vehicle.url) && (
         <div className="flex items-center justify-between gap-2 px-4 pb-4">
-          {isConverted ? (
-            <span className="text-[11px] font-medium text-secondary-500">
-              Ya convertida en deal
-            </span>
-          ) : (
-            <button
-              type="button"
-              disabled={convert.isPending}
-              onClick={(e) => {
-                e.preventDefault();
-                convert.mutate();
-              }}
-              className="text-[11px] font-semibold px-3 py-1.5 rounded-lg bg-primary-600/10 text-primary-400 border border-primary-600/30 hover:bg-primary-600/20 disabled:opacity-50 transition-colors"
-            >
-              {convert.isPending ? "Creando deal..." : "Convertir en deal"}
-            </button>
-          )}
+          <div className="flex items-center gap-3">
+            {isConverted ? (
+              <span className="text-[11px] font-medium text-secondary-500">
+                Ya convertida en deal
+              </span>
+            ) : isConvertible ? (
+              <button
+                type="button"
+                disabled={convert.isPending}
+                onClick={(e) => {
+                  e.preventDefault();
+                  convert.mutate();
+                }}
+                className="text-[11px] font-semibold px-3 py-1.5 rounded-lg bg-primary-600/10 text-primary-400 border border-primary-600/30 hover:bg-primary-600/20 disabled:opacity-50 transition-colors"
+              >
+                {convert.isPending ? "Creando deal..." : "Convertir en deal"}
+              </button>
+            ) : null}
+            {vehicle.url && (
+              <a
+                href={vehicle.url}
+                target="_blank"
+                rel="noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="text-[11px] font-medium text-primary-400 hover:text-primary-300"
+              >
+                Ver anuncio original
+              </a>
+            )}
+          </div>
           {errorMsg && (
             <span className="text-[11px] text-red-400">{errorMsg}</span>
           )}
