@@ -31,6 +31,7 @@ Propiedades garantizadas:
 
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime
 
 from sqlalchemy.exc import IntegrityError
@@ -46,6 +47,8 @@ from app.models.audit_log import AuditLog
 from app.models.deal import Deal, DealStatus, DealStatusHistory
 from app.repositories.deal_repository import DealRepository
 from app.repositories.vehicle_evaluation_repository import VehicleEvaluationRepository
+
+logger = logging.getLogger(__name__)
 
 
 class DealService:
@@ -170,27 +173,35 @@ class DealService:
         # TASK 3: snapshot del resultado de NegotiationEngine si ya existe
         # una VehicleEvaluation con negociación calculada para este
         # vehículo (se pierde en cuanto termina la sesión de búsqueda si
-        # no se copia aquí). Best-effort: nunca bloquea la creación del deal.
+        # no se copia aquí). Best-effort: nunca bloquea la creación del deal
+        # (un fallo aquí solo deja los campos de negociación en None).
         if vehicle_id and self.evaluation_repository is not None:
-            evaluation = await self.evaluation_repository.get_by_vehicle_id(vehicle_id)
-            negotiation = getattr(evaluation, "negotiation", None) if evaluation else None
-            if negotiation is not None:
-                deal.negotiation_initial_offer = getattr(
-                    negotiation, "recommended_initial_offer", None
+            try:
+                evaluation = await self.evaluation_repository.get_by_vehicle_id(vehicle_id)
+                negotiation = getattr(evaluation, "negotiation", None) if evaluation else None
+                if negotiation is not None:
+                    deal.negotiation_initial_offer = getattr(
+                        negotiation, "recommended_initial_offer", None
+                    )
+                    deal.negotiation_max_price = getattr(
+                        negotiation, "maximum_purchase_price", None
+                    )
+                    deal.negotiation_walk_away_price = getattr(
+                        negotiation, "walk_away_price", None
+                    )
+                    recommendation = getattr(negotiation, "recommendation", None)
+                    deal.negotiation_recommendation = (
+                        recommendation.value
+                        if hasattr(recommendation, "value")
+                        else recommendation
+                    )
+                    deal.negotiation_snapshot_at = self._now()
+            except Exception:  # noqa: BLE001 — snapshot is best-effort here
+                logger.warning(
+                    "No se pudo tomar el snapshot de negociación para vehicle_id=%s",
+                    vehicle_id,
+                    exc_info=True,
                 )
-                deal.negotiation_max_price = getattr(
-                    negotiation, "maximum_purchase_price", None
-                )
-                deal.negotiation_walk_away_price = getattr(
-                    negotiation, "walk_away_price", None
-                )
-                recommendation = getattr(negotiation, "recommendation", None)
-                deal.negotiation_recommendation = (
-                    recommendation.value
-                    if hasattr(recommendation, "value")
-                    else recommendation
-                )
-                deal.negotiation_snapshot_at = self._now()
 
         creation_history = DealStatusHistory(
             deal_id=deal.id,
