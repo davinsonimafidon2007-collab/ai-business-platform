@@ -294,6 +294,10 @@ async def create_opportunity(
         analyzed_at=datetime.now(UTC),
     )
     opportunity = await OpportunityRepository(session).save(opportunity)
+    # OpportunityRepository.save() ya no comitea por sí sola (bug real: ver
+    # nota en el repositorio) — esta ruta es dueña de su propia sesión, así
+    # que confirma aquí explícitamente.
+    await session.commit()
     return _to_opportunity_read(opportunity)
 
 
@@ -394,6 +398,10 @@ async def get_opportunity_detail(
 
     phase_service = OpportunityPhaseService(session)
     phases = await phase_service.ensure_seeded(opportunity)
+    # ensure_seeded() ya no comitea por sí sola (bug real: ver nota en
+    # OpportunityPhaseRepository.seed_for_opportunity) — esta ruta confirma
+    # aquí las fases recién sembradas, si las hubo.
+    await session.commit()
 
     # Se reutiliza el mismo mapper que el listado para que detalle y listado
     # no diverjan (antes el detalle omitía confidence y status).
@@ -429,6 +437,10 @@ async def list_opportunity_phases(
             detail="Opportunity not found",
         )
     phases = await service.ensure_seeded(opportunity)
+    # ensure_seeded() ya no comitea por sí sola (bug real: ver nota en
+    # OpportunityPhaseRepository.seed_for_opportunity) — esta ruta confirma
+    # aquí las fases recién sembradas, si las hubo.
+    await session.commit()
     return [OpportunityPhaseService.to_read(p) for p in phases]
 
 

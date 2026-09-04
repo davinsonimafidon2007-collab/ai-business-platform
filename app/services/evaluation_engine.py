@@ -38,8 +38,14 @@ class EvaluationResult:
     score: int  # Score de 0 a 100
     classification: str  # "verde", "amarillo", "rojo"
     warnings: list[str]  # Lista de advertencias
-    recommendation: str  # Recomendación
+    recommendation: str  # Explicación en lenguaje natural (frase larga, NO cabe en VARCHAR(50))
     confidence: float = 0.0  # TASK 2: confianza 0-100, ver app/services/confidence.py
+    # Código corto (BUY/CONSIDER/REJECT, ver ProfitRecommendation) — el que
+    # sí debe persistirse en Opportunity.recommendation (String(50)). Bug
+    # real: refresh_opportunities.py escribía `recommendation` (la frase
+    # larga de arriba) directamente en esa columna y reventaba con
+    # StringDataRightTruncationError en cada ejecución del job programado.
+    recommendation_code: str = ""
 
 
 class EvaluationEngine:
@@ -184,6 +190,7 @@ class EvaluationEngine:
             classification=classification,
             warnings=warnings,
             recommendation=recommendation,
+            recommendation_code=str(getattr(analysis.recommendation, "value", analysis.recommendation)),
             confidence=confidence,
         )
 
@@ -216,6 +223,7 @@ class EvaluationEngine:
             classification=classification,
             warnings=warnings,
             recommendation=recommendation,
+            recommendation_code=ProfitRecommendation.REJECT.value,
             confidence=confidence,
         )
 

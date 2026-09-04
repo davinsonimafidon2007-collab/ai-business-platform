@@ -6,6 +6,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.base import AgentError, AgentExecutionError, AgentTimeoutError
 from app.agents.budget_search_agent import BudgetSearchAgent
@@ -14,6 +15,7 @@ from app.api.v1.dependencies import get_search_engine_service
 from app.api.v1.routes.search import _build_search_result_item
 from app.api.v1.schemas.search import ProviderIssueSchema, SearchResultItem
 from app.config.import_costs import PROFILE_ALIASES, get_profile
+from app.database import get_db_session
 from app.dependencies.auth import get_current_user
 from app.models.user import User
 from app.services.provider_issue_labels import build_provider_issue_payloads
@@ -49,6 +51,7 @@ async def search_by_budget(
     request: BudgetSearchRequest,
     search_engine: SearchEngineService = Depends(get_search_engine_service),
     current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db_session),
 ) -> Any:
     """Busca vehículos que encajen en el capital disponible.
 
@@ -99,6 +102,13 @@ async def search_by_budget(
                 f"Sin ese margen no puede comprarse ningún vehículo."
             ),
         )
+
+    # Bug real: ComparableMarketEstimator.save() dejó de hacer commit propio
+    # (ver cached_market_repository.py) para no cerrar la transacción
+    # ambiente del endpoint /search — este endpoint debe confirmar aquí lo
+    # que quedó solo "flushed" (comparables cacheados durante la búsqueda),
+    # o se pierde silenciosamente al cerrar la sesión sin commit.
+    await session.commit()
 
     items = [_build_search_result_item(r) for r in result.results]
     return BudgetSearchResponse(

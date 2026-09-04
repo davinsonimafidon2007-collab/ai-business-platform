@@ -316,7 +316,13 @@ class TestRefreshOpportunityJob:
             mock_result = MagicMock()
             mock_result.score = 75
             mock_result.classification = "verde"
-            mock_result.recommendation = "Buena oportunidad"
+            # Regresión: recommendation es una frase larga (no cabe en
+            # Opportunity.recommendation, VARCHAR(50)) — el job debe usar
+            # recommendation_code (el valor corto) para persistir, no este.
+            mock_result.recommendation = (
+                "Vehículo no recomendado. El margen de beneficio es insuficiente o negativo."
+            )
+            mock_result.recommendation_code = "REJECT"
             mock_result.profit_margin_percent = 20.0
             mock_result.gross_profit = 1500.0
             mock_result.confidence = 40.0
@@ -339,6 +345,14 @@ class TestRefreshOpportunityJob:
         assert result.data["vehicle_count"] == 1
         assert result.data["updated_count"] == 1
         assert result.data["failed_count"] == 0
+
+        # Regresión: la Opportunity guardada debe llevar el código corto
+        # (recommendation_code), NUNCA la frase larga de result.recommendation
+        # (que en Postgres real revienta VARCHAR(50) con
+        # StringDataRightTruncationError).
+        saved_opportunity = mock_opp_repo_instance.save.call_args[0][0]
+        assert saved_opportunity.recommendation == "REJECT"
+        assert len(saved_opportunity.recommendation) <= 50
 
     @pytest.mark.asyncio
     async def test_execute_calls_telegram_alert_service(self, context: JobContext) -> None:
@@ -384,7 +398,13 @@ class TestRefreshOpportunityJob:
             mock_result = MagicMock()
             mock_result.score = 75
             mock_result.classification = "verde"
-            mock_result.recommendation = "Buena oportunidad"
+            # Regresión: recommendation es una frase larga (no cabe en
+            # Opportunity.recommendation, VARCHAR(50)) — el job debe usar
+            # recommendation_code (el valor corto) para persistir, no este.
+            mock_result.recommendation = (
+                "Vehículo no recomendado. El margen de beneficio es insuficiente o negativo."
+            )
+            mock_result.recommendation_code = "REJECT"
             mock_result.profit_margin_percent = 20.0
             mock_result.gross_profit = 1500.0
             mock_result.confidence = 40.0

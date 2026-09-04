@@ -38,7 +38,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     UV_LINK_MODE=copy \
     UV_PROJECT_ENVIRONMENT=/opt/venv \
-    PATH=/opt/venv/bin:$PATH
+    PATH=/opt/venv/bin:$PATH \
+    PLAYWRIGHT_BROWSERS_PATH=/opt/playwright-browsers
 
 # curl para el healthcheck del compose.
 RUN apt-get update \
@@ -61,7 +62,18 @@ RUN mkdir -p /app/uploads/inspection_photos \
 # se descarga si ENABLE_MOBILE_DE_PLAYWRIGHT=true en runtime. Se instala como
 # root (requiere apt) antes de bajar a appuser; no bloquea el build si falla
 # (fallback httpx en el provider).
-RUN uv run --no-sync playwright install --with-deps chromium || echo "playwright browsers skip (offline)"
+#
+# Bug real encontrado probando la integración: `playwright install` (el
+# shortcut de CLI) bajo `uv run --no-sync` no descarga nada — termina con
+# exit 0 y sin salida, sin error visible — así que el `|| echo skip`
+# enmascaraba un fallo real y silencioso, no una falta de red. El módulo
+# `python -m playwright install` sí funciona igual bajo `uv run`.
+# PLAYWRIGHT_BROWSERS_PATH se fija a una ruta fija (no depende de $HOME,
+# que aquí es el de root, no el de appuser) y se hace legible por
+# cualquier usuario para que el proceso runtime (appuser) pueda usarlo.
+RUN uv run --no-sync python -m playwright install --with-deps chromium \
+    && chmod -R a+rX "$PLAYWRIGHT_BROWSERS_PATH" \
+    || echo "playwright browsers skip (offline)"
 
 USER appuser
 

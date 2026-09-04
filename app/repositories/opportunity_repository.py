@@ -31,10 +31,19 @@ class OpportunityRepository:
 
         Returns:
             The persisted Opportunity with generated id and timestamps.
+
+        Nota (bug real): antes hacía ``session.commit()`` aquí. Cuando se
+        llama desde SearchPersistenceService.persist_engine_result (sesión
+        COMPARTIDA de todo el request de búsqueda), un commit a mitad de
+        loop cierra la transacción ambiente y revienta el resto del batch
+        con "InvalidRequestError: Can't operate on closed transaction".
+        Solo hace ``flush()`` (visible para lecturas posteriores en la
+        misma sesión); el commit final es responsabilidad de quien
+        orquesta el request/job (ver opportunities.py y
+        refresh_opportunities.py, que ahora comitean explícitamente).
         """
         self.session.add(opportunity)
-        await self.session.commit()
-        await self.session.refresh(opportunity)
+        await self.session.flush()
         return opportunity
 
     async def save_many(self, opportunities: list[Opportunity]) -> list[Opportunity]:
@@ -127,8 +136,7 @@ class OpportunityRepository:
             existing.confidence = opportunity.confidence
             existing.analyzed_at = opportunity.analyzed_at or datetime.now(UTC)
             existing.engine_version = opportunity.engine_version
-            await self.session.commit()
-            await self.session.refresh(existing)
+            await self.session.flush()
             return existing
         else:
             # Create new record

@@ -190,10 +190,10 @@ class ProcessSearchOrdersJob(Job):
 
     def _build_search_engine(self, session: Any) -> Any:
         """Construye SearchEngineService con sus dependencias (mismo wiring que DI)."""
+        from app.api.v1.dependencies import get_mobile_de_provider
         from app.providers.autoscout24 import AutoScout24Provider
         from app.providers.autoscout24_es import AutoScout24EsProvider
         from app.providers.http_client import ProviderHttpClient
-        from app.providers.mobile_de import MobileDeProvider
         from app.repositories.cached_market_repository import CachedMarketRepository
         from app.repositories.inspection_repository import (
             InspectionObservationRepository,
@@ -212,12 +212,13 @@ class ProcessSearchOrdersJob(Job):
 
         vehicle_service = VehicleService(VehicleRepository(session))
 
-        mobile_de_client = ProviderHttpClient(
-            provider_name="mobile_de",
-            base_url="https://suchen.mobile.de",
-            timeout=settings.provider_http_timeout,
-            max_retries=settings.provider_http_max_retries,
-        )
+        # Bug real: este job construía un MobileDeProvider(httpx puro) a mano
+        # en vez de reusar get_mobile_de_provider() (mismo wiring que DI, tal
+        # como dice el docstring de este método) — con ENABLE_MOBILE_DE_PLAYWRIGHT
+        # activado, la búsqueda interactiva sí usaba el browser headless pero
+        # esta búsqueda en segundo plano seguía cayendo siempre al 403 anti-bot
+        # de httpx puro.
+        mobile_de_provider = get_mobile_de_provider()
         autoscout_client = ProviderHttpClient(
             provider_name="autoscout24",
             base_url="https://www.autoscout24.de",
@@ -243,10 +244,7 @@ class ProcessSearchOrdersJob(Job):
         )
         return SearchEngineService(
             vehicle_service=vehicle_service,
-            mobile_de_provider=MobileDeProvider(
-                http_client=mobile_de_client,
-                base_url="https://suchen.mobile.de",
-            ),
+            mobile_de_provider=mobile_de_provider,
             autoscout24_provider=AutoScout24Provider(
                 http_client=autoscout_client,
                 base_url="https://www.autoscout24.de",
