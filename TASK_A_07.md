@@ -17,6 +17,17 @@ donde esta sesión no pudo. **No conviertas ninguno de estos puntos en
 un "arreglo de código" — si no hay recurso externo disponible,
 documenta el bloqueo y para ahí; no inventes bypass de anti-bot.**
 
+> **Actualización (2026-09-04, más tarde el mismo día):** OpenClaw
+> revisó este documento y encontró un fallback inseguro real en
+> `app/providers/registry.py` (`enable_mobile_de` por defecto `True` si
+> el atributo faltaba, inconsistente con el default `False` de
+> `config.py`) — corregido en `6de7aeb`, verificado por esta sesión
+> (CI verde, tests 1863 passed, ruff limpio). También verificó que
+> **coches.net ya no está bloqueado** — confirmado independientemente
+> por esta sesión: el bloqueo de la auditoría original era una ventana
+> temporal de anti-bot (rate limit/cooldown), no permanente. Ver
+> Bloqueo 2 actualizado abajo. Los Bloqueos 1, 3 y 4 siguen vigentes.
+
 ---
 
 ## Bloqueo 1 — mobile.de: sin datos reales sin proxy/cookies/browser real
@@ -63,35 +74,33 @@ de tráfico de navegador real, no que sea un bloqueo total.
 
 ---
 
-## Bloqueo 2 — coches.net: mismo problema, confirmado en vivo hoy
+## Bloqueo 2 — coches.net: RESUELTO (era intermitente, no permanente)
 
-### Problema
-`app/providers/coches_net.py` es un scraper real, probado contra un
-fixture HTML capturado (2026-08-20). Pero en la auditoría de hoy,
-probado en vivo, coches.net devolvió una página de reto anti-bot
-(`<title>Ups! Parece que algo no va bien...</title>`,
-`meta name="robots" content="noindex, nofollow"`) en vez de listados
-reales — mismo patrón que mobile.de.
+### Estado: ~~BLOCKED_EXTERNAL~~ → REAL, confirmado dos veces en el mismo día
 
-### Lo que SÍ podrías intentar
-- Mismas opciones que Bloqueo 1 (`PROVIDER_HTTP_PROXY`/
-  `PROVIDER_HTTP_COOKIES`), pero coches.net no tiene transporte
-  Playwright/OpenClaw todavía — solo httpx (`app/providers/coches_net.py`).
-  Si un proxy no basta, considera si merece la pena añadirle el mismo
-  patrón de `BrowserAutomation` que ya tiene mobile.de (ver
-  `app/providers/browser_automation.py`, ADR-006) — pero solo si
-  confirmas primero que un navegador real SÍ pasa el bloqueo (como se
-  confirmó para mobile.de), para no construir algo sin evidencia de que
-  vaya a funcionar.
+Durante la auditoría original (2026-09-04, por la tarde) coches.net
+devolvió una página de reto anti-bot (`<title>Ups! Parece que algo no
+va bien...</title>`, `meta name="robots" content="noindex, nofollow"`,
+HTML de solo 8715 bytes) en vez de listados reales.
 
-### Archivos relevantes
+Horas después, OpenClaw reportó que en su propia validación live
+coches.net SÍ devolvía resultados reales. Esta sesión lo re-verificó
+de forma independiente contra el mismo contenedor: `_download_url`
+devolvió una página real de 1.481.281 bytes, y `search("seat")` devolvió
+8 anuncios reales (SEAT León, Ibiza, Alhambra con precios reales en EUR).
+
+**Conclusión: el bloqueo de coches.net era una ventana temporal (rate
+limit / cooldown de IP), no un bloqueo permanente como mobile.de.** No
+se hizo ningún cambio de código para "arreglarlo" — el scraper ya era
+correcto; simplemente el anti-bot dejó de activarse. Si vuelve a
+bloquear de forma intermitente, es un comportamiento esperado del
+proveedor, no un defecto — no hay nada que reparar aquí salvo, si se
+quiere más resiliencia, un retry con backoff ante un bloqueo detectado
+(evaluar si merece la pena antes de implementarlo).
+
+### Archivos relevantes (referencia, no bloqueo)
 - `app/providers/coches_net.py`
 - `tests/unit/providers/test_coches_net.py`
-- `tests/fixtures/coches_net_sample.html` (fixture de referencia)
-
-### Criterio de aceptación
-- `POST /api/v1/search` con `providers: ["coches_net"]` devuelve
-  `results` no vacíos para una marca real (ej. "seat").
 
 ---
 
