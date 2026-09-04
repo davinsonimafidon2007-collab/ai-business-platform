@@ -24,8 +24,9 @@ _ERROR_MESSAGES_ES: dict[str, str] = {
         "Espera unos minutos antes de repetir la búsqueda."
     ),
     "ProviderParsingError": (
-        "{provider}: la respuesta no se pudo interpretar. "
-        "Puede que la web haya cambiado de formato."
+        "{provider}: no se pudo completar la búsqueda con esta fuente "
+        "(puede que la web haya cambiado de formato, o que este tipo de "
+        "búsqueda no esté soportado aún en este proveedor)."
     ),
     "ProviderMaxRetriesExceededError": (
         "{provider}: la fuente falló repetidamente y se agotaron los reintentos."
