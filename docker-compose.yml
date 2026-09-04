@@ -52,6 +52,13 @@ services:
       ENABLE_MOBILE_DE: "${ENABLE_MOBILE_DE:-false}"
       ENABLE_MOBILE_DE_PLAYWRIGHT: "${ENABLE_MOBILE_DE_PLAYWRIGHT:-false}"
       PLAYWRIGHT_HEADLESS: "${PLAYWRIGHT_HEADLESS:-true}"
+      # OpenClaw (BROWSER.1): capa opcional, mismo patrón de passthrough que
+      # ENABLE_MOBILE_DE_PLAYWRIGHT arriba — sin esto, activarlo en el .env
+      # del host no tendría ningún efecto dentro del contenedor.
+      ENABLE_OPENCLAW_BROWSER: "${ENABLE_OPENCLAW_BROWSER:-false}"
+      OPENCLAW_ENDPOINT: "${OPENCLAW_ENDPOINT:-}"
+      OPENCLAW_AGENT_ID: "${OPENCLAW_AGENT_ID:-mobile-de-browser}"
+      OPENCLAW_TIMEOUT_MS: "${OPENCLAW_TIMEOUT_MS:-45000}"
       PROVIDER_HTTP_COOKIES: "${PROVIDER_HTTP_COOKIES:-}"
       PROVIDER_HTTP_PROXY: "${PROVIDER_HTTP_PROXY:-}"
       FIREBASE_CREDENTIALS_JSON: "${FIREBASE_CREDENTIALS_JSON:-}"
