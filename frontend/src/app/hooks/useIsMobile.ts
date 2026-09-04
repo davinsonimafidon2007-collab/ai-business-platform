@@ -29,16 +29,12 @@ export function useIsMobile(breakpointPx = 768): boolean {
   const [mobile, setMobile] = useState<boolean>(false);
 
   useEffect(() => {
-    if (isNative()) {
-      setMobile(true);
-      return;
-    }
-
-    const mq = window.matchMedia(`(max-width: ${breakpointPx - 1}px)`);
-    const apply = () => setMobile(mq.matches);
-    mq.addEventListener("change", apply);
+    const native = isNative();
+    const mq = native ? null : window.matchMedia(`(max-width: ${breakpointPx - 1}px)`);
+    const apply = () => setMobile(native || (mq?.matches ?? false));
+    mq?.addEventListener("change", apply);
     apply();
-    return () => mq.removeEventListener("change", apply);
+    return () => mq?.removeEventListener("change", apply);
   }, [breakpointPx]);
 
   return mobile;
