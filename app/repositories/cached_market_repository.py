@@ -31,16 +31,27 @@ class CachedMarketRepository:
 
         Returns:
             The persisted CachedMarketData with generated id and timestamps.
+
+        Nota (bug real): antes hacía ``session.commit()`` aquí. Este repo se
+        usa desde ComparableMarketEstimator con la sesión COMPARTIDA de todo
+        el request de búsqueda (ver app/api/v1/routes/search.py) — un commit
+        a mitad de request cierra la transacción ambiente, y el paso
+        posterior (SearchPersistenceService.persist_engine_result, que
+        también reutiliza esa misma sesión) fallaba con
+        "sqlalchemy.exc.InvalidRequestError: Can't operate on closed
+        transaction" para los 30/30 vehículos del batch. Solo hace
+        ``flush()`` (visible para lecturas posteriores en la misma sesión,
+        sin cerrar la transacción); el commit final es responsabilidad de
+        quien orquesta el request.
         """
         self.session.add(market_data)
-        await self.session.commit()
-        await self.session.refresh(market_data)
+        await self.session.flush()
         return market_data
 
     async def save_many(
         self, market_data_list: list[CachedMarketData]
     ) -> list[CachedMarketData]:
-        """Persists multiple cached market data entries in a single transaction.
+        """Persists multiple cached market data entries in the current transaction.
 
         Args:
             market_data_list: List of CachedMarketData instances to persist.
@@ -50,9 +61,7 @@ class CachedMarketRepository:
         """
         for md in market_data_list:
             self.session.add(md)
-        await self.session.commit()
-        for md in market_data_list:
-            await self.session.refresh(md)
+        await self.session.flush()
         return market_data_list
 
     async def get(self, market_data_id: str | UUID) -> CachedMarketData | None:

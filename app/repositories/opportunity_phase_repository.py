@@ -104,9 +104,13 @@ class OpportunityPhaseRepository:
                 agent="logistics",
             ),
         ]
+        # Bug real: antes hacía session.commit() aquí. Llamado desde
+        # SearchPersistenceService (sesión compartida de todo el request de
+        # búsqueda) esto cerraba la transacción ambiente a mitad de batch —
+        # ver misma nota en OpportunityRepository.save(). Solo flush(); el
+        # commit final es responsabilidad de cada ruta que orquesta el
+        # request (ver opportunities.py).
         for phase in phases:
             self.session.add(phase)
-        await self.session.commit()
-        for phase in phases:
-            await self.session.refresh(phase)
+        await self.session.flush()
         return phases
