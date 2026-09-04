@@ -127,8 +127,10 @@ describe("Deep Links Integration", () => {
   });
 
   it("should resolve routes", () => {
+    // /vehicle/{id} (singular) nunca ha existido como ruta — ver
+    // use-deep-links.ts y deep-links.test.ts para el detalle del fix.
     const data = parseDeepLink("aibusiness://vehicle/123");
-    expect(resolveDeepLinkRoute(data!)).toBe("/vehicle/123");
+    expect(resolveDeepLinkRoute(data!)).toBe("/vehicles");
   });
 
   it("should build deep links", () => {

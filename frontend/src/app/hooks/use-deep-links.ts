@@ -50,17 +50,26 @@ export function resolveDeepLinkRoute(data: DeepLinkData): string | null {
   if (segments.length === 0) return "/dashboard";
   const [resource, id] = segments;
 
-  if (resource === "vehicle" && id) return `/vehicle/${id}`;
-  if (resource === "deal" && id) return `/deal/${id}`;
-
-  const withId = (route: string) => (id ? `${route}?id=${id}` : route);
+  // BUG real (encontrado auditando el flujo push→deep link): "vehicle"/"deal"
+  // apuntaban a /vehicle/{id} y /deal/{id} (singular), rutas que nunca han
+  // existido en el frontend (404) — ni /vehicles ni /deals tienen sub-ruta
+  // [id], el detalle de vehículo se abre como drawer con estado local, no
+  // por URL. "opportunity" apuntaba a /opportunities?id={id}, que SÍ es una
+  // ruta real pero es el LISTADO: el query param nunca se lee ahí, así que
+  // tocar una notificación de una oportunidad pendiente de aprobación
+  // llevaba a la lista, no al detalle. /opportunities/{id} SÍ existe y es
+  // la página de detalle real (ver OpportunityCard.tsx).
   switch (resource) {
     case "vehicle":
-      return withId("/vehicles");
+      // TODO: no hay ruta de detalle de vehículo direccionable por URL
+      // todavía (VehicleDrawer se abre con estado local en /vehicles).
+      // Aterriza en el listado en vez de un 404 hasta que exista.
+      return "/vehicles";
     case "deal":
-      return withId("/deals");
+      // TODO: mismo caso que "vehicle" — no hay detalle de deal direccionable.
+      return "/deals";
     case "opportunity":
-      return withId("/opportunities");
+      return id ? `/opportunities/${id}` : "/opportunities";
     case "search": {
       // MOBILE-HARDENING #4: el builder coloca la búsqueda en el path
       // (deepLinkBuilder.search → aibusiness://search/Toyota), mientras que
