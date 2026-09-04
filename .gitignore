@@ -108,3 +108,8 @@ frontend/storage-results.txt
 frontend/android/app/release.keystore
 frontend/android/keystore.properties
 *.keystore
+
+# scripts/generate-release-keystore.sh escribe aquí el keystore en base64
+# (material de firma real) para copiarlo a GitHub Secrets sin imprimirlo
+# por stdout — nunca debe versionarse.
+*.base64.txt
