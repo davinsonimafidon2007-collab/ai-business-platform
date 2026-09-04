@@ -9,6 +9,7 @@ import { PhaseTimeline } from "@/app/components/opportunity/PhaseTimeline";
 import { ApprovalActions } from "@/app/components/opportunity/ApprovalActions";
 import { HumanSupervision } from "@/app/components/opportunity/HumanSupervision";
 import { RequestChangesModal } from "@/app/components/opportunity/RequestChangesModal";
+import { SimulateProfitPanel } from "@/app/features/simulate/SimulateProfitPanel";
 import { Skeleton } from "@/app/components/ui/Skeleton";
 import { ErrorDisplay } from "@/app/components/ui/ErrorDisplay";
 import { ArrowLeft, Copy, FileText, Activity, Info } from "lucide-react";
@@ -305,6 +306,22 @@ export function OpportunityDetailClient() {
               </div>
             </div>
           </div>
+
+          {vehicle?.id && (
+            <div className="lg:col-span-2 rounded-2xl bg-[#111118] border border-[#1e1e2d] p-4">
+              <h3 className="text-sm font-semibold text-white mb-1">
+                Desglose de costes de importación
+              </h3>
+              <p className="text-xs text-secondary-500 mb-2">
+                Simulación en vivo con el precio real del vehículo; ajusta
+                los valores para explorar escenarios what-if.
+              </p>
+              <SimulateProfitPanel
+                vehicleId={vehicle.id}
+                defaultPurchasePrice={vehicle.price}
+              />
+            </div>
+          )}
         </div>
       )}
 

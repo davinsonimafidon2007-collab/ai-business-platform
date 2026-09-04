@@ -158,8 +158,14 @@ def test_simulate_profit_includes_sim1_fields(override_deps: None) -> None:
     assert "label_es" in data["cost_lines"][0]
     assert "coherence_warnings" in data
     assert isinstance(data["coherence_warnings"], list)
-    assert data.get("recommendation_label_es")
-    assert data.get("risk_label_es")
+    # Regresión: recommendation_label_es()/risk_label_es() recibían el
+    # enum de ProfitAnalysis (ProfitRecommendation.CONSIDER) en vez de su
+    # .value ("CONSIDER"), y str(enum) en Python da "ClassName.MEMBER"
+    # -> ".title()" producía "Profitrecommendation.Consider" en vez de
+    # "Considerar" (encontrado probando la página de detalle de
+    # oportunidad en vivo, donde salía "Profitrecommendation.Reject").
+    assert data.get("recommendation_label_es") == "Considerar"
+    assert data.get("risk_label_es") == "Medio"
 
 
 def test_simulate_profit_coherence_warnings_extreme_roi(override_deps: None) -> None:
