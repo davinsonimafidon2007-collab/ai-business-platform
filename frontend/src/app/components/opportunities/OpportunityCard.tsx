@@ -106,8 +106,14 @@ export function OpportunityCard({ id, opportunity }: OpportunityCardProps) {
                   {price != null ? `${Number(price).toLocaleString("es-ES")} €` : "Precio no disponible"}
                 </span>
               </div>
-              <p className="text-[11px] text-emerald-400 font-medium">
-                {profit != null && roi != null ? `+${Number(profit).toLocaleString("es-ES")} € · ROI ${Number(roi).toFixed(1)}%` : "Rentabilidad pendiente"}
+              <p
+                className={`text-[11px] font-medium ${
+                  profit != null && profit < 0 ? "text-red-400" : "text-emerald-400"
+                }`}
+              >
+                {profit != null && roi != null
+                  ? `${profit >= 0 ? "+" : ""}${Number(profit).toLocaleString("es-ES")} € · ROI ${Number(roi).toFixed(1)}%`
+                  : "Rentabilidad pendiente"}
               </p>
             </div>
 
