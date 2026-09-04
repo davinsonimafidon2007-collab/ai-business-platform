@@ -133,16 +133,16 @@ export function SearchFilters({ onSearch, onBackgroundSearch, isLoading, initial
             className="mt-1 block w-full rounded-lg border border-secondary-300 bg-white px-3 py-2.5 text-sm text-secondary-900 placeholder-secondary-400 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-secondary-600 dark:bg-secondary-700 dark:text-secondary-100 dark:placeholder-secondary-500"
           />
         </div>
-        <div className="flex items-end gap-2">
-          <Button type="submit" disabled={isLoading} aria-label="Buscar vehículos">
+        <div className="flex flex-wrap items-center gap-2">
+          <Button type="submit" disabled={isLoading} aria-label="Buscar vehículos" className="whitespace-nowrap">
             {isLoading ? "Buscando..." : "Buscar"}
           </Button>
           {onBackgroundSearch && (
-            <Button type="button" variant="outline" onClick={handleBackgroundSearch} aria-label="Buscar en segundo plano y notificar cuando hay resultados">
+            <Button type="button" variant="outline" onClick={handleBackgroundSearch} aria-label="Buscar en segundo plano y notificar cuando hay resultados" className="whitespace-nowrap">
               Buscar en segundo plano
             </Button>
           )}
-          <Button type="button" variant="ghost" onClick={handleReset} aria-label="Limpiar todos los filtros">
+          <Button type="button" variant="ghost" onClick={handleReset} aria-label="Limpiar todos los filtros" className="whitespace-nowrap">
             Limpiar
           </Button>
           <Button
@@ -151,6 +151,7 @@ export function SearchFilters({ onSearch, onBackgroundSearch, isLoading, initial
             onClick={() => setShowAdvanced(!showAdvanced)}
             aria-expanded={showAdvanced}
             aria-controls="advanced-filters"
+            className="whitespace-nowrap"
           >
             {showAdvanced ? "Ocultar filtros" : "Más filtros"}
           </Button>
