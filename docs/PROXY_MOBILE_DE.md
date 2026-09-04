@@ -41,6 +41,8 @@ los parsers** para activar el proxy; solo configuración.
 | `PROVIDER_HTTP_COOKIES` | Cookie header de navegador real (opcional) | `sid=abc123; consent=1` |
 | `PROVIDER_HTTP_MIN_DELAY_MS` | Delay mínimo entre peticiones (ms) | `800`–`1500` en prod |
 | `PLAYWRIGHT_TIMEOUT_MS` / `PLAYWRIGHT_HEADLESS` | Timeout/navegación Playwright | `30000` / `true` |
+| `ENABLE_OPENCLAW_BROWSER` | Usa OpenClaw (agente externo) en vez de Playwright — ver ADR-006 | `true` solo si tienes `OPENCLAW_ENDPOINT` corriendo |
+| `OPENCLAW_ENDPOINT` / `OPENCLAW_AGENT_ID` / `OPENCLAW_TIMEOUT_MS` | Servidor OpenClaw y agente especializado | `http://localhost:4173` / `mobile-de-browser` / `45000` |
 
 ```env
 # .env — ejemplos de activación explícita (no por defecto)
@@ -58,9 +60,19 @@ PLAYWRIGHT_HEADLESS=true
 # Opcional: combinar con proxy
 # PROVIDER_HTTP_PROXY=http://user:pass@residential-proxy.example:8080
 
-# Opción C: mantener desactivado (default seguro)
+# Opción C: OpenClaw como brazo de browser automation externo (ADR-006).
+# Tiene prioridad sobre ENABLE_MOBILE_DE_PLAYWRIGHT si ambos están activos.
+# Requiere un servidor OpenClaw real corriendo en OPENCLAW_ENDPOINT — no
+# incluido en este repo, no verificado contra una instancia real todavía.
+ENABLE_MOBILE_DE=true
+ENABLE_OPENCLAW_BROWSER=true
+OPENCLAW_ENDPOINT=http://localhost:4173
+OPENCLAW_AGENT_ID=mobile-de-browser
+
+# Opción D: mantener desactivado (default seguro)
 ENABLE_MOBILE_DE=false
 ENABLE_MOBILE_DE_PLAYWRIGHT=false
+ENABLE_OPENCLAW_BROWSER=false
 ```
 
 > **Seguridad:** nunca commits de `.env` con credenciales reales. El código
@@ -122,6 +134,8 @@ Comportamiento actual:
 | `app/providers/http_client.py` | Cliente HTTP con proxy/cookies/delay/retries |
 | `app/providers/base.py` | `_get_client()` crea `ProviderHttpClient` con settings |
 | `app/providers/mobile_de.py` | Provider mobile.de (selectores + detección anti-bot) |
+| `app/providers/mobile_de_playwright.py` | Delega en `get_browser_automation()` para el transporte browser |
+| `app/providers/browser_automation.py` | Abstracción `BrowserAutomation` (Playwright / OpenClaw) — ver ADR-006 |
 | `app/jobs/provider_canary.py` | Canary: AS24 obligatorio, mobile.de WARN/PASS |
-| `app/core/config.py` | Settings `provider_http_*` |
+| `app/core/config.py` | Settings `provider_http_*` y `openclaw_*` |
 | `scripts/verify_providers_live.py` | Smoke script de verificación en vivo |
