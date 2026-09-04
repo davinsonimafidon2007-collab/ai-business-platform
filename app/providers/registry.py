@@ -268,7 +268,7 @@ class ProviderRegistry:
         if "mobile_de" not in cls._providers:
             from app.core.config import settings
 
-            if getattr(settings, "enable_mobile_de", True):
+            if getattr(settings, "enable_mobile_de", False):
                 from app.providers.http_client import ProviderHttpClient
 
                 # Playwright opcional (sin cuenta): si está habilitado y disponible,
