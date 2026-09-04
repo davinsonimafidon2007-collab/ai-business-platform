@@ -75,17 +75,30 @@ describe("parseDeepLink — URLs inválidas", () => {
 });
 
 describe("resolveDeepLinkRoute — rutas", () => {
-  it("vehicle/:id → ruta directa de detalle", () => {
-    expect(resolveDeepLinkRoute({ path: "vehicle/123" })).toBe("/vehicle/123");
+  // Regresión: /vehicle/{id} y /deal/{id} (singular) nunca han existido
+  // como rutas en el frontend (ni /vehicles ni /deals tienen sub-ruta
+  // [id] — el detalle de vehículo es un drawer con estado local, no una
+  // URL). Antes del fix, tocar uno de estos deep links producía un 404
+  // real dentro de la app nativa. Aterrizan en el listado real hasta que
+  // exista una ruta de detalle direccionable.
+  it("vehicle/:id → listado (no existe ruta de detalle direccionable)", () => {
+    expect(resolveDeepLinkRoute({ path: "vehicle/123" })).toBe("/vehicles");
   });
 
-  it("deal/:id → ruta directa de detalle", () => {
-    expect(resolveDeepLinkRoute({ path: "deal/123" })).toBe("/deal/123");
+  it("deal/:id → listado (no existe ruta de detalle direccionable)", () => {
+    expect(resolveDeepLinkRoute({ path: "deal/123" })).toBe("/deals");
   });
 
-  it("opportunity/:id → listado con query id", () => {
+  // Regresión: antes resolvía a "/opportunities?id=123" — esa ruta SÍ
+  // existe pero es el LISTADO, que nunca lee el query param "id". Tocar
+  // una notificación push de una oportunidad (ver push-notifications.ts,
+  // caso "opportunity") llevaba al usuario a la lista completa en vez de
+  // a la oportunidad concreta que necesitaba su aprobación.
+  // /opportunities/{id} SÍ existe y es la página de detalle real (ver
+  // OpportunityCard.tsx, que enlaza exactamente a esa ruta).
+  it("opportunity/:id → página de detalle real", () => {
     expect(resolveDeepLinkRoute({ path: "opportunity/123" })).toBe(
-      "/opportunities?id=123"
+      "/opportunities/123"
     );
   });
 
@@ -153,7 +166,7 @@ describe("useDeepLinks — ciclo de vida nativo", () => {
     });
     renderHook(() => useDeepLinks());
     await waitFor(() =>
-      expect(mocks.mockRouter.push).toHaveBeenCalledWith("/vehicle/42")
+      expect(mocks.mockRouter.push).toHaveBeenCalledWith("/vehicles")
     );
   });
 
@@ -167,7 +180,20 @@ describe("useDeepLinks — ciclo de vida nativo", () => {
     await waitFor(() => expect(handler).not.toBeNull());
     handler!({ url: "aibusiness://deal/77" });
     await waitFor(() =>
-      expect(mocks.mockRouter.push).toHaveBeenCalledWith("/deal/77")
+      expect(mocks.mockRouter.push).toHaveBeenCalledWith("/deals")
+    );
+  });
+
+  it("COLD START: notificación push de oportunidad abre el detalle real, no el listado", async () => {
+    // Regresión del flujo real push-notifications.ts (case "opportunity")
+    // -> deepLinkBuilder.opportunity -> useDeepLinks. Antes del fix
+    // terminaba en "/opportunities?id=456" (el listado).
+    mocks.mockApp.getLaunchUrl.mockResolvedValue({
+      url: "aibusiness://opportunity/456",
+    });
+    renderHook(() => useDeepLinks());
+    await waitFor(() =>
+      expect(mocks.mockRouter.push).toHaveBeenCalledWith("/opportunities/456")
     );
   });
 
@@ -178,6 +204,41 @@ describe("useDeepLinks — ciclo de vida nativo", () => {
     await waitFor(() => expect(mocks.mockApp.addListener).toHaveBeenCalled());
     unmount();
     expect(removeSpy).toHaveBeenCalled();
+  });
+
+  // MO-M-006: regresión del flujo real de push-notifications.ts, caso
+  // "opportunity" — despacha `new CustomEvent("deepLink:navigate", {detail:
+  // {url}})` en vez de pasar por App.addListener("appUrlOpen", ...). Antes
+  // de este fix nada escuchaba ese evento: tocar una notificación push de
+  // una oportunidad pendiente de aprobación no navegaba a ningún sitio.
+  it("deepLink:navigate (CustomEvent de push-notifications.ts) navega al detalle real", async () => {
+    renderHook(() => useDeepLinks());
+    await waitFor(() => expect(mocks.mockApp.addListener).toHaveBeenCalled());
+
+    window.dispatchEvent(
+      new CustomEvent("deepLink:navigate", {
+        detail: { url: "aibusiness://opportunity/999" },
+      })
+    );
+
+    await waitFor(() =>
+      expect(mocks.mockRouter.push).toHaveBeenCalledWith("/opportunities/999")
+    );
+  });
+
+  it("deepLink:navigate también funciona en web (fuera de plataforma nativa)", async () => {
+    mocks.mockCapacitor.isNativePlatform.mockReturnValue(false);
+    renderHook(() => useDeepLinks());
+
+    window.dispatchEvent(
+      new CustomEvent("deepLink:navigate", {
+        detail: { url: "aibusiness://opportunity/111" },
+      })
+    );
+
+    await waitFor(() =>
+      expect(mocks.mockRouter.push).toHaveBeenCalledWith("/opportunities/111")
+    );
   });
 });
 

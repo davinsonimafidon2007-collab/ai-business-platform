@@ -246,6 +246,23 @@ class Settings(BaseSettings):
     """Timeout de navegación Playwright (ms)."""
     playwright_headless: bool = True
 
+    # OpenClaw como brazo de browser automation opcional (BROWSER.1). Es una
+    # capa EXTERNA y OPCIONAL: si está desactivado, no configurado, caído o
+    # sin respuesta, el sistema debe seguir funcionando con Playwright/httpx
+    # (ver app/providers/browser_automation.py::get_browser_automation()).
+    # El dominio nunca importa nada de OpenClaw directamente — solo pasa por
+    # esta capa de settings + la abstracción BrowserAutomation.
+    enable_openclaw_browser: bool = False
+    """Si True, se intenta usar OpenClaw como browser automation antes que
+    Playwright. Requiere openclaw_endpoint configurado; si no lo está, se
+    ignora silenciosamente (fallback a Playwright/httpx) — ver ProviderUnavailableError."""
+    openclaw_endpoint: str = ""
+    """URL base del servidor OpenClaw (ej. http://localhost:4173). Vacío = deshabilitado."""
+    openclaw_agent_id: str = ""
+    """Identificador del agente OpenClaw especializado (ej. "mobile-de-browser")."""
+    openclaw_timeout_ms: int = 45000
+    """Timeout total (ms) de una petición de browsing a OpenClaw."""
+
     # =========================================================================
     # Scheduler / Jobs configuration
     # =========================================================================
