@@ -6,7 +6,7 @@ import { AgentCard } from "@/app/components/agents/AgentCard";
 import { Skeleton } from "@/app/components/ui/Skeleton";
 import { ErrorDisplay } from "@/app/components/ui/ErrorDisplay";
 import { EmptyState } from "@/app/components/ui/EmptyState";
-import { Search, Plus } from "lucide-react";
+import { Search } from "lucide-react";
 
 export default function AgentsPage() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -27,17 +27,11 @@ export default function AgentsPage() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-5">
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-bold text-white">Agentes</h1>
-          <p className="text-sm text-secondary-500 mt-0.5">
-            {isLoading ? "Cargando..." : `${filtered.length} agentes disponibles`}
-          </p>
-        </div>
-        <button className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary-600 hover:bg-primary-500 text-white text-sm font-semibold transition-colors active:scale-95">
-          <Plus className="w-4 h-4" />
-          <span className="hidden sm:inline">Nuevo agente</span>
-        </button>
+      <div>
+        <h1 className="text-xl font-bold text-white">Agentes</h1>
+        <p className="text-sm text-secondary-500 mt-0.5">
+          {isLoading ? "Cargando..." : `${filtered.length} agentes disponibles`}
+        </p>
       </div>
 
       <div className="relative">
