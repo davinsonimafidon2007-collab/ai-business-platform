@@ -2,10 +2,15 @@
 
 import Link from "next/link";
 import {
+  Search,
   Car,
+  Handshake,
   SearchCheck,
+  Workflow,
   History,
   KeyRound,
+  Settings,
+  Bot,
   Shield,
   ChevronRight,
   type LucideIcon,
@@ -15,11 +20,19 @@ import { isAuthDisabled } from "@/app/config/app-mode";
 
 type MoreLink = { href: string; label: string; Icon: LucideIcon };
 
+// Bug real: Búsqueda, Deals, Agentes (fuera del tab central), Workflows y
+// Configuración no tenían NINGÚN punto de entrada en móvil (ni en la
+// barra inferior ni aquí) — inalcanzables salvo escribiendo la URL a mano.
 const MAIN_LINKS: MoreLink[] = [
+  { href: "/search/", label: "Búsqueda", Icon: Search },
   { href: "/vehicles/", label: "Mis vehículos", Icon: Car },
+  { href: "/deals/", label: "Deals", Icon: Handshake },
   { href: "/inspection/", label: "Inspección", Icon: SearchCheck },
+  { href: "/agents/", label: "Agentes", Icon: Bot },
+  { href: "/workflows/", label: "Workflows", Icon: Workflow },
   { href: "/history/", label: "Historial", Icon: History },
   { href: "/api-keys/", label: "API keys", Icon: KeyRound },
+  { href: "/settings/", label: "Configuración", Icon: Settings },
 ];
 
 const ADMIN_LINKS: MoreLink[] = [
