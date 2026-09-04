@@ -45,7 +45,14 @@ services:
       ENVIRONMENT: "${ENVIRONMENT:-development}"
       APP_URL: "${APP_URL:-http://localhost:3001}"
       ENABLE_SCHEDULER: "${ENABLE_SCHEDULER:-true}"
+      # Bug real encontrado probando la integración: ENABLE_MOBILE_DE_PLAYWRIGHT
+      # nunca se pasaba al contenedor (a diferencia de ENABLE_MOBILE_DE, que sí
+      # tenía passthrough) — activarlo en el .env del host no tenía ningún
+      # efecto, el provider siempre caía al fallback httpx puro.
       ENABLE_MOBILE_DE: "${ENABLE_MOBILE_DE:-false}"
+      ENABLE_MOBILE_DE_PLAYWRIGHT: "${ENABLE_MOBILE_DE_PLAYWRIGHT:-false}"
+      PLAYWRIGHT_HEADLESS: "${PLAYWRIGHT_HEADLESS:-true}"
+      PROVIDER_HTTP_COOKIES: "${PROVIDER_HTTP_COOKIES:-}"
       PROVIDER_HTTP_PROXY: "${PROVIDER_HTTP_PROXY:-}"
       FIREBASE_CREDENTIALS_JSON: "${FIREBASE_CREDENTIALS_JSON:-}"
       # Bug real encontrado probando el stack en vivo: sin este passthrough
