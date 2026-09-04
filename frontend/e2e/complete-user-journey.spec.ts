@@ -6,7 +6,11 @@ test.describe('Complete User Journey', () => {
     await page.goto('/search');
 
     // 2. Ejecutar búsqueda
-    const searchButton = page.getByRole('button', { name: /buscar|search/i });
+    // Regresión: el nombre accesible real es "Buscar vehículos"; el regex
+    // /buscar|search/i también matcheaba "Buscar en segundo plano y
+    // notificar cuando hay resultados" (violación de modo estricto de
+    // Playwright, confirmado corriendo este spec contra la app real).
+    const searchButton = page.getByRole('button', { name: 'Buscar vehículos' });
     await searchButton.click();
     await page.waitForLoadState('networkidle');
 

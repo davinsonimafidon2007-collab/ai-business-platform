@@ -208,6 +208,36 @@ jobs:
       - name: Validación completa del stack (validate_deployment.sh)
         run: ./scripts/validate_deployment.sh http://127.0.0.1
 
+      # E2E.WEB.1 — el proyecto tenía @playwright/test instalado y specs
+      # reales en frontend/e2e/*.spec.ts, pero ningún script npm ni workflow
+      # de CI los ejecutaba jamás (test:e2e apunta a Maestro, un runner
+      # distinto, sobre el mismo directorio). Corriéndolos por primera vez
+      # contra la app real se encontraron 2 specs rotos de verdad (locator
+      # ambiguo en complete-user-journey.spec.ts, selectores inexistentes en
+      # admin-panel.spec.ts) — ya corregidos. Se ejecutan aquí, contra el
+      # stack real que este job ya levantó, en vez de contra un servidor de
+      # desarrollo aparte.
+      - name: Setup Node (para Playwright E2E)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend deps
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: E2E web (Playwright) contra el stack real
+        working-directory: frontend
+        run: npm run test:e2e:web
+        env:
+          PLAYWRIGHT_BASE_URL: http://127.0.0.1:3001
+
       - name: Diagnóstico en fallo (logs del stack)
         if: failure()
         run: |

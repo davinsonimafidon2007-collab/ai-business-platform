@@ -9,26 +9,19 @@ test.describe('Admin Panel', () => {
   test('should display admin dashboard', async ({ page }) => {
     await expect(page).toHaveURL(/.*admin/);
 
-    // Verificar que hay métricas o estadísticas
-    const metrics = page.locator('[data-testid="admin-metric"], .admin-metric');
-    const dashboard = page.locator('[data-testid="admin-dashboard"], .admin-dashboard');
-
-    const hasMetrics = await metrics.count() > 0;
-    const hasDashboard = await dashboard.isVisible();
-
-    expect(hasMetrics || hasDashboard).toBeTruthy();
+    // Regresión: el markup real no usa data-testid ni clases .admin-metric/
+    // .admin-dashboard (confirmado corriendo este spec contra la app real,
+    // y leyendo app/(app)/admin/page.tsx: es AdminStatusPage, sin testids).
+    // Se asertan las secciones reales que siempre renderiza esa página.
+    await expect(page.getByText('Admin · Sistema')).toBeVisible();
+    await expect(page.getByText('PROVIDER CANARY')).toBeVisible({ timeout: 10_000 });
   });
 
   test('should allow viewing system status', async ({ page }) => {
-    const statusLink = page.getByRole('link', { name: /estado|status|sistema/i });
-
-    if (await statusLink.isVisible()) {
-      await statusLink.click();
-      await page.waitForLoadState('networkidle');
-
-      // Verificar que se muestra información del sistema
-      const systemInfo = page.locator('[data-testid="system-info"], .system-info');
-      await expect(systemInfo).toBeVisible({ timeout: 5000 });
-    }
+    // La página /admin ES la página de estado del sistema (no hay un link
+    // separado "estado/status/sistema" — regresión: el link buscado antes
+    // nunca existió, así que el test "pasaba" sin comprobar nada).
+    await expect(page.getByText('Health', { exact: true })).toBeVisible();
+    await expect(page.getByText(/api: ok|api: error/i)).toBeVisible({ timeout: 10_000 });
   });
 });

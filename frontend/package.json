@@ -14,6 +14,7 @@
     "test:mobile": "vitest run src/__tests__/mobile/",
     "test:release": "vitest run src/__tests__/release/",
     "test:e2e": "maestro test e2e/",
+    "test:e2e:web": "playwright test",
     "test:perf": "bash scripts/performance-test.sh",
     "test:lighthouse": "bash scripts/lighthouse-audit.sh",
     "test:all": "npm run test:run && npm run test:release",
