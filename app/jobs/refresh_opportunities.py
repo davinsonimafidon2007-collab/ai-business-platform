@@ -121,7 +121,7 @@ class RefreshOpportunityJob(Job):
                             if existing:
                                 opp = existing[0]
                                 opp.opportunity_score = float(result.score)
-                                opp.recommendation = result.recommendation
+                                opp.recommendation = result.recommendation_code
                                 opp.roi = round(result.profit_margin_percent, 2)
                                 opp.risk = risk
                                 opp.profit = round(result.gross_profit, 2)
@@ -131,7 +131,7 @@ class RefreshOpportunityJob(Job):
                                 opp = Opportunity(
                                     vehicle_id=vehicle.id,
                                     opportunity_score=float(result.score),
-                                    recommendation=result.recommendation,
+                                    recommendation=result.recommendation_code,
                                     roi=round(result.profit_margin_percent, 2),
                                     risk=risk,
                                     profit=round(result.gross_profit, 2),
@@ -207,6 +207,13 @@ class RefreshOpportunityJob(Job):
                                 vehicle.id,
                             )
                             failed_count += 1
+
+                    # OpportunityRepository.save()/upsert_opportunity() ya no
+                    # comitean por sí solos (bug real: cerraban a mitad de
+                    # request la transacción compartida de /search) — este
+                    # job es el dueño de su propia sesión, así que confirma
+                    # aquí una vez por página procesada.
+                    await session.commit()
 
                     if len(vehicles) < page_size:
                         break
