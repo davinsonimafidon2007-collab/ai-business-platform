@@ -148,8 +148,23 @@ jobs:
           printf '%s\n' "${TAG}" > ../VERSION
           echo "APP_VERSION=${TAG}" >> "$GITHUB_ENV"
 
+      # BUG real encontrado en el primer release intentado (tag v1.0.0):
+      # este job nunca pasaba NEXT_PUBLIC_AUTH_DISABLED, a diferencia de
+      # debug-apk (bypasseado vía isCiDebugBuild en check-capacitor-config.mjs)
+      # y del job "docker" de ci.yml (que sí lo pasa explícitamente). El repo
+      # es "personal use, no login" por diseño (AGENTS.md) — sin este flag,
+      # el guard exige NEXT_PUBLIC_GOOGLE_WEB_CLIENT_ID/
+      # NEXT_PUBLIC_GOOGLE_ANDROID_CLIENT_ID, que este proyecto
+      # deliberadamente no configura, y el release fallaba en el primer paso.
+      # Segundo bug relacionado: NEXT_PUBLIC_API_URL tampoco llegaba a este
+      # step (cada step de GitHub Actions tiene su propio env aislado — que
+      # "Build Next.js export" más abajo lo reciba no significa que este
+      # step también lo tenga), y el guard lo exige siempre salvo en debug.
       - name: Capacitor config guard
         run: npm run check:cap-config
+        env:
+          NEXT_PUBLIC_AUTH_DISABLED: "true"
+          NEXT_PUBLIC_API_URL: ${{ secrets.API_URL }}
 
       - name: Run unit tests
         run: npm run test:run
@@ -161,6 +176,7 @@ jobs:
           NEXT_PUBLIC_API_URL: ${{ secrets.API_URL }}
           NEXT_PUBLIC_APP_VERSION: ${{ env.APP_VERSION }}
           CAPACITOR_ANDROID_SCHEME: https
+          NEXT_PUBLIC_AUTH_DISABLED: "true"
 
       - name: Guard — NEXT_PUBLIC_API_URL definido en release
         if: startsWith(github.ref, 'refs/tags/v')
@@ -246,8 +262,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Mismo bug que release-aab (ver comentario allí): sin esto el guard
+      # exige credenciales Google que este proyecto "no login" no configura.
       - name: Capacitor config guard
         run: npm run check:cap-config
+        env:
+          NEXT_PUBLIC_AUTH_DISABLED: "true"
 
       - name: Resolve app version
         run: |
@@ -255,6 +275,10 @@ jobs:
           echo "APP_VERSION=${APP_VERSION}" >> "$GITHUB_ENV"
 
       # Producción: WebView HTTPS obligatorio.
+      # NOTA: a diferencia de release-aab, este step no pasa
+      # NEXT_PUBLIC_API_URL — fuera de alcance del fix de hoy (no es el job
+      # que se está usando), pero probablemente sea el mismo tipo de defecto.
+      # Revisar antes de usar "Firebase Distribution" de verdad.
       - name: Build export + Sync
         run: |
           BUILD_TARGET=capacitor npm run export
@@ -262,6 +286,7 @@ jobs:
         env:
           NEXT_PUBLIC_APP_VERSION: ${{ env.APP_VERSION }}
           CAPACITOR_ANDROID_SCHEME: https
+          NEXT_PUBLIC_AUTH_DISABLED: "true"
 
       - name: Build release AAB
         env:
