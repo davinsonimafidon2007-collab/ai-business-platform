@@ -5,6 +5,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from app.api.v1.routes.search import _build_search_result_item
+from app.services.opportunity_finder import OpportunityAnalysis, OpportunityLevel, Recommendation
 from app.services.profit_analyzer import (
     CostBreakdown,
     ProfitAnalysis,
@@ -98,13 +99,34 @@ def _make_profit(
     )
 
 
-def _make_result(*, score: VehicleScore | None = None, profit: ProfitAnalysis | None = None) -> SimpleNamespace:
+def _make_opportunity(
+    *,
+    recommendation: Recommendation = Recommendation.BUY_NOW,
+    risk_level: str = "LOW",
+) -> OpportunityAnalysis:
+    return OpportunityAnalysis(
+        overall_score=85.0,
+        opportunity_level=OpportunityLevel.EXCELLENT,
+        recommendation=recommendation,
+        estimated_profit=6000.0,
+        roi=50.0,
+        market_confidence=80.0,
+        risk_level=risk_level,
+    )
+
+
+def _make_result(
+    *,
+    score: VehicleScore | None = None,
+    profit: ProfitAnalysis | None = None,
+    opportunity: OpportunityAnalysis | None = None,
+) -> SimpleNamespace:
     return SimpleNamespace(
         vehicle=_make_vehicle(),
         vehicle_score=score if score is not None else _make_score(),
         market_estimation=None,
         profit_analysis=profit if profit is not None else _make_profit(),
-        opportunity=None,
+        opportunity=opportunity,
         negotiation=None,
     )
 
@@ -172,6 +194,43 @@ def test_mapper_emits_coherence_warnings_list() -> None:
     assert pa is not None
     assert isinstance(pa.coherence_warnings, list)
     assert any("ROI" in w or "roi" in w.lower() for w in pa.coherence_warnings)
+
+
+def test_mapper_emits_top_level_labels_from_opportunity_when_present() -> None:
+    """Regresión (auditoría MVP): SearchResultItem.recommendation_label_es/
+    risk_label_es declaran default="" y nunca se poblaban en
+    _build_search_result_item, pese a estar documentados como "etiqueta
+    legible en español de la recomendación" — ningún frontend los lee (leen
+    opportunity.*/profit_analysis.* en su lugar), pero el contrato de API a
+    nivel de item quedaba roto para cualquier otro consumidor. Con
+    oportunidad calculada, el nivel superior debe reflejar su clasificación
+    (más completa que la de profit_analysis)."""
+    item = _build_search_result_item(
+        _make_result(
+            profit=_make_profit(risk=RiskLevel.MEDIUM, rec=ProfitRecommendation.CONSIDER),
+            opportunity=_make_opportunity(recommendation=Recommendation.BUY_NOW, risk_level="LOW"),
+        )
+    )
+    assert item.recommendation_label_es == "Comprar ya"
+    assert item.risk_label_es == "Bajo"
+    # Y coincide exactamente con lo que expone item.opportunity (misma fuente).
+    assert item.opportunity is not None
+    assert item.recommendation_label_es == item.opportunity.recommendation_label_es
+    assert item.risk_label_es == item.opportunity.risk_label_es
+
+
+def test_mapper_top_level_labels_fallback_to_profit_analysis_without_opportunity() -> None:
+    """Sin oportunidad calculada, el nivel superior cae a profit_analysis en
+    vez de quedarse en "" (comportamiento pre-fix)."""
+    item = _build_search_result_item(
+        _make_result(
+            profit=_make_profit(risk=RiskLevel.MEDIUM, rec=ProfitRecommendation.CONSIDER),
+            opportunity=None,
+        )
+    )
+    assert item.opportunity is None
+    assert item.recommendation_label_es == "Considerar"
+    assert item.risk_label_es == "Medio"
 
 
 def test_mapper_coherence_warnings_empty_when_reasonable() -> None:

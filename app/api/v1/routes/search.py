@@ -288,6 +288,27 @@ def _build_search_result_item(result: Any) -> SearchResultItem:
             discount_needed=getattr(neg, "discount_needed", 0.0) or 0.0,
         )
 
+    # --- Labels ES a nivel de item (REC.1) ---
+    # Regresión: SearchResultItem declara recommendation_label_es/risk_label_es
+    # (pensados como resumen de conveniencia a nivel de item), pero nunca se
+    # pasaban al constructor — quedaban siempre "" pese a estar documentados
+    # como "etiqueta legible en español de la recomendación". Ningún consumidor
+    # del frontend los lee (todos leen opportunity.*/profit_analysis.* en su
+    # lugar, confirmado por auditoría), pero es un campo del contrato de API
+    # roto para cualquier otro consumidor. Prioriza la clasificación de
+    # oportunidad (más completa) y cae a la de rentabilidad cuando no hay
+    # oportunidad calculada.
+    top_recommendation_label_es = (
+        opportunity_schema.recommendation_label_es
+        if opportunity_schema is not None
+        else (profit_analysis_schema.recommendation_label_es if profit_analysis_schema is not None else "")
+    )
+    top_risk_label_es = (
+        opportunity_schema.risk_label_es
+        if opportunity_schema is not None
+        else (profit_analysis_schema.risk_label_es if profit_analysis_schema is not None else "")
+    )
+
     # --- Construir item ---
     return SearchResultItem(
         source=getattr(vehicle, "source", None),
@@ -310,6 +331,8 @@ def _build_search_result_item(result: Any) -> SearchResultItem:
         market_estimation=market_estimation_schema,
         profit_analysis=profit_analysis_schema,
         opportunity=opportunity_schema,
+        recommendation_label_es=top_recommendation_label_es,
+        risk_label_es=top_risk_label_es,
         negotiation=negotiation_schema,
     )
 
