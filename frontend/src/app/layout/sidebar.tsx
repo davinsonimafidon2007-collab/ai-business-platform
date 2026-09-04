@@ -21,6 +21,7 @@ import {
 import { cn } from "@/app/utils/cn";
 import { useAuthStore } from "@/app/store/auth-store";
 import { useApprovals } from "@/app/hooks/useApprovals";
+import { isActiveRoute } from "@/app/utils/is-active-route";
 
 type NavItem = { name: string; href: string; icon: LucideIcon; badgeCount?: number };
 
@@ -65,7 +66,7 @@ export function Sidebar() {
       </div>
       <nav className="flex flex-1 flex-col gap-1 overflow-y-auto p-4">
         {items.map((item) => {
-          const isActive = pathname.startsWith(item.href);
+          const isActive = isActiveRoute(pathname, item.href);
           return (
             <Link
               key={item.href}

@@ -11,6 +11,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useApprovals } from "@/app/hooks/useApprovals";
+import { isActiveRoute } from "@/app/utils/is-active-route";
 
 type Tab = {
   href: string;
@@ -44,6 +45,22 @@ export function MobileTabBar() {
     { href: "/more/", label: "Más", Icon: LayoutGrid },
   ];
 
+  // Rutas alcanzables SOLO desde "Más" (ver more/page.tsx): sin esto,
+  // ningún tab queda marcado como activo mientras se navega por ellas —
+  // el usuario pierde la referencia de "dónde estoy" en cuanto sale de
+  // los 5 destinos directos.
+  const MORE_SUB_ROUTES = [
+    "/vehicles/",
+    "/deals/",
+    "/inspection/",
+    "/workflows/",
+    "/history/",
+    "/api-keys/",
+    "/settings/",
+    "/admin/",
+  ];
+  const onMoreSubRoute = MORE_SUB_ROUTES.some((r) => isActiveRoute(pathname, r));
+
   return (
     <nav
       className="fixed bottom-0 left-0 right-0 z-50 border-t border-secondary-200 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur dark:border-primary-900/40 dark:bg-secondary-950/95"
@@ -51,7 +68,9 @@ export function MobileTabBar() {
     >
       <ul className="flex h-16 items-stretch justify-around">
         {tabs.map((tab) => {
-          const active = pathname === tab.href || pathname.startsWith(tab.href);
+          const active =
+            isActiveRoute(pathname, tab.href) ||
+            (tab.href === "/more/" && onMoreSubRoute);
 
           if (tab.featured) {
             return (
