@@ -205,6 +205,41 @@ describe("useDeepLinks — ciclo de vida nativo", () => {
     unmount();
     expect(removeSpy).toHaveBeenCalled();
   });
+
+  // MO-M-006: regresión del flujo real de push-notifications.ts, caso
+  // "opportunity" — despacha `new CustomEvent("deepLink:navigate", {detail:
+  // {url}})` en vez de pasar por App.addListener("appUrlOpen", ...). Antes
+  // de este fix nada escuchaba ese evento: tocar una notificación push de
+  // una oportunidad pendiente de aprobación no navegaba a ningún sitio.
+  it("deepLink:navigate (CustomEvent de push-notifications.ts) navega al detalle real", async () => {
+    renderHook(() => useDeepLinks());
+    await waitFor(() => expect(mocks.mockApp.addListener).toHaveBeenCalled());
+
+    window.dispatchEvent(
+      new CustomEvent("deepLink:navigate", {
+        detail: { url: "aibusiness://opportunity/999" },
+      })
+    );
+
+    await waitFor(() =>
+      expect(mocks.mockRouter.push).toHaveBeenCalledWith("/opportunities/999")
+    );
+  });
+
+  it("deepLink:navigate también funciona en web (fuera de plataforma nativa)", async () => {
+    mocks.mockCapacitor.isNativePlatform.mockReturnValue(false);
+    renderHook(() => useDeepLinks());
+
+    window.dispatchEvent(
+      new CustomEvent("deepLink:navigate", {
+        detail: { url: "aibusiness://opportunity/111" },
+      })
+    );
+
+    await waitFor(() =>
+      expect(mocks.mockRouter.push).toHaveBeenCalledWith("/opportunities/111")
+    );
+  });
 });
 
 describe("constantes públicas", () => {

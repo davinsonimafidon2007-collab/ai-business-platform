@@ -105,7 +105,21 @@ export function useDeepLinks() {
   );
 
   useEffect(() => {
-    if (!Capacitor.isNativePlatform()) return;
+    // MO-M-006: push-notifications.ts despacha un CustomEvent
+    // "deepLink:navigate" (caso "opportunity", ver handleNotificationAction)
+    // en vez de una URL de sistema — nada lo escuchaba, así que tocar una
+    // notificación push de oportunidad nunca llegaba a handleDeepLink,
+    // independientemente de que la ruta resuelta fuera correcta o no.
+    const onCustomDeepLink = (e: Event) => {
+      const ce = e as CustomEvent<{ url: string }>;
+      if (ce.detail?.url) handleDeepLink(ce.detail.url);
+    };
+    window.addEventListener("deepLink:navigate", onCustomDeepLink as EventListener);
+
+    if (!Capacitor.isNativePlatform()) {
+      return () =>
+        window.removeEventListener("deepLink:navigate", onCustomDeepLink as EventListener);
+    }
     // MOBILE-HARDENING #4: cleanup robusto. Si el componente se desmonta
     // antes de que el import dinámico resuelva, `cancelled` evita registrar
     // un listener huérfano que nadie removería jamás.
@@ -139,6 +153,7 @@ export function useDeepLinks() {
     return () => {
       cancelled = true;
       if (listenerHandle) void listenerHandle.remove();
+      window.removeEventListener("deepLink:navigate", onCustomDeepLink as EventListener);
     };
   }, [handleDeepLink]);
 
