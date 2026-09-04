@@ -676,6 +676,40 @@ def test_provider_is_subclass_of_vehicle_provider() -> None:
     assert issubclass(MobileDeProvider, VehicleProvider)
 
 
+# ---------------------------------------------------------------------------
+# build_search_url / search con término libre (regresión)
+# ---------------------------------------------------------------------------
+
+
+def test_build_search_url_passes_through_full_url(provider: MobileDeProvider) -> None:
+    url = "https://suchen.mobile.de/fahrzeuge/search.html?makeModelVariant1.makeId=3500"
+    assert provider.build_search_url(url) == url
+
+
+def test_build_search_url_rejects_free_text() -> None:
+    """Regresión: search() con término libre generaba una URL inválida
+    (espacios sin codificar) que Playwright rechazaba con "Cannot navigate
+    to invalid URL" en vez de fallar con un mensaje claro. mobile.de no
+    tiene un parámetro de texto libre equivalente al '?q=' de AutoScout24
+    (usa IDs de marca/modelo de su propia taxonomía), así que se declara
+    explícitamente no soportado en vez de construir una URL rota."""
+    from app.providers.exceptions import ProviderParsingError
+
+    p = MobileDeProvider()
+    with pytest.raises(ProviderParsingError):
+        p.build_search_url("BMW Serie 3")
+
+
+@pytest.mark.asyncio
+async def test_search_with_free_text_raises_instead_of_crashing(
+    provider: MobileDeProvider,
+) -> None:
+    from app.providers.exceptions import ProviderParsingError
+
+    with pytest.raises(ProviderParsingError):
+        await provider.search("BMW Serie 3")
+
+
 def test_provider_context_manager() -> None:
     """Test que el provider funciona como context manager."""
     import asyncio

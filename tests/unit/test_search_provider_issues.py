@@ -176,7 +176,7 @@ async def test_issues_reset_between_searches() -> None:
         ("ProviderConnectionError", "anti-bot"),
         ("ProviderTimeoutError", "tardó demasiado"),
         ("ProviderRateLimitError", "rate limit"),
-        ("ProviderParsingError", "no se pudo interpretar"),
+        ("ProviderParsingError", "no se pudo completar la búsqueda"),
         ("ProviderNotFoundError", "Revisa la marca"),
         ("KeyError", "no disponible"),
     ],

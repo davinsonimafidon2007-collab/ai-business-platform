@@ -152,6 +152,21 @@ class CochesNetProvider(VehicleProvider):
             url += "?" + "&".join(params)
         return url
 
+    async def search(self, query: str, **kwargs: Any) -> list[VehicleSearchResult]:
+        """Busca en coches.net aceptando término libre o URL completa.
+
+        Bug real encontrado probando la búsqueda de comparables en vivo:
+        ``build_search_url`` estaba correctamente implementado pero nunca se
+        llamaba — sin este override, ``VehicleProvider.search()`` base pasa
+        el ``query`` (p.ej. "Volkswagen Passat") tal cual a
+        ``_download_url``, produciendo ``coches.net/Volkswagen%20Passat``
+        (404) en vez de la URL real ``/segunda-mano/volkswagen-passat/``.
+        Mismo patrón que ``AutoScout24Provider.search()``, que el propio
+        docstring del módulo dice seguir pero que aquí faltaba.
+        """
+        search_url = self.build_search_url(query, **kwargs)
+        return await super().search(search_url, **kwargs)
+
     # ------------------------------------------------------------------
     # Capa de transporte y bloqueo anti-bot (patrón mobile_de.py)
     # ------------------------------------------------------------------

@@ -24,7 +24,7 @@ from bs4 import BeautifulSoup
 
 from app.providers.base import VehicleProvider
 from app.providers.dto import VehicleDetail, VehicleSearchResult
-from app.providers.exceptions import ProviderConnectionError
+from app.providers.exceptions import ProviderConnectionError, ProviderParsingError
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +57,48 @@ class MobileDeProvider(VehicleProvider):
     @property
     def source_name(self) -> str:
         return "mobile_de"
+
+    def build_search_url(self, query: str, **kwargs: Any) -> str:
+        """Construye (o valida) la URL de búsqueda para mobile.de.
+
+        Bug real encontrado probando una búsqueda en vivo con Playwright: a
+        diferencia de AutoScout24Provider (que sí sobrescribe ``search()``
+        para convertir un término libre en una URL válida — ver su propio
+        comentario sobre el mismo problema), ``MobileDeProvider`` nunca lo
+        hizo. ``VehicleProvider.search()`` base pasa el ``query`` tal cual a
+        ``_download_url``; con un término libre como "BMW Serie 3" eso
+        produce literalmente ``https://suchen.mobile.de/BMW Serie 3`` — una
+        URL inválida con espacios sin codificar, que Playwright rechaza con
+        "Protocol error (Page.navigate): Cannot navigate to invalid URL".
+
+        A diferencia de AutoScout24 (``/lst/<marca>``, texto libre), mobile.de
+        exige IDs numéricos de marca/modelo de su propia taxonomía interna
+        (``makeModelVariant1.makeId=...``) para filtrar por texto — no hay
+        forma verificable de mapear "BMW Serie 3" a esos IDs sin acceso
+        estable al formulario real de mobile.de (bloqueado por su propio
+        anti-bot al intentar inspeccionarlo). Inventar un mapeo sin verificar
+        arriesga devolver resultados de la marca/modelo equivocados
+        silenciosamente, peor que no soportar la búsqueda.
+
+        Si ``query`` ya es una URL completa se respeta tal cual (mismo
+        contrato que AutoScout24Provider). Si no, se declara explícitamente
+        no soportado en vez de construir una URL rota o adivinada.
+        """
+        if query and query.strip().startswith("http"):
+            return query.strip()
+        raise ProviderParsingError(
+            "mobile_de: búsqueda por texto libre no soportada todavía — "
+            "mobile.de requiere IDs de marca/modelo de su propia taxonomía "
+            "(no hay un parámetro de texto libre equivalente al '?q=' de "
+            "AutoScout24). Pasa una URL de resultados de mobile.de completa "
+            "si quieres usar este provider mientras tanto.",
+            provider=self.source_name,
+        )
+
+    async def search(self, query: str, **kwargs: Any) -> list[VehicleSearchResult]:
+        """Busca en mobile.de aceptando solo URL completa (ver build_search_url)."""
+        search_url = self.build_search_url(query, **kwargs)
+        return await super().search(search_url, **kwargs)
 
     async def _download_url(self, url: str) -> str:
         """Descarga HTML; convierte 403 anti-bot en ProviderConnectionError."""

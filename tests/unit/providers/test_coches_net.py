@@ -222,6 +222,35 @@ async def test_search_parses_real_fixture(monkeypatch: pytest.MonkeyPatch) -> No
     assert len({r.external_id for r in rich}) == len(rich)
 
 
+@pytest.mark.asyncio
+async def test_search_with_free_text_builds_real_search_url(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regresión: build_search_url() existía pero search() nunca lo llamaba
+    — un término libre como "Volkswagen Passat" se pasaba tal cual a
+    _download_url, produciendo "coches.net/Volkswagen%20Passat" (404) en
+    vez de "/segunda-mano/volkswagen-passat/". Encontrado probando la
+    búsqueda de comparables en vivo."""
+    provider = CochesNetProvider(http_client=None)
+    seen_urls: list[str] = []
+
+    async def _fake_download(url: str) -> str:
+        seen_urls.append(url)
+        return "<html></html>"
+
+    monkeypatch.setattr(provider, "_download_url", _fake_download)
+    # El HTML falso no tiene listados: _parse_search_results lanza
+    # ProviderParsingError (comportamiento real y correcto, ver
+    # _find_listing_nodes). Lo que importa aquí es la URL que search()
+    # construyó ANTES de descargar, no el resultado del parseo.
+    with pytest.raises(ProviderParsingError):
+        await provider.search("Volkswagen Passat")
+
+    assert len(seen_urls) == 1
+    assert "Volkswagen%20Passat" not in seen_urls[0]
+    assert "/segunda-mano/volkswagen-passat/" in seen_urls[0]
+
+
 # ---------------------------------------------------------------------------
 # Registry: ES_DATA_MODE=live registra coches_net real (no fixture)
 # ---------------------------------------------------------------------------
