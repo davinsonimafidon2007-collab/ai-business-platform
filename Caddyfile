@@ -1,0 +1,33 @@
+# Caddyfile — reverse proxy + HTTPS automático (Let's Encrypt) para el
+# despliegue personal en un único VPS. Ver docker-compose.caddy.yml y
+# docs/deployment.md (sección "Despliegue personal").
+#
+# {$DOMAIN} y {$ACME_EMAIL} vienen del entorno del contenedor Caddy
+# (definidos en .env del servidor, ver .env.personal.example). Caddy
+# obtiene y renueva el certificado automáticamente la primera vez que
+# arranca, siempre que el DNS de $DOMAIN y api.$DOMAIN ya apunten a la
+# IP pública de este VPS.
+
+{
+	email {$ACME_EMAIL}
+}
+
+# API — esto es lo que usa la app Android/Capacitor como API_URL:
+#   https://api.<tu-dominio>
+api.{$DOMAIN} {
+	reverse_proxy api:8000
+
+	encode gzip
+
+	# Health check propio de Caddy contra el liveness real de la API.
+	handle /caddy-health {
+		reverse_proxy api:8000/health/live
+	}
+}
+
+# Frontend (PWA / uso desde navegador de escritorio).
+{$DOMAIN} {
+	reverse_proxy frontend:3000
+
+	encode gzip
+}

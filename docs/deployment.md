@@ -71,7 +71,15 @@ curl -s http://localhost:8001/health | jq .status
 
 ---
 
-## 3. Entornos: staging y producción
+## 3. Entornos
+
+> **Este proyecto se despliega en modo PERSONAL (ver §3-bis), no
+> multiusuario.** La tabla de abajo describe `.env.production.example` /
+> `.env.staging.example`, escritos para un hipotético SaaS multiusuario
+> futuro (login real, Firebase) — **no es el modo que se usa hoy**. Si vas
+> a desplegar esta app para uso propio, ve directamente a §3-bis y usa
+> `.env.personal.example`. Esta sección se conserva por si el proyecto
+> pivota a multiusuario más adelante.
 
 Cada entorno usa un archivo **`.env.<entorno>`** en el servidor y variables
 propias. Los templates (sin secretos) son `.env.staging.example` y
@@ -93,7 +101,7 @@ Reglas de seguridad de la app (apply-on-boot):
 - `FIREBASE_REQUIRED=true` en producción exige credenciales Firebase válidas
   (Google Login vivo) — fail-fast si faltan.
 
-**Pasos por servidor:**
+**Pasos por servidor (modo multiusuario, NO es el que usa este proyecto hoy):**
 
 ```bash
 # 1) Clonar y preparar variables
@@ -110,6 +118,114 @@ docker compose --profile obs up -d --build
 # 4) Validar despliegue
 ./scripts/validate_deployment.sh http://localhost
 ```
+
+---
+
+## 3-bis. Despliegue PERSONAL (el que usa este proyecto hoy) — VPS único + Docker + Caddy
+
+Este proyecto es de **uso personal, sin login** (`AUTH_DISABLED=true`,
+ver `AGENTS.md`). No necesita staging, no necesita Firebase/Google Login,
+y no tiene sentido pagar dos servidores para un único usuario. Este es el
+despliegue real preparado para este proyecto.
+
+### Arquitectura
+
+```
+Internet ─▶ Caddy (80/443, único punto público, HTTPS automático)
+              ├─▶ api.$DOMAIN      → api:8000
+              └─▶ $DOMAIN          → frontend:3000
+                                        │
+                                   (red interna docker, sin puertos publicados)
+                                        ├─▶ db:5432 (Postgres)
+                                        └─▶ redis:6379
+```
+
+`docker-compose.caddy.yml` es el override que añade Caddy y **quita** la
+publicación directa de puertos de `api`/`frontend` al host — el único
+punto de entrada público pasa a ser Caddy en 80/443.
+
+### Qué necesitas (recursos externos — ver §"Qué necesitas contratar" al final de este documento)
+
+1. Un VPS pequeño con Docker instalado (2 vCPU / 2-4 GB RAM es de sobra
+   para este stack: api + frontend + Postgres + Redis, sin observabilidad).
+2. Un **dominio real** con dos registros DNS tipo A apuntando a la IP del
+   VPS: `$DOMAIN` y `api.$DOMAIN`. **Sin dominio no hay HTTPS posible** —
+   Let's Encrypt (lo que usa Caddy) no emite certificados para IPs desnudas.
+
+### Pasos en el servidor
+
+```bash
+# 1) Instalar Docker + compose plugin (Ubuntu/Debian)
+curl -fsSL https://get.docker.com | sh
+
+# 2) Clonar el repo
+git clone https://github.com/<tu-usuario>/ai-business-platform.git /opt/ai-business-platform
+cd /opt/ai-business-platform
+
+# 3) Preparar variables — RELLENA los CHANGE_ME antes de continuar
+cp .env.personal.example .env.personal
+nano .env.personal   # DOMAIN, ACME_EMAIL, JWT_SECRET_KEY, POSTGRES_*, REDIS_PASSWORD
+
+# 4) Arrancar el stack completo (hardening de producción + Caddy)
+docker compose \
+  -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.caddy.yml \
+  --env-file .env.personal \
+  up -d --build
+
+# 5) Validar (contra el dominio real, no localhost — confirma que Caddy sirve HTTPS)
+API_PORT= FRONTEND_PORT= ./scripts/validate_deployment.sh \
+  "https://api.tu-dominio.com" "https://tu-dominio.com"
+```
+
+La primera vez que Caddy arranca, pide el certificado a Let's Encrypt
+automáticamente — puede tardar hasta 1-2 minutos. Si el DNS todavía no ha
+propagado, Caddy reintentará solo; no hace falta reiniciarlo a mano.
+
+### ⚠️ Decisión de seguridad pendiente: API pública sin login
+
+Con `AUTH_DISABLED=true` (el modo de este proyecto), **cualquiera que
+descubra `https://api.tu-dominio.com` tiene acceso admin completo** — no
+hay login que lo impida (`app/core/config.py::auth_disabled_forbidden_in_production`
+lo permite explícitamente con `ALLOW_AUTH_DISABLED_IN_PROD=true`, pero no
+añade ninguna barrera de acceso por sí solo). Esto es aceptable si:
+
+- el dominio no se comparte/publicita en ningún sitio indexable, o
+- se añade una capa de protección adicional delante de Caddy (elige una,
+  no viene preconfigurada — requiere decisión consciente):
+  - **VPN/Tailscale**: el VPS solo acepta tráfico de tu red privada; ni
+    siquiera queda expuesto a internet. Es la opción más segura, pero el
+    móvil necesita la VPN activa para usar la app fuera de casa.
+  - **HTTP Basic Auth en Caddy** (`basicauth` directive) delante de
+    `api.$DOMAIN`: sencillo de añadir al Caddyfile, pero requiere que la
+    app Android también envíe esas credenciales en cada petición — no
+    implementado hoy en el cliente HTTP del frontend/mobile.
+  - **IP allowlist en Caddy** (`@allowed remote_ip ...`) si tu IP pública
+    es estable.
+
+No se implementó ninguna de estas por defecto: es una decisión de
+producto (facilidad de acceso vs. superficie de exposición), no algo que
+deba decidirse sin ti.
+
+### Backups automáticos (cron)
+
+Igual que en §4 (Backups), pero contra el `.env.personal`:
+
+```cron
+0 3 * * * cd /opt/ai-business-platform && \
+  DATABASE_URL="postgresql+asyncpg://ai_business:TU_PASSWORD@localhost:5433/ai_business_platform" \
+  BACKUP_ENCRYPTION_PASSPHRASE="$SECRET" ./scripts/backup_postgres.sh \
+  >> /var/log/backup_postgres.log 2>&1
+```
+
+(Postgres no publica puerto al host en este modo — ejecuta el backup
+desde dentro del propio servidor, o usa `docker compose exec db pg_dump`
+directamente si prefieres no depender de un `localhost:5433` que no existe
+en este modo.)
+
+### CI/CD para este despliegue
+
+`.github/workflows/deploy.yml` — un único job `production`, disparado por
+cualquier tag `v*`. Ver §7 para los secrets/variables exactos que necesita.
 
 ---
 
@@ -237,19 +353,31 @@ Workflows en `.github/workflows/`:
   ruff, `alembic upgrade head`, unit + coverage gate en módulos críticos,
   subconjunto de integración con Postgres service) y frontend (Node 22, npm,
   Vitest + coverage). Es el gate de calidad antes de cualquier release.
-- **`deploy.yml`** — en push de tag `v*`: despliega a **staging** (ambiente
-  `staging`) y luego a **producción** (ambiente `production`, con protección
-  opcional por reviewers). Requiere secrets:
-  `STAGING_HOST/STAGING_USER/STAGING_KEY` y
-  `PRODUCTION_HOST/PRODUCTION_USER/PRODUCTION_KEY`.
+- **`deploy.yml`** — en push de tag `v*`: despliega directamente a
+  **producción** (un único VPS, ambiente `production` de GitHub —
+  simplificado respecto a un esquema staging+producción, que para un
+  único usuario solo duplicaría el coste sin aportar nada). Necesita, en
+  el environment `production` de GitHub (Settings → Environments):
+
+  **Secrets:**
+  | Secret | Para qué |
+  |--------|----------|
+  | `PRODUCTION_HOST` | IP o dominio del VPS (SSH) |
+  | `PRODUCTION_USER` | Usuario SSH con Docker instalado |
+  | `PRODUCTION_KEY` | Clave privada SSH (par con la pública ya autorizada en el VPS) |
+
+  **Variables** (Settings → Variables, no secretas — son solo el dominio público):
+  | Variable | Para qué |
+  |----------|----------|
+  | `DOMAIN` | Dominio real, ej. `midominio.com` (usado por `validate_deployment.sh` tras el despliegue) |
+
+  El propio `.env.personal` en el servidor (no en GitHub) lleva `DOMAIN` y
+  `ACME_EMAIL` para Caddy — ver §3-bis.
 
 ```bash
 git tag v1.2.0
-git push origin v1.2.0      # → CI primero; luego Deploy a staging y producción
+git push origin v1.2.0      # → CI primero; luego Deploy a producción (VPS único)
 ```
-
-Cada environment en GitHub puede definir variables (`COMPOSE_ENV_FILE`,
-dominios) y secrets de SSH para aislar staging de producción.
 
 ---
 

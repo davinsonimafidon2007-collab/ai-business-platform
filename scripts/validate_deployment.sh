@@ -10,20 +10,32 @@
 #   - Prometheus/Grafana (perfil obs; aviso si no están, no falla)
 #
 # Uso:
-#   ./scripts/validate_deployment.sh                 # http://localhost
-#   ./scripts/validate_deployment.sh https://app.ejemplo.com
+#   ./scripts/validate_deployment.sh                 # http://localhost (puertos host)
+#   ./scripts/validate_deployment.sh http://localhost https://app.ejemplo.com
+#
+# Modo dominio (despliegue personal con Caddy — sin puertos, HTTPS 443):
+# API y frontend viven en subdominios distintos, sin puerto explícito.
+# Pasa el segundo argumento (frontend) y vacía API_PORT/FRONTEND_PORT:
+#   API_PORT= FRONTEND_PORT= ./scripts/validate_deployment.sh \
+#     https://api.midominio.com https://midominio.com
 #
 # Códigos de salida: 0 = todo OK (obs opcional), 1 = algún servicio crítico falla.
 
 set -uo pipefail
 
 BASE_URL="${1:-http://localhost}"
-API_PORT="${API_PORT:-8001}"
-FRONTEND_PORT="${FRONTEND_PORT:-3001}"
+FRONTEND_URL="${2:-$BASE_URL}"
+API_PORT="${API_PORT-8001}"
+FRONTEND_PORT="${FRONTEND_PORT-3001}"
+
+# Puerto vacío (API_PORT= / FRONTEND_PORT=) => no se añade ":puerto" a la URL
+# (modo dominio: Caddy sirve por subdominio en 443, sin puerto explícito).
+api_url() { [[ -n "$API_PORT" ]] && echo "${BASE_URL}:${API_PORT}$1" || echo "${BASE_URL}$1"; }
+frontend_url() { [[ -n "$FRONTEND_PORT" ]] && echo "${FRONTEND_URL}:${FRONTEND_PORT}$1" || echo "${FRONTEND_URL}$1"; }
 
 fail=0
 
-echo "==> Validando despliegue en ${BASE_URL} (puertos host api=${API_PORT} frontend=${FRONTEND_PORT})"
+echo "==> Validando despliegue — api=$(api_url '') frontend=$(frontend_url '')"
 
 check_http() {
   local name="$1" url="$2"
@@ -46,12 +58,12 @@ check_docker() {
 }
 
 # --- Backend ---
-check_http "Backend liveness" "${BASE_URL}:${API_PORT}/health/live"
-check_http "Backend health (compuesto)" "${BASE_URL}:${API_PORT}/health"
-check_http "Backend metrics (Prometheus)" "${BASE_URL}:${API_PORT}/metrics"
+check_http "Backend liveness" "$(api_url /health/live)"
+check_http "Backend health (compuesto)" "$(api_url /health)"
+check_http "Backend metrics (Prometheus)" "$(api_url /metrics)"
 
 # --- Frontend ---
-check_http "Frontend" "${BASE_URL}:${FRONTEND_PORT}"
+check_http "Frontend" "$(frontend_url '')"
 
 # --- Dependencias internas (docker compose) ---
 # En Linux/CI `docker` funciona; en Windows (git-bash/WSL) el wrapper `docker`

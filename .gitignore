@@ -69,6 +69,7 @@ frontend/*-error.txt
 !.env.example
 !.env.staging.example
 !.env.production.example
+!.env.personal.example
 !**/.env.example
 
 # Build

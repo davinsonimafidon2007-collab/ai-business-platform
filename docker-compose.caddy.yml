@@ -1,0 +1,60 @@
+# Override de PRODUCCIÓN PERSONAL — reverse proxy + HTTPS automático (Caddy).
+#
+# Se aplica ENCIMA de docker-compose.yml + docker-compose.prod.yml:
+#
+#   docker compose \
+#     -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.caddy.yml \
+#     up -d --build
+#
+# Qué añade:
+#   - Un único punto de entrada público (Caddy, puertos 80/443). api y
+#     frontend dejan de publicar puertos al host directamente — solo son
+#     alcanzables a través de Caddy, en la red interna de compose.
+#   - HTTPS automático vía Let's Encrypt: Caddy pide y renueva los
+#     certificados solo con tener el dominio (DOMAIN) apuntando por DNS a
+#     la IP del VPS. Sin esto no hay forma de conseguir el HTTPS que
+#     Capacitor exige en producción (CAPACITOR_ANDROID_SCHEME=https).
+#   - api.$DOMAIN -> api:8000 (esto es lo que usa la app Android/API_URL)
+#     $DOMAIN      -> frontend:3000 (PWA / uso desde navegador)
+#
+# Requiere en el .env del servidor (ver .env.personal.example):
+#   DOMAIN=tu-dominio-real.com        # con DNS ya apuntando al VPS
+#   ACME_EMAIL=tu@email.com           # Let's Encrypt te avisa si el cert falla en renovar
+#
+# Sin un dominio real apuntando al VPS, Caddy no puede emitir el
+# certificado — no existe un HTTPS de confianza sobre una IP desnuda.
+
+services:
+  api:
+    ports: !reset []
+
+  frontend:
+    ports: !reset []
+
+  caddy:
+    image: caddy:2.8-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: "${DOMAIN:?define DOMAIN (dominio real con DNS apuntando a este VPS)}"
+      ACME_EMAIL: "${ACME_EMAIL:?define ACME_EMAIL (para avisos de Let's Encrypt)}"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      api:
+        condition: service_healthy
+      frontend:
+        condition: service_healthy
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  caddy_data:
+  caddy_config:
