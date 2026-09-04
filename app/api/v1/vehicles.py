@@ -330,8 +330,12 @@ async def simulate_vehicle_profit(
         miscellaneous_cost=costs.miscellaneous_cost,
         cost_lines=[CostLineSchema(**line) for line in cost_lines_raw],
         coherence_warnings=warnings,
-        recommendation_label_es=recommendation_label_es(analysis.recommendation),
-        risk_label_es=risk_label_es(analysis.risk_level),
+        recommendation_label_es=recommendation_label_es(
+            getattr(analysis.recommendation, "value", analysis.recommendation)
+        ),
+        risk_label_es=risk_label_es(
+            getattr(analysis.risk_level, "value", analysis.risk_level)
+        ),
         max_purchase_price=max_purchase_price,
         max_purchase_price_binding_constraint=max_purchase_price_binding,
     )
