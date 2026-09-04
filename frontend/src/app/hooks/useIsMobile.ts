@@ -36,8 +36,8 @@ export function useIsMobile(breakpointPx = 768): boolean {
 
     const mq = window.matchMedia(`(max-width: ${breakpointPx - 1}px)`);
     const apply = () => setMobile(mq.matches);
-    apply();
     mq.addEventListener("change", apply);
+    apply();
     return () => mq.removeEventListener("change", apply);
   }, [breakpointPx]);
 
