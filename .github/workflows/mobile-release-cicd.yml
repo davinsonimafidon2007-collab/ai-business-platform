@@ -116,6 +116,14 @@ jobs:
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
 
+    # BUG real (segundo intento real de release, tag v1.0.0): el AAB se
+    # compiló y firmó correctamente, pero el último paso (crear la GitHub
+    # Release) fallaba con "Resource not accessible by integration" — el
+    # GITHUB_TOKEN por defecto de este repo no tiene permiso de escritura
+    # sobre releases (default de seguridad de GitHub en repos nuevos).
+    permissions:
+      contents: write
+
     defaults:
       run:
         working-directory: ${{ env.FRONTEND_DIR }}
